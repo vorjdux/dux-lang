@@ -1,24 +1,26 @@
-Str name = "Matheus Santos";
-Int age = 33;
+import out.println, test.assert
 
-assert_equal(name+age, 'Matheus Santos33');
+Str name = "Matheus Santos"
+Int age = 33
 
-println('Hi, my name is {0} and I\'m {1} years old', name);
+assert_equal(name+age, 'Matheus Santos33')
+
+println('Hi, my name is {0} and I\'m {1} years old', name)
 
 Int a = 1,
     b = 2,
-    total = 0;
+    total = 0
 
-total = a + b;
+total = a + b
 
-assert_equal(total, 3);
+assert.equal(total, 3)
 
-total++;
+total++
 
-assert_equal(total, 4);
+assert.equal(total, 4)
 
-total--;
+total--
 
-assert_equal(total, 3);
+assert.equal(total, 3)
 
-println(total);
+println(total)
