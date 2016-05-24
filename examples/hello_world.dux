@@ -1,3 +1,1 @@
-import out.println
-
-println('Hello World!')
+dux.out.println('Hello World!')

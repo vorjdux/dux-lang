@@ -1,9 +1,10 @@
-import out.println, test.assert
+from dux.out import println
+from dux.test import Assert
 
 Str name = "Matheus Santos"
 Int age = 33
 
-assert_equal(name+age, 'Matheus Santos33')
+Assert.equal(name+age, 'Matheus Santos33')
 
 println('Hi, my name is {0} and I\'m {1} years old', name)
 
@@ -13,14 +14,35 @@ Int a = 1,
 
 total = a + b
 
-assert.equal(total, 3)
+Assert.equal(total, 3)
 
 total++
 
-assert.equal(total, 4)
+Assert.equal(total, 4)
 
 total--
 
-assert.equal(total, 3)
+Assert.equal(total, 3)
 
 println(total)
+
+for Int i in range(10):
+    println(i)
+
+for Int i = 0, i < 10, i++:
+    println(i)
+
+&label1:
+    while True:
+        Int i = 0
+        println(i)
+        i++
+        while i < 10:
+            if i == 5:
+                break &label1
+            else:
+                j++
+        if i == 10:
+            break
+else:
+    println('Didn\'t use the break to the label')
