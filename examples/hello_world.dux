@@ -1,7 +1,2 @@
-from dux.out import println
-
 void main():
     println('Hello World!')
-
-    if true:
-        println('ok')
