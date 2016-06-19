@@ -16,7 +16,6 @@ interface IPerson:
         int burn_year
         str set_name(str name, int age)
 
-from dux.out import println
 from dux.datetime import date
 
 public:
