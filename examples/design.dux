@@ -1,0 +1,143 @@
+module br.com.structtechnology
+
+# Comment single line test
+
+#*
+    Comment multline test 1
+    ~!@#$%ˆ&*()_+=-{}[]|\:;'`/.,<>?
+    Comment multline test 2 #*
+    Comment multline test 3 #
+    Comment multline test 4 #*
+    Comment multline test 5
+*#
+
+interface IPerson:
+    public:
+        int burn_year
+        str set_name(str name, int age)
+
+from dux.out import println
+from dux.datetime import date
+
+public:
+    const str name = "Matheus Santos" # It's a comment
+    real valor = 0.0
+    double dv#* This comment must
+
+    be ignorated *#alor = 0.0
+    list names = []
+    dict people = {
+        'nome': name
+    }
+    tuple coordinates = [22,23]
+
+
+#*doc!markdown
+    Class Documentation test using markdown
+    =======================================
+
+    - Item 1
+    - Item 2
+*#
+public class Person(object, IPerson):
+
+    private int age = 33
+    private bool live = false
+
+    void init:
+        super.init()
+        this.name = name
+
+    #*doc
+        burn_year: Calc the burn year
+    *#
+    public int burn_year:
+        int year = date.today().year
+        return year - this.age
+
+    get int age:
+        return this.age
+
+    set void age(int value):
+        this.age = value
+
+Person person = new Person()
+println(person.burn_year)
+
+class Animal:
+
+    int age = 2
+
+    void init:
+        super.init()
+        this.name = name
+
+    int burn_year:
+        int year = date.today().year
+        return year - this.age
+
+Animal animal = new Animal
+println(animal.burn_year)
+
+assert name+age == 'Matheus Santos33'
+
+println('Hi, my name is {0} and I\'m {1} years old'![name, age])
+
+str text = 'Hi, my name is {0} and I\'m {1} years old'![name, age]
+
+str text = 'Hi, my name is {name} and I\'m {age} years old'!{
+    'name': name,
+    'age': age
+}
+
+int a = 1,
+    b = 2,
+    total = 0
+
+total = a + b
+
+assert total==3
+
+total++
+
+assert total==4
+
+total--
+
+assert total==3
+
+println(total)
+
+for int i in range(10):
+    println(i)
+
+for int i in 0..<10:
+    println(i)
+
+for int i = 0, i < 10, i++:
+    println(i)
+
+do:
+    i++
+while i<100
+
+try:
+    &label1 while true:
+        int i = 0
+        println(i)
+        i++
+        while i < 10:
+            if i == 5:
+                break &label1
+            else:
+                j++
+        if i == 10:
+            break
+except:
+    goto &error
+
+else:
+    println('Didn\'t use the break to the label')
+
+&error:
+    println('error')
