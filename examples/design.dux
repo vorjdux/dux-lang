@@ -61,9 +61,6 @@ public class Person(object, IPerson):
     set void age(int value):
         this.age = value
 
-Person person = new Person()
-println(person.burn_year)
-
 class Animal:
 
     int age = 2
@@ -76,68 +73,72 @@ class Animal:
         int year = date.today().year
         return year - this.age
 
-Animal animal = new Animal
-println(animal.burn_year)
+void main:
+    Person person = new Person()
+    println(person.burn_year)
 
-assert name+age == 'Matheus Santos33'
+    Animal animal = new Animal
+    println(animal.burn_year)
 
-println('Hi, my name is {0} and I\'m {1} years old'![name, age])
+    assert name+age == 'Matheus Santos33'
 
-str text = 'Hi, my name is {0} and I\'m {1} years old'![name, age]
+    println('Hi, my name is {0} and I\'m {1} years old'![name, age])
 
-str text = 'Hi, my name is {name} and I\'m {age} years old'!{
-    'name': name,
-    'age': age
-}
+    str text = 'Hi, my name is {0} and I\'m {1} years old'![name, age]
 
-int a = 1,
-    b = 2,
-    total = 0
+    str text = 'Hi, my name is {name} and I\'m {age} years old'!{
+        'name': name,
+        'age': age
+    }
 
-total = a + b
+    int a = 1,
+        b = 2,
+        total = 0
 
-assert total==3
+    total = a + b
 
-total++
+    assert total==3
 
-assert total==4
+    total++
 
-total--
+    assert total==4
 
-assert total==3
+    total--
 
-println(total)
+    assert total==3
 
-for int i in range(10):
-    println(i)
+    println(total)
 
-for int i in 0..<10:
-    println(i)
-
-for int i = 0, i < 10, i++:
-    println(i)
-
-do:
-    i++
-while i<100
-
-try:
-    &label1 while true:
-        int i = 0
+    for int i in range(10):
         println(i)
+
+    for int i in 0..<10:
+        println(i)
+
+    for int i = 0, i < 10, i++:
+        println(i)
+
+    do:
         i++
-        while i < 10:
-            if i == 5:
-                break &label1
-            else:
-                j++
-        if i == 10:
-            break
-except:
-    goto &error
+    while i<100
 
-else:
-    println('Didn\'t use the break to the label')
+    try:
+        &label1 while true:
+            int i = 0
+            println(i)
+            i++
+            while i < 10:
+                if i == 5:
+                    break &label1
+                else:
+                    j++
+            if i == 10:
+                break
+    except:
+        goto &error
 
-&error:
-    println('error')
+    else:
+        println('Didn\'t use the break to the label')
+
+    &error:
+        println('error')
