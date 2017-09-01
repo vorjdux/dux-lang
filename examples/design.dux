@@ -11,9 +11,9 @@ module br.com.structtechnology
     Comment multline test 5
 *#
 
-interface IPerson:
+interface IPerson(): # for parsing optimization purposes, if you maintain the structure of the statement you'll be avoiding LOOKAHEAD's in LR parsers
     public:
-        int burn_year
+        int burn_year() # the same
         str set_name(str name, int age)
 
 from dux.datetime import date
@@ -38,45 +38,56 @@ public:
     - Item 1
     - Item 2
 *#
-public class Person(object, IPerson):
+class Person(public object, private IPerson): # it's more dynamic if you let the consumer of your class to decide if it will be exposed, like in C++
+public:
+    # Would add constructor and destructor... Specially, destructor since will help avoid garbage collectors and will enable smart pointers
+    Person() :
+        this.age = 0
+        this.hand = new Hand();
+    ~Person() :
+        delete this.hand;
 
-    private int age = 33
-    private bool live = false
+private: # prefer C++ like scoping
+    int age = 33
+    bool live = false
+    Hand hand;
 
-    void init:
+protected:
+    void init():
         super.init()
         this.name = name
 
+public:
     #*doc
         burn_year: Calc the burn year
     *#
-    public int burn_year:
+    int burn_year():
         int year = date.today().year
         return year - this.age
 
-    get int age:
+    int age() get: # again, for parsing purposes would apply modifiers at the end
         return this.age
 
-    set void age(int value):
+    void age(int value) set:
         this.age = value
 
-class Animal:
+class Animal():
 
     int age = 2
 
-    void init:
+    void init():
         super.init()
         this.name = name
 
-    int burn_year:
+    int burn_year():
         int year = date.today().year
         return year - this.age
 
-void main:
+void main():
     Person person = new Person()
     println(person.burn_year)
 
-    Animal animal = new Animal
+    Animal animal = new Animal()
     println(animal.burn_year)
 
     assert name+age == 'Matheus Santos33'
