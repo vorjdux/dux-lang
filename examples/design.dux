@@ -30,6 +30,8 @@ public:
     }
     tuple coordinates = [22,23]
 
+class Hand():
+    pass
 
 #*doc!markdown
     Class Documentation test using markdown
@@ -39,44 +41,43 @@ public:
     - Item 2
 *#
 class Person(public object, private IPerson): # it's more dynamic if you let the consumer of your class to decide if it will be exposed, like in C++
-public:
-    # Would add constructor and destructor... Specially, destructor since will help avoid garbage collectors and will enable smart pointers
-    Person() :
-        this.age = 0
-        this.hand = new Hand();
-    ~Person() :
-        delete this.hand;
+    public:
+        # Would add constructor and destructor... Specially, destructor since will help avoid garbage collectors and will enable smart pointers
+        Person():
+            this.age = 0
+            this.hand = new Hand()
+        ~Person():
+            delete this.hand
 
-private: # prefer C++ like scoping
-    int age = 33
-    bool live = false
-    Hand hand;
+    private: # prefer C++ like scoping
+        int age = 33
+        bool live = false
+        Hand hand;
 
-protected:
-    void init():
-        super.init()
-        this.name = name
+    protected:
+        void init():
+            super.init()
+            this.name = name
 
-public:
-    #*doc
-        burn_year: Calc the burn year
-    *#
-    int burn_year():
-        int year = date.today().year
-        return year - this.age
+    public:
+        #*doc
+            burn_year: Calc the burn year
+        *#
+        int burn_year():
+            int year = date.today().year
+            return year - this.age
 
-    int age() get: # again, for parsing purposes would apply modifiers at the end
-        return this.age
+        int age() get: # again, for parsing purposes would apply modifiers at the end
+            return this.age
 
-    void age(int value) set:
-        this.age = value
+        void age(int value) set:
+            this.age = value
 
 class Animal():
 
     int age = 2
 
-    void init():
-        super.init()
+    Animal(str name):
         this.name = name
 
     int burn_year():
@@ -92,11 +93,11 @@ void main():
 
     assert name+age == 'Matheus Santos33'
 
-    println('Hi, my name is {0} and I\'m {1} years old'![name, age])
+    println('Hi, my name is {0} and I\'m {1} years old' % [name, age])
 
-    str text = 'Hi, my name is {0} and I\'m {1} years old'![name, age]
+    str text = 'Hi, my name is {0} and I\'m {1} years old' % [name, age]
 
-    str text = 'Hi, my name is {name} and I\'m {age} years old'!{
+    str text = 'Hi, my name is {name} and I\'m {age} years old' % {
         'name': name,
         'age': age
     }
@@ -107,15 +108,15 @@ void main():
 
     total = a + b
 
-    assert total==3
+    assert(total==3)
 
     total++
 
-    assert total==4
+    assert(total==4)
 
     total--
 
-    assert total==3
+    assert(total==3)
 
     println(total)
 
@@ -128,9 +129,21 @@ void main():
     for int i = 0, i < 10, i++:
         println(i)
 
+    int i = 0
+    
     do:
         i++
     while i<100
+    
+    switch(i):
+        case 1:
+            println('It is the number one')
+            break
+        case 'Matheus':
+            println('It is a person!')
+            break
+        default:
+            println('I don\'t know')
 
     try:
         &label1 while true:
