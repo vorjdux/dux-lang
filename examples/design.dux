@@ -91,7 +91,7 @@ void main():
     Animal animal = new Animal()
     println(animal.burn_year)
 
-    assert name+age == 'Matheus Santos33'
+    assert(name+age == 'Matheus Santos33')
 
     println('Hi, my name is {0} and I\'m {1} years old' % [name, age])
 
