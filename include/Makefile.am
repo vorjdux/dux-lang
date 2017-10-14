@@ -1,4 +1,4 @@
 nobase_include_HEADERS = \
-./lexer/LexerBase.h \
-./lexer/Lexer.h \
-./lexer/LexerImpl.h
+./lexer/ScannerBase.h \
+./lexer/Scanner.h \
+./lexer/ScannerImpl.h
