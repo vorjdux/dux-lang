@@ -8,4 +8,20 @@
 - Out aim is to create a fusion between the elegance of Python and the strenght of C++ without so much crazy syntax (just a little bit :D)
 - Compiled! Yeahhh \nn/_
 
-Anyone that want to help and code well will be awesome :)
+## Dependences
+- libbobcat-dev : sudo apt install libbobcat-dev
+- autotools-dev : sudo apt-get install autotools-dev
+
+
+## Editing and renegerating from dux.lexer
+```
+$ ./lexgen.sh
+```
+
+## Compile process
+```
+$ autoreconf -vfi
+$ ./configure
+$ make
+$ sudo make install
+```
