@@ -1,10 +1,10 @@
 /* $Id$ -*- mode: c++ -*- */
 
-%baseclass-header = "LexerBase.h"
-%class-header = "Lexer.h"
-%implementation-header = "LexerImpl.h"
-%class-name = "Lexer"
-%lex-source = "Lexer.cpp"
+%baseclass-header = "ScannerBase.h"
+%class-header = "Scanner.h"
+%implementation-header = "ScannerImpl.h"
+%class-name = "Scanner"
+%lex-source = "Scanner.cpp"
 
 %namespace = "dux"
 
