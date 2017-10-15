@@ -1,3 +1,5 @@
+/* $Id$ -*- mode: c++ -*- */
+
 %namespace dux
 
 %baseclass-header ParserBase.h
