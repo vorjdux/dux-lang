@@ -6,4 +6,5 @@ dux_CPPFLAGS = -std=c++14 -Wall -I../include
 
 dux_SOURCES = \
 lexer/Scanner.cpp \
+grammar/Parser.cpp \
 dux.cpp

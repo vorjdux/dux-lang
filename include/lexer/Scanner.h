@@ -9,6 +9,7 @@
 
 // $insert baseclass_h
 #include "ScannerBase.h"
+#include "grammar/ParserBase.h"
 
 // $insert namespace-open
 namespace dux
