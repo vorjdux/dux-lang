@@ -10,12 +10,19 @@
 
 ## Dependences
 - libbobcat-dev : sudo apt install libbobcat-dev
-- autotools-dev : sudo apt-get install autotools-dev
+- autotools-dev : sudo apt install autotools-dev
+- flexc++       : sudo apt install flexc++
+- bisonc++      : sudo apt install bisonc++
 
 
 ## Editing and renegerating from dux.lexer
 ```
 $ ./lexgen.sh
+```
+
+## Editing and renegerating from dux.grammar
+```
+$ ./gragen.sh
 ```
 
 ## Compile process
