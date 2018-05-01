@@ -1,15 +1,13 @@
 namespace com.vorjdux.lang {
 
-// Comment single line test
+# Comment single line test
 
 import dux.datetime.date
 
 @global {
     const str name = "Matheus Santos" # It's a comment
     real valor = 0.0
-    double dv/*This comment must
-
-    be ignorated*/alor = 0.0
+    double dvalor = 0.0
     list names = []
     dict people = {
         'nome': name
