@@ -27,12 +27,6 @@ class Scanner: public ScannerBase
         // $insert lexFunctionDecl
         int lex();
 
-	enum Tokens
-        {
-            IDENTIFIER = 0x100,
-            NUMBER
-        };
-
     private:
         int lex__();
         int executeAction__(size_t ruleNr);

@@ -1,103 +1,143 @@
-module br.com.structtechnology
+namespace com.vorjdux.lang {
 
-# Comment single line test
+// Comment single line test
 
-#*
-    Comment multline test 1
-    ~!@#$%ˆ&*()_+=-{}[]|\:;'`/.,<>?
-    Comment multline test 2 #*
-    Comment multline test 3 #
-    Comment multline test 4 #*
-    Comment multline test 5
-*#
+import dux.datetime.date
 
-interface IPerson(): # for parsing optimization purposes, if you maintain the structure of the statement you'll be avoiding LOOKAHEAD's in LR parsers
-    public:
-        int burn_year() # the same
-        str set_name(str name, int age)
-
-from dux.datetime import date
-
-public:
+@global {
     const str name = "Matheus Santos" # It's a comment
     real valor = 0.0
-    double dv#* This comment must
+    double dv/*This comment must
 
-    be ignorated *#alor = 0.0
+    be ignorated*/alor = 0.0
     list names = []
     dict people = {
         'nome': name
     }
     tuple coordinates = [22,23]
+}
 
-class Hand():
-    pass
+#{
+    Comment multline test 1
+    ~!@#$%ˆ&*()_+=-{}[]|\:;'`/.,<>?
+    Comment multline test 2 / *
+    Comment multline test 3 //
+    Comment multline test 4 /*
+    Comment multline test 5
+}
 
-#*doc!markdown
+interface IPerson() { # for parsing optimization purposes, if you maintain the structure of the statement you'll be avoiding LOOKAHEAD's in LR parsers
+    @public {
+        int burn_year() # the same
+        str set_name(str name, int age);
+    }
+}
+
+
+class Hand()
+
+@doc:markdown {
     Class Documentation test using markdown
     =======================================
 
     - Item 1
     - Item 2
-*#
-class Person(public object, private IPerson): # it's more dynamic if you let the consumer of your class to decide if it will be exposed, like in C++
-    public:
+}
+class Person(public object, private IPerson) { # it's more dynamic if you let the consumer of your class to decide if it will be exposed, like in C++
+    
+    @public {
+        
         # Would add constructor and destructor... Specially, destructor since will help avoid garbage collectors and will enable smart pointers
-        Person():
-            this.age = 0
-            this.hand = new Hand()
-        ~Person():
-            delete this.hand
+        
+        Person() {
+            this._age = 0
+            this._hand = new Hand()
+        }
+        
+        Person(str _name, int _age) : _name(_name), _age(_age)  {
+            this._age = 0
+            this._hand = new Hand()
+        }
 
-    private: # prefer C++ like scoping
-        int age = 33
-        bool live = false
-        Hand hand;
+        ~Person() {
+            delete this._hand
+        }
 
-    protected:
-        void init():
+    }
+
+    @private { # prefer C++ like scoping
+        int _age = 33
+        bool _live = false
+        Hand _hand
+    }
+
+    @protected {
+        void init(str _name) {
             super.init()
-            this.name = name
+            this._name = _name
+        }
+    }
 
-    public:
-        #*doc
+    @public {
+        
+        #doc(
             burn_year: Calc the burn year
-        *#
-        int burn_year():
+        )
+        int burn_year() {
             int year = date.today().year
             return year - this.age
+        }
 
-        int age() get: # again, for parsing purposes would apply modifiers at the end
+        int age() get { # again, for parsing purposes would apply modifiers at the end
             return this.age
+        }
 
-        void age(int value) set:
-            this.age = value
+        void set_age(int value) -> set {
+            this._age = _value
+        }
 
-class Animal():
+        int get_age() -> get {
+            return this._age
+        }
 
-    int age = 2
+    }
 
-    Animal(str name):
-        this.name = name
+}
 
-    int burn_year():
-        int year = date.today().year
-        return year - this.age
+class Animal() {
 
-void main():
-    Person person = new Person()
-    println(person.burn_year)
+    int _age = 2
 
-    Animal animal = new Animal()
-    println(animal.burn_year)
+    @public {
+        
+        Animal(str _name) {
+            this._name = _name
+        }
 
-    assert(name+age == 'Matheus Santos33')
+        int burn_year() {
+            int _year = date.today().year
+            return _year - this._age
+        }
+
+    }
+
+}
+
+void main() {
+
+    Person _person = new Person()
+    println(_person.burn_year)
+
+    Animal _animal = new Animal()
+    println(_animal.burn_year)
+
+    assert(_name + _age == 'Matheus Santos33')
 
     println('Hi, my name is {0} and I\'m {1} years old' % [name, age])
 
-    str text = 'Hi, my name is {0} and I\'m {1} years old' % [name, age]
+    str _text = 'Hi, my name is {0} and I\'m {1} years old' % [name, age]
 
-    str text = 'Hi, my name is {name} and I\'m {age} years old' % {
+    str _text = 'Hi, my name is {name} and I\'m {age} years old' % {
         'name': name,
         'age': age
     }
@@ -120,22 +160,25 @@ void main():
 
     println(total)
 
-    for int i in range(10):
+    for int i in range(10) {
         println(i)
+    }
 
-    for int i in 0..<10:
+    for int i in 0..<10 {
         println(i)
+    }
 
-    for int i = 0, i < 10, i++:
+    for int i = 0, i < 10, i++ {
         println(i)
+    }
 
     int i = 0
     
-    do:
+    do {
         i++
-    while i<100
+    } while i < 100
     
-    switch(i):
+    switch i {
         case 1:
             println('It is the number one')
             break
@@ -144,24 +187,36 @@ void main():
             break
         default:
             println('I don\'t know')
+    }
 
-    try:
-        &label1 while true:
+    try {
+        
+        &label1 while true {
+            
             int i = 0
+            
             println(i)
+            
             i++
-            while i < 10:
-                if i == 5:
+            
+            while i < 10 {
+                
+                if i == 5 {
                     break &label1
-                else:
+                } else {
                     j++
-            if i == 10:
+                }
+
+            }
+
+            if i == 10 {
                 break
-    except:
-        goto &error
+            }
 
-    else:
-        println('Didn\'t use the break to the label')
+        }
 
-    &error:
-        println('error')
+    } catch ... {
+        println('Error')
+    }
+
+}

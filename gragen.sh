@@ -4,6 +4,8 @@ GRAINC_DIR='include/grammar'
 GRASRC_DIR='src/grammar'
 GRAGEN_DIR='gen/grammar'
 
+rm -rf "$GRACEN/ParserBase.h"
+
 bisonc++ $GRASRC_DIR/dux.grammar --target-directory=$GRAGEN_DIR
 
 for entry in $GRAGEN_DIR/*.cpp

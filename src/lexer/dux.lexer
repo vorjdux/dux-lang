@@ -16,7 +16,11 @@
 
 %%
 
-[ \t\n]+                            // skip white space chars.
-[0-9]+                              return dux::Parser::NUMBER;
+[\n]+                               return dux::Parser::NEW_LINE;
+[ ]+                                return dux::Parser::SPACE;
+[\t]+                               return dux::Parser::TAB;
+[0-9]+                              return dux::Parser::INT;
+"."[0-9]*                           |
+[0-9]+("."[0-9]*)?                  return dux::Parser::DOUBLE;
 [[:alpha:]_][[:alpha:][:digit:]_]*  return dux::Parser::IDENTIFIER;
 .                                   return dux::Parser::CHAR;

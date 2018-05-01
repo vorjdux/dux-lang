@@ -3,14 +3,13 @@
 %namespace dux
 
 %baseclass-header ParserBase.h
-%class-header Parser.h
 %implementation-header ParserImpl.h
 %parsefun-source Parser.cpp
 
 %scanner             ../lexer/Scanner.h
 %scanner-token-function d_scanner.lex()
 
-%token IDENTIFIER NUMBER CHAR
+%token NEW_LINE SPACE TAB INT DOUBLE IDENTIFIER CHAR
 
 %%
 
@@ -23,14 +22,22 @@ startrule:
 tokenshow:
     token
     {
-        std::cout << "matched: " << d_scanner.matched() << '\n';
+	    std::cout << "matched: " << d_scanner.matched() << std::endl;
     }
 ;
 
 token:
-    IDENTIFIER
+    NEW_LINE
 |
-    NUMBER
+    SPACE
+|
+    TAB
+|
+    INT
+|
+    DOUBLE
+|
+    IDENTIFIER
 |
     CHAR
 ;
