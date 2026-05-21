@@ -30,13 +30,14 @@ void  duxrt_print_double(double v);
  * refcount == 0   →  freed (invalid, should not be accessed)
  * refcount >  0   →  live; each variable holding the pointer counts +1
  *
- * Heap layout: DuxStr* points to malloc'd block; data points to a separate
- * malloc'd char buffer of size (len+1) with null terminator.
+ * Memory: a single malloc(sizeof(DuxStr) + len + 1) block; the char data
+ * is embedded immediately after the header via a flexible array member.
+ * This gives one allocation, one free, and contiguous header+data layout.
  */
 typedef struct DuxStr {
     int32_t  refcount;
     int64_t  len;
-    char*    data;      /* null-terminated; separately malloc'd on heap */
+    char     data[];   /* flexible array member — data starts right after header */
 } DuxStr;
 
 /* Allocate a new DuxStr (refcount=1) copying len bytes from data. */
