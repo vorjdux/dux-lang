@@ -136,6 +136,8 @@ private:
                   TypeId class_type = TypeRegistry::TID_UNKNOWN);
     void gen_class(const ast::ClassDecl& c);
     void gen_namespace(const ast::NamespaceDecl& ns);
+    // Ensure there is a proper i32 @main() entry point the C runtime can call
+    void emit_main_wrapper();
 
     // ── Statement codegen ────────────────────────────────────────────────
     void gen_stmts(const ast::StmtList& stmts);
