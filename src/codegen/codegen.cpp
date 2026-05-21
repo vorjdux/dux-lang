@@ -1829,22 +1829,22 @@ Value* Codegen::str_literal(const std::string& s) {
 
     std::string idx = std::to_string(str_lit_cache_.size());
 
-    // @.str_data.N = private constant [len+1 x i8]
+    // Build one global that mirrors the FAM C struct layout:
+    //   @.duxstr.N = private constant { i32, i64, [len+1 x i8] }
+    //                                 { -1,  len,  c"...\00" }
+    //
+    // The [len+1 x i8] array sits at the same offset as DuxStr::data[],
+    // so duxrt_* C functions see the embedded bytes directly via s->data.
     auto* data_arr = llvm::ConstantDataArray::getString(*ctx_, s, /*AddNull=*/true);
-    auto* data_gv  = new llvm::GlobalVariable(*mod_, data_arr->getType(),
-        /*isConstant=*/true, llvm::GlobalValue::PrivateLinkage,
-        data_arr, ".str_data." + idx);
-
-    // @.duxstr.N = private constant { i32, i64, ptr } { -1, len, data_gv }
-    auto* str_ty = llvm::StructType::get(*ctx_, {
-        llvm::Type::getInt32Ty(*ctx_),
-        llvm::Type::getInt64Ty(*ctx_),
-        ptr_type()
+    auto* str_ty   = llvm::StructType::get(*ctx_, {
+        llvm::Type::getInt32Ty(*ctx_),   // refcount  (offset  0)
+        llvm::Type::getInt64Ty(*ctx_),   // len       (offset  8, after 4-byte pad)
+        data_arr->getType()              // data[]    (offset 16)
     });
     auto* str_init = llvm::ConstantStruct::get(str_ty, {
         llvm::ConstantInt::getSigned(llvm::Type::getInt32Ty(*ctx_), -1),
         llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), (uint64_t)s.size()),
-        data_gv
+        data_arr
     });
     auto* str_gv = new llvm::GlobalVariable(*mod_, str_ty,
         /*isConstant=*/true, llvm::GlobalValue::PrivateLinkage,

@@ -1,0 +1,28 @@
+str build(int n) {
+    str s = ""
+    int i = 0
+    while (i < n) {
+        s = s + "ab"
+        i = i + 1
+    }
+    return s
+}
+
+str prefix(str s, str p) {
+    return p + s
+}
+
+void main() {
+    str big = build(20)
+    println(len(big))
+
+    str labelled = prefix(big, ">> ")
+    println(len(labelled))
+
+    int i = 0
+    while (i < 5) {
+        str msg = "pass " + build(i)
+        println(len(msg))
+        i = i + 1
+    }
+}
