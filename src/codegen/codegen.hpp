@@ -42,9 +42,10 @@ using sema::SymKind;
 // ─── Per-class layout info ───────────────────────────────────────────────────
 
 struct FieldInfo {
-    std::string name;
-    TypeId      type;
-    unsigned    index; // struct field index (0 = vtable ptr)
+    std::string            name;
+    TypeId                 type;
+    unsigned               index; // struct field index (0 = vtable ptr)
+    const ast::FieldDecl*  decl{nullptr}; // original AST node (for default init)
 };
 
 struct MethodInfo {
@@ -66,6 +67,7 @@ struct ClassLayout {
 struct LoopCtx {
     llvm::BasicBlock* header{nullptr};  // continue target
     llvm::BasicBlock* exit{nullptr};    // break target
+    std::string       label;            // optional loop label (for break &label)
 };
 
 // ─── Codegen ─────────────────────────────────────────────────────────────────
@@ -120,6 +122,9 @@ private:
     // Per-class layouts
     std::unordered_map<std::string, ClassLayout> layouts_;
 
+    // Maps variable name → class name (for member access resolution)
+    std::unordered_map<std::string, std::string> var_class_;
+
     // Maps alloca → its element type (needed for opaque-pointer loads)
     std::unordered_map<llvm::Value*, llvm::Type*> alloca_type_;
 
@@ -133,6 +138,7 @@ private:
     llvm::Function* current_fn_{nullptr};
     TypeId          current_ret_type_{TypeRegistry::TID_VOID};
     std::string     current_class_;
+    std::string     pending_label_;   // label from &label before a loop stmt
 
     // ── Type lowering (#14) ──────────────────────────────────────────────
     llvm::Type* lower_type(TypeId tid);
