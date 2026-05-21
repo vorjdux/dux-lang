@@ -138,6 +138,31 @@ install(TARGETS dux    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(TARGETS duxrt  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES   src/runtime/duxrt.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/duxrt)
+install(DIRECTORY stdlib/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/dux/stdlib
+        FILES_MATCHING PATTERN "*.dux")
+
+# ─── Packaging (CPack) (#38) ──────────────────────────────────────────────────
+set(CPACK_PACKAGE_NAME        "dux-lang")
+set(CPACK_PACKAGE_VERSION     "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The Dux programming language compiler")
+set(CPACK_PACKAGE_VENDOR      "Dux Lang")
+set(CPACK_PACKAGE_CONTACT     "dux@example.com")
+
+# Source strip prefix so installed paths are relative
+set(CPACK_STRIP_FILES         TRUE)
+
+# Debian package
+set(CPACK_DEBIAN_PACKAGE_SECTION    "devel")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS    "libc6 (>= 2.17), libstdc++6 (>= 9)")
+set(CPACK_DEBIAN_FILE_NAME          "DEB-DEFAULT")
+
+# Generators: .deb and .tar.gz
+set(CPACK_GENERATOR             "TGZ;DEB")
+set(CPACK_SOURCE_GENERATOR      "TGZ")
+set(CPACK_SOURCE_IGNORE_FILES   "/\\.git/;/build/;/\\.cache/")
+
+include(CPack)
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 enable_testing()

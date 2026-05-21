@@ -1,0 +1,6 @@
+// io — input/output module
+// Usage: import io
+
+void println(str s)
+void print(str s)
+str readline()

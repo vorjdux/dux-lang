@@ -32,6 +32,8 @@ struct Options {
     bool         emit_ir{false};
     bool         emit_obj{false};
     bool         compile{false};   // emit obj + link → executable
+    bool         debug_info{false}; // -g: emit DWARF
+    int          opt_level{0};      // -O0/-O1/-O2/-O3
     bool         trace_lex{false};
     bool         trace_parse{false};
     bool         help{false};
@@ -49,6 +51,8 @@ void usage(std::string_view prog) {
         "  --emit-obj      Emit native object file (requires -o path)\n"
         "  --compile       Compile to a runnable native executable\n"
         "  -o <path>       Output path\n"
+        "  -O0/-O1/-O2/-O3 Optimisation level (default -O0)\n"
+        "  -g              Emit DWARF debug information\n"
         "  --trace-lex     Enable flex debug output\n"
         "  --trace-parse   Enable bison debug output\n"
         "  --version       Print version and exit\n"
@@ -66,6 +70,11 @@ Options parse_args(std::span<char*> args) {
         else if (a == "--emit-ir")             { opts.emit_ir     = true; }
         else if (a == "--emit-obj")            { opts.emit_obj    = true; }
         else if (a == "--compile")             { opts.compile     = true; }
+        else if (a == "-g")                    { opts.debug_info  = true; }
+        else if (a == "-O0")                   { opts.opt_level   = 0; }
+        else if (a == "-O1")                   { opts.opt_level   = 1; }
+        else if (a == "-O2")                   { opts.opt_level   = 2; }
+        else if (a == "-O3")                   { opts.opt_level   = 3; }
         else if (a == "--trace-lex")           { opts.trace_lex   = true; }
         else if (a == "--trace-parse")         { opts.trace_parse = true; }
         else if (a == "--version")             { opts.version     = true; }
@@ -140,6 +149,8 @@ int main(int argc, char** argv) {
         }
 
         dux::codegen::Codegen cg(driver);
+        cg.set_opt_level(opts.opt_level);
+        cg.set_debug(opts.debug_info);
         if (!cg.run(*driver.result, mod_name)) return EXIT_FAILURE;
 
         if (opts.emit_ir) {
