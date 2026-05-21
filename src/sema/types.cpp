@@ -100,12 +100,10 @@ bool TypeRegistry::assignable(TypeId from, TypeId to) const {
         return ti.kind == TypeKind::Class || ti.kind == TypeKind::Interface ||
                to == TID_LIST || to == TID_DICT || to == TID_STR;
     }
-    // Numeric widening
-    if (to == TID_DOUBLE) return is_numeric(from);
-    if (to == TID_REAL)   return from == TID_INT || from == TID_LONG ||
-                                 from == TID_BOOL || from == TID_REAL;
-    if (to == TID_LONG)   return from == TID_INT || from == TID_BOOL || from == TID_LONG;
-    if (to == TID_INT)    return from == TID_BOOL || from == TID_INT;
+    // Any numeric type is assignable to any other numeric type (narrowing allowed)
+    if (is_numeric(from) && is_numeric(to)) return true;
+    // list literal can initialize a tuple
+    if (from == TID_LIST && to == TID_TUPLE) return true;
 
     // Class subtyping
     return is_subtype(from, to);
