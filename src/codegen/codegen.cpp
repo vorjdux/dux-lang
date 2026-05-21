@@ -1148,10 +1148,16 @@ void Codegen::gen_assert(const ast::AssertStmt& s) {
 
 void Codegen::gen_delete(const ast::DeleteStmt& s) {
     Value* ptr = gen_expr(*s.expr);
-    // Call duxrt_free (or just free)
-    auto* free_fn = get_or_declare_rt("free",
-        llvm::Type::getVoidTy(*ctx_), {ptr_type()});
-    builder_->CreateCall(free_fn, {ptr});
+    TypeId tid = type_id_of(*s.expr);
+    if (tid == TR::TID_STR) {
+        /* Strings are refcounted — must go through release, not raw free,
+           so the ext heap buffer is freed for long strings. */
+        emit_str_release(ptr);
+    } else {
+        auto* free_fn = get_or_declare_rt("free",
+            llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+        builder_->CreateCall(free_fn, {ptr});
+    }
 }
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
