@@ -1,0 +1,39 @@
+class Animal {
+    str name
+
+    Animal(str name) {
+        this.name = name
+    }
+
+    str getName() {
+        return this.name
+    }
+
+    str speak() {
+        return "..."
+    }
+}
+
+class Dog(Animal) {
+    str breed
+
+    Dog(str name, str breed) {
+        this.name  = name
+        this.breed = breed
+    }
+
+    str speak() {
+        return "Woof"
+    }
+
+    str getBreed() {
+        return this.breed
+    }
+}
+
+void main() {
+    d = new Dog("Rex", "Labrador")
+    println(d.getName())
+    println(d.speak())
+    delete d
+}

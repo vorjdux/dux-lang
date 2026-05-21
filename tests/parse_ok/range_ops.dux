@@ -1,0 +1,12 @@
+# Range operators: exclusive (..<) and inclusive (..=)
+# for-in requires type annotation
+void main() {
+    for int i in 0..<10 {
+        println(i)
+    }
+    for int i in 1..=10 {
+        println(i)
+    }
+    r1 = 0..<5
+    r2 = 0..=4
+}

@@ -1,0 +1,7 @@
+void main() {
+    int sum = 0
+    for int i in 1..=5 {
+        sum = sum + i
+    }
+    println(sum)
+}

@@ -1,0 +1,23 @@
+void main() {
+    int x = 10
+
+    if x > 5 {
+        println("big")
+    } else {
+        println("small")
+    }
+
+    int i = 0
+    while i < 5 {
+        println(i)
+        i = i + 1
+    }
+
+    for int j in 0..<5 {
+        println(j)
+    }
+
+    do {
+        i = i - 1
+    } while i > 0
+}

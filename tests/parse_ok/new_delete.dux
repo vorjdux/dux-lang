@@ -1,0 +1,9 @@
+# new and delete
+void main() {
+    p = new Point(1, 2)
+    q = new Dog("Rex", 3, "Labrador")
+    r = new MyClass()
+    delete p
+    delete q
+    delete r
+}

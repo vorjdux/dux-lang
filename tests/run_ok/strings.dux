@@ -1,0 +1,7 @@
+void main() {
+    str a = "Hello"
+    str b = ", World!"
+    str c = a + b
+    println(c)
+    println("length check")
+}
