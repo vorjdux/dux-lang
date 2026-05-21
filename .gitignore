@@ -1,5 +1,6 @@
-# CMake build directory
+# CMake build directories
 build/
+build-*/
 cmake-build-*/
 
 # Object files
