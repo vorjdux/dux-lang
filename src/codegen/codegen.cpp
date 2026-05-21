@@ -1074,14 +1074,22 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
 }
 
 void Codegen::gen_return(const ast::ReturnStmt& s) {
+    Value* val = nullptr;
     if (s.value) {
-        Value* val = gen_expr(**s.value);
+        val = gen_expr(**s.value);
         TypeId val_tid = type_id_of(**s.value);
         val = coerce(val, val_tid, current_ret_type_);
-        builder_->CreateRet(val);
-    } else {
-        builder_->CreateRetVoid();
+        // Retain the return value before releasing scopes so the caller gets
+        // a valid owned reference even when returning a local str variable.
+        if (current_ret_type_ == TR::TID_STR)
+            val = maybe_retain_str(val);
     }
+    // Release all tracked str variables across all active scopes before returning.
+    emit_all_str_releases();
+    if (val)
+        builder_->CreateRet(val);
+    else
+        builder_->CreateRetVoid();
 }
 
 void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
@@ -1102,13 +1110,15 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
         llvm::Type* t = lower_type(var_tid);
         Value* alloca = make_alloca(t, name);
         if (init_val) {
+            if (var_tid == TR::TID_STR)
+                init_val = maybe_retain_str(init_val);
             if (init_val->getType() != t)
                 init_val = coerce(init_val, decl_tid, var_tid);
             builder_->CreateStore(init_val, alloca);
         } else {
             builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
         }
-        env_define(name, alloca);
+        env_define(name, alloca, var_tid);
         // Track variable→class for member access resolution
         if (!s.type.name.empty() && layouts_.count(s.type.name))
             var_class_[name] = s.type.name;
@@ -1155,8 +1165,7 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
         return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*ctx_), p->value);
 
     if (auto* p = dynamic_cast<const ast::StringLitExpr*>(&e)) {
-        // Emit a global constant string and return a ptr to it
-        return builder_->CreateGlobalStringPtr(p->value, ".str");
+        return str_literal(p->value);
     }
 
     if (auto* p = dynamic_cast<const ast::BoolLitExpr*>(&e))
@@ -1207,6 +1216,15 @@ Value* Codegen::gen_assign(const ast::AssignExpr& e) {
 
     if (rhs) {
         if (e.op == "=") {
+            // For str: release old value, then retain new value before storing.
+            if (rhs_tid == TR::TID_STR) {
+                auto tit = alloca_type_.find(slot);
+                if (tit != alloca_type_.end() && tit->second->isPointerTy()) {
+                    Value* old_val = builder_->CreateLoad(ptr_type(), slot, "str.old");
+                    emit_str_release(old_val);
+                }
+                rhs = maybe_retain_str(rhs);
+            }
             builder_->CreateStore(rhs, slot);
         } else {
             // Compound assignment
@@ -1377,7 +1395,7 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
 
         if (name == "println" || name == "print") {
             Value* arg = e.args.empty()
-                ? (Value*)builder_->CreateGlobalStringPtr("", ".empty")
+                ? str_literal("")
                 : gen_expr(*e.args[0]);
             TypeId t = e.args.empty() ? TR::TID_STR : type_id_of(*e.args[0]);
             return rt_println(arg, t);
@@ -1403,13 +1421,20 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
                 llvm::cast<llvm::PointerType>(ptr_type()));
         }
 
-        // len() — call duxrt_list_len or strlen
+        // len() — dispatch to the correct runtime function based on type
         if (name == "len") {
             Value* arg = e.args.empty() ? nullptr : gen_expr(*e.args[0]);
             if (!arg) return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0);
-            auto* len_fn = get_or_declare_rt("duxrt_len",
+            TypeId arg_tid = e.args.empty() ? TR::TID_UNKNOWN : type_id_of(*e.args[0]);
+            if (arg_tid == TR::TID_LIST) {
+                auto* fn = get_or_declare_rt("duxrt_list_len",
+                    llvm::Type::getInt64Ty(*ctx_), {ptr_type()});
+                return builder_->CreateCall(fn, {arg});
+            }
+            // str and fallback
+            auto* fn = get_or_declare_rt("duxrt_str_length",
                 llvm::Type::getInt64Ty(*ctx_), {ptr_type()});
-            return builder_->CreateCall(len_fn, {arg});
+            return builder_->CreateCall(fn, {arg});
         }
 
         // Look up a declared function
@@ -1499,13 +1524,20 @@ Value* Codegen::gen_index(const ast::IndexExpr& e) {
     if (obj_tid == TR::TID_DICT) {
         auto* get_fn = get_or_declare_rt("duxrt_dict_get",
             ptr_type(), {ptr_type(), ptr_type()});
+        // Dict keys are char*; extract from DuxStr if the index is a str.
+        TypeId idx_tid = type_id_of(*e.index);
+        if (idx_tid == TR::TID_STR) {
+            auto* cstr_fn = get_or_declare_rt("duxrt_str_cstr", ptr_type(), {ptr_type()});
+            idx = builder_->CreateCall(cstr_fn, {idx});
+        }
         return builder_->CreateCall(get_fn, {obj, idx});
     }
-    // String indexing
+    // String indexing — returns a new single-char DuxStr* (caller owns)
     if (obj_tid == TR::TID_STR) {
         Value* idx64 = builder_->CreateSExt(idx, llvm::Type::getInt64Ty(*ctx_));
-        return builder_->CreateGEP(llvm::Type::getInt8Ty(*ctx_), obj,
-                                   {idx64}, "str.idx");
+        auto* idx_fn = get_or_declare_rt("duxrt_str_index",
+            ptr_type(), {ptr_type(), llvm::Type::getInt64Ty(*ctx_)});
+        return builder_->CreateCall(idx_fn, {obj, idx64});
     }
     return llvm::ConstantPointerNull::get(
         llvm::cast<llvm::PointerType>(ptr_type()));
@@ -1577,10 +1609,15 @@ Value* Codegen::gen_dict(const ast::DictExpr& e) {
     Value* dict  = builder_->CreateCall(new_fn, {});
     auto* set_fn = get_or_declare_rt("duxrt_dict_set",
         llvm::Type::getVoidTy(*ctx_), {ptr_type(), ptr_type(), ptr_type()});
+    auto* cstr_fn = get_or_declare_rt("duxrt_str_cstr", ptr_type(), {ptr_type()});
     for (const auto& [k, v] : e.pairs) {
         Value* kv = gen_expr(*k);
         Value* vv = gen_expr(*v);
-        if (!kv->getType()->isPointerTy()) {
+        // Dict keys are stored as char*; extract from DuxStr if needed.
+        TypeId k_tid = type_id_of(*k);
+        if (k_tid == TR::TID_STR)
+            kv = builder_->CreateCall(cstr_fn, {kv});
+        else if (!kv->getType()->isPointerTy()) {
             Value* box = make_alloca(kv->getType(), "kbox");
             builder_->CreateStore(kv, box);
             kv = box;
@@ -1664,9 +1701,9 @@ Value* Codegen::lvalue_of(const ast::Expr& e) {
         Value* obj = gen_expr(*idx->object);
         Value* i   = gen_expr(*idx->index);
         TypeId obj_tid = type_id_of(*idx->object);
+        (void)obj; (void)i;
         if (obj_tid == TR::TID_STR)
-            return builder_->CreateGEP(llvm::Type::getInt8Ty(*ctx_), obj,
-                                       {builder_->CreateSExt(i, llvm::Type::getInt64Ty(*ctx_))});
+            return nullptr; // str characters are not mutable lvalues
     }
     return nullptr;
 }
@@ -1744,11 +1781,30 @@ TypeId Codegen::type_id_of(const ast::Expr& e) const {
 
 // ─── Environment ─────────────────────────────────────────────────────────────
 
-void Codegen::env_push() { env_.emplace_back(); }
-void Codegen::env_pop()  { if (!env_.empty()) env_.pop_back(); }
+void Codegen::env_push() {
+    env_.emplace_back();
+    str_scopes_.emplace_back();
+}
 
-void Codegen::env_define(const std::string& name, Value* alloca) {
+void Codegen::env_pop() {
+    // Emit releases for str variables going out of scope (only on live paths).
+    if (!str_scopes_.empty()) {
+        auto* bb = builder_->GetInsertBlock();
+        if (bb && !bb->getTerminator()) {
+            for (Value* alloca : str_scopes_.back()) {
+                Value* v = builder_->CreateLoad(ptr_type(), alloca, "str.rel");
+                emit_str_release(v);
+            }
+        }
+        str_scopes_.pop_back();
+    }
+    if (!env_.empty()) env_.pop_back();
+}
+
+void Codegen::env_define(const std::string& name, Value* alloca, TypeId tid) {
     if (!env_.empty()) env_.back()[name] = alloca;
+    if (tid == TR::TID_STR && !str_scopes_.empty())
+        str_scopes_.back().push_back(alloca);
 }
 
 Value* Codegen::make_alloca(llvm::Type* t, const std::string& name) {
@@ -1763,6 +1819,68 @@ Value* Codegen::env_lookup(const std::string& name) const {
         if (it != env_[static_cast<std::size_t>(i)].end()) return it->second;
     }
     return nullptr;
+}
+
+// ─── String reference counting ───────────────────────────────────────────────
+
+Value* Codegen::str_literal(const std::string& s) {
+    auto it = str_lit_cache_.find(s);
+    if (it != str_lit_cache_.end()) return it->second;
+
+    std::string idx = std::to_string(str_lit_cache_.size());
+
+    // @.str_data.N = private constant [len+1 x i8]
+    auto* data_arr = llvm::ConstantDataArray::getString(*ctx_, s, /*AddNull=*/true);
+    auto* data_gv  = new llvm::GlobalVariable(*mod_, data_arr->getType(),
+        /*isConstant=*/true, llvm::GlobalValue::PrivateLinkage,
+        data_arr, ".str_data." + idx);
+
+    // @.duxstr.N = private constant { i32, i64, ptr } { -1, len, data_gv }
+    auto* str_ty = llvm::StructType::get(*ctx_, {
+        llvm::Type::getInt32Ty(*ctx_),
+        llvm::Type::getInt64Ty(*ctx_),
+        ptr_type()
+    });
+    auto* str_init = llvm::ConstantStruct::get(str_ty, {
+        llvm::ConstantInt::getSigned(llvm::Type::getInt32Ty(*ctx_), -1),
+        llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), (uint64_t)s.size()),
+        data_gv
+    });
+    auto* str_gv = new llvm::GlobalVariable(*mod_, str_ty,
+        /*isConstant=*/true, llvm::GlobalValue::PrivateLinkage,
+        str_init, ".duxstr." + idx);
+
+    str_lit_cache_[s] = str_gv;
+    return str_gv;
+}
+
+Value* Codegen::emit_str_retain(Value* v) {
+    auto* fn = get_or_declare_rt("duxrt_str_retain", ptr_type(), {ptr_type()});
+    return builder_->CreateCall(fn, {v});
+}
+
+void Codegen::emit_str_release(Value* v) {
+    auto* fn = get_or_declare_rt("duxrt_str_release",
+        llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+    builder_->CreateCall(fn, {v});
+}
+
+Value* Codegen::maybe_retain_str(Value* v) {
+    if (!v) return v;
+    // Consuming convention: call results (refcount=1) and immortal globals need no retain.
+    if (llvm::isa<llvm::CallInst>(v) || llvm::isa<llvm::GlobalVariable>(v)) return v;
+    return emit_str_retain(v);
+}
+
+void Codegen::emit_all_str_releases() {
+    auto* bb = builder_->GetInsertBlock();
+    if (!bb || bb->getTerminator()) return;
+    for (int i = (int)str_scopes_.size() - 1; i >= 0; --i) {
+        for (Value* alloca : str_scopes_[(size_t)i]) {
+            Value* v = builder_->CreateLoad(ptr_type(), alloca, "str.rel");
+            emit_str_release(v);
+        }
+    }
 }
 
 // ─── Runtime helpers ─────────────────────────────────────────────────────────
