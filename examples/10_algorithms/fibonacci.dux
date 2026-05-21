@@ -1,0 +1,55 @@
+# Two implementations of Fibonacci — recursive and iterative.
+# The iterative version handles large n without stack overflow.
+
+int fib_recursive(int n) {
+    if (n <= 0) {
+        return 0
+    }
+    if (n == 1) {
+        return 1
+    }
+    return fib_recursive(n - 1) + fib_recursive(n - 2)
+}
+
+int fib_iterative(int n) {
+    if (n <= 0) {
+        return 0
+    }
+    if (n == 1) {
+        return 1
+    }
+    int a = 0
+    int b = 1
+    int i = 2
+    while (i <= n) {
+        int next = a + b
+        a = b
+        b = next
+        i = i + 1
+    }
+    return b
+}
+
+void main() {
+    # First 15 terms (recursive — fine for small n)
+    println("Recursive:")
+    for int i in 0..=14 {
+        println(fib_recursive(i))
+    }
+
+    # First 40 terms (iterative — efficient)
+    println("Iterative:")
+    for int i in 0..=39 {
+        println(fib_iterative(i))
+    }
+
+    # Verify both agree for n=0..15
+    for int i in 0..=15 {
+        int r = fib_recursive(i)
+        int it = fib_iterative(i)
+        if (r != it) {
+            println("MISMATCH")
+        }
+    }
+    println("both agree for n=0..15")
+}

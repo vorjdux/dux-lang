@@ -1,0 +1,26 @@
+void main() {
+    # Create a dict and insert key-value pairs
+    dict scores
+    scores = {}
+    scores["alice"] = 95
+    scores["bob"]   = 82
+    scores["carol"] = 91
+
+    # Lookup
+    println(scores["alice"])   # 95
+    println(scores["bob"])     # 82
+
+    # Update a value
+    scores["bob"] = 88
+    println(scores["bob"])     # 88
+
+    # String keys and string values
+    dict capitals
+    capitals = {}
+    capitals["France"]  = "Paris"
+    capitals["Germany"] = "Berlin"
+    capitals["Japan"]   = "Tokyo"
+
+    println(capitals["France"])    # Paris
+    println(capitals["Japan"])     # Tokyo
+}

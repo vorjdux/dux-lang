@@ -1,0 +1,25 @@
+void main() {
+    # Create a list and push elements
+    list nums
+    nums = []
+    nums[len(nums)] = 10
+    nums[len(nums)] = 20
+    nums[len(nums)] = 30
+
+    # Access by index
+    println(nums[0])   # 10
+    println(nums[1])   # 20
+    println(nums[2])   # 30
+    println(len(nums)) # 3
+
+    # Iterate with for-range
+    for int i in range(len(nums)) {
+        println(nums[i])
+    }
+
+    # Nested list — list of lists
+    list row0
+    list row1
+    row0 = []
+    row1 = []
+}

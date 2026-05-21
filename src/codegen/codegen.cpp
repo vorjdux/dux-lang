@@ -1298,9 +1298,12 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
     TypeId lt = type_id_of(*e.left);
     TypeId rt = type_id_of(*e.right);
 
-    // Promote types
+    // Promote types — also fall back to checking the actual LLVM types for
+    // cases where type_id is TID_UNKNOWN (e.g. stdlib member calls like math.sqrt).
     bool is_fp = (lt == TR::TID_DOUBLE || lt == TR::TID_REAL ||
-                  rt == TR::TID_DOUBLE || rt == TR::TID_REAL);
+                  rt == TR::TID_DOUBLE || rt == TR::TID_REAL ||
+                  L->getType()->isFloatingPointTy() ||
+                  R->getType()->isFloatingPointTy());
     if (is_fp) {
         if (L->getType()->isIntegerTy())
             L = builder_->CreateSIToFP(L, llvm::Type::getDoubleTy(*ctx_));

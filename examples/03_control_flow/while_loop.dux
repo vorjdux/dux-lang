@@ -1,0 +1,45 @@
+void main() {
+    # Basic while loop
+    int i = 0
+    while (i < 5) {
+        println(i)
+        i = i + 1
+    }
+
+    # Summing with while
+    int sum = 0
+    int n = 1
+    while (n <= 100) {
+        sum = sum + n
+        n = n + 1
+    }
+    println(sum)   # 5050
+
+    # Countdown
+    int count = 5
+    while (count > 0) {
+        println(count)
+        count = count - 1
+    }
+    println("liftoff!")
+
+    # Break out of a loop early
+    int x = 0
+    while (1) {
+        if (x >= 3) {
+            break
+        }
+        println(x)
+        x = x + 1
+    }
+
+    # Continue skips the rest of the body
+    int j = 0
+    while (j < 8) {
+        j = j + 1
+        if (j % 2 == 0) {
+            continue
+        }
+        println(j)   # prints only odd: 1 3 5 7
+    }
+}

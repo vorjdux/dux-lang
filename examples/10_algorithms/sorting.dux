@@ -1,0 +1,111 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+import math
+
+# Bubble sort — sort a fixed-size sequence represented as a function
+# that returns the i-th element (Dux lists are being used for small arrays).
+
+int bubble_sort_steps(int n) {
+    # Count swaps needed to sort [n, n-1, ..., 1] (reverse order)
+    int swaps = 0
+    int size = n
+    int pass = 0
+    while (pass < size - 1) {
+        int i = 0
+        while (i < size - 1 - pass) {
+            # Would compare arr[i] and arr[i+1]; count swap if needed
+            # Here we simulate on a numeric sequence
+            swaps = swaps + 1
+            i = i + 1
+        }
+        pass = pass + 1
+    }
+    return swaps
+}
+
+# Binary search on a virtual sorted sequence 0, 1, ..., n-1
+int binary_search(int target, int size) {
+    int lo = 0
+    int hi = size - 1
+    int steps = 0
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2
+        steps = steps + 1
+        if (mid == target) {
+            return steps
+        } else if (mid < target) {
+            lo = mid + 1
+        } else {
+            hi = mid - 1
+        }
+    }
+    return -1
+}
+
+# Merge count — number of comparisons in merge of two sorted halves of size n
+int merge_comparisons(int n) {
+    # Upper bound: two halves of n/2 merged = at most n comparisons
+    return n
+}
+
+void main() {
+    # Binary search: how many steps to find target in sorted array of size?
+    println(binary_search(0, 16))    # 1st element needs ~4 steps
+    println(binary_search(15, 16))   # last element ~4 steps
+    println(binary_search(7, 16))    # middle ~1 step
+
+    # Verify O(log n) growth
+    for int exp in 1..=10 {
+        int size = 1
+        for int i in range(exp) {
+            size = size * 2
+        }
+        int steps = binary_search(0, size)
+        println(int_to_str(size) + " elements: " + int_to_str(steps) + " steps")
+    }
+
+    # Bubble sort comparisons for n elements
+    for int n in 2..=8 {
+        int s = bubble_sort_steps(n)
+        println("n=" + int_to_str(n) + " comparisons=" + int_to_str(s))
+    }
+}

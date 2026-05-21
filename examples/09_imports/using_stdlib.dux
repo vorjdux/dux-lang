@@ -1,0 +1,37 @@
+import math
+import io
+
+# Dux provides standard-library modules importable with `import`.
+# Modules expose their functions via dot-notation: module.function(args).
+#
+# Available modules:
+#   math  — sqrt, pow, floor, ceil, abs, log, log2, sin, cos, min, max
+#   io    — println, print, readline
+
+void main() {
+    # ── math module ───────────────────────────────────────────────────────────
+    double root = math.sqrt(144.0)
+    io.println("sqrt(144) = ")
+    println(root)                     # 12
+
+    double result = math.pow(2.0, 8.0)
+    println(result)                   # 256
+
+    println(math.floor(3.9))          # 3
+    println(math.ceil(3.1))           # 4
+    println(math.abs(-7.5))           # 7.5
+    println(math.min(4.0, 9.0))       # 4
+    println(math.max(4.0, 9.0))       # 9
+    println(math.log2(16.0))          # 4
+    println(math.sin(0.0))            # 0
+    println(math.cos(0.0))            # 1
+
+    # ── io module ─────────────────────────────────────────────────────────────
+    io.println("Printed via io.println")
+    io.print("no newline: ")
+    io.println("followed by io.println")
+
+    # io.readline reads a line from stdin (uncomment to use interactively)
+    # str line = io.readline()
+    # io.println("you typed: " + line)
+}

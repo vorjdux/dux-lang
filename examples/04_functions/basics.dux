@@ -1,0 +1,55 @@
+# Functions must declare a return type.
+# void means no return value.
+
+void greet(str name) {
+    println("Hello, " + name + "!")
+}
+
+int add(int a, int b) {
+    return a + b
+}
+
+double average(double a, double b, double c) {
+    return (a + b + c) / 3.0
+}
+
+int absolute(int n) {
+    if (n < 0) {
+        return 0 - n
+    }
+    return n
+}
+
+int max2(int a, int b) {
+    if (a > b) {
+        return a
+    }
+    return b
+}
+
+str repeat(str s, int times) {
+    str result = ""
+    for int i in range(times) {
+        result = result + s
+    }
+    return result
+}
+
+void main() {
+    greet("World")               # Hello, World!
+    greet("Dux")                 # Hello, Dux!
+
+    println(add(3, 4))           # 7
+    println(add(-10, 10))        # 0
+
+    println(average(1.0, 2.0, 3.0))  # 2
+
+    println(absolute(-42))       # 42
+    println(absolute(7))         # 7
+
+    println(max2(10, 20))        # 20
+    println(max2(99, 3))         # 99
+
+    println(repeat("ab", 4))     # abababab
+    println(repeat("-", 20))     # --------------------
+}
