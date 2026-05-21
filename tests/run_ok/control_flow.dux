@@ -1,0 +1,18 @@
+void main() {
+    int x = 7
+    if (x > 5) {
+        println("big")
+    } else {
+        println("small")
+    }
+
+    int count = 0
+    while (count < 3) {
+        count = count + 1
+    }
+    println(count)
+
+    for int i in 0..<3 {
+        println(i)
+    }
+}

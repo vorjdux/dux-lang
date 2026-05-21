@@ -3,10 +3,12 @@ cmake_minimum_required(VERSION 3.25)
 project(dux-lang
     VERSION     0.1.0
     DESCRIPTION "The Dux programming language compiler"
-    LANGUAGES   CXX
+    LANGUAGES   C CXX
 )
 
 # ─── C++ standard ─────────────────────────────────────────────────────────────
+set(CMAKE_C_STANDARD            11)
+set(CMAKE_C_STANDARD_REQUIRED   ON)
 set(CMAKE_CXX_STANDARD          23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS        OFF)
@@ -40,6 +42,34 @@ llvm_map_components_to_libnames(LLVM_LIBS
     core support irreader passes
     x86codegen x86asmparser x86info
 )
+
+# ─── duxrt: runtime library ───────────────────────────────────────────────────
+add_library(duxrt STATIC
+    src/runtime/alloc.c
+    src/runtime/io.c
+    src/runtime/str.c
+    src/runtime/list.c
+    src/runtime/dict.c
+    src/runtime/range.c
+    src/runtime/math_rt.c
+    src/runtime/exceptions.c
+)
+
+target_include_directories(duxrt PUBLIC src/runtime)
+
+target_compile_options(duxrt PRIVATE
+    -Wall -Wextra -Wpedantic
+    $<$<CONFIG:Debug>:   -g3 -O0>
+    $<$<CONFIG:Release>: -O3 -DNDEBUG -march=native>
+)
+# duxrt must NOT be instrumented with sanitizers: user programs link against
+# it and are not compiled with sanitizer runtimes.
+
+target_link_libraries(duxrt PUBLIC m)  # math functions
+
+# Record absolute path so the compiler driver can find it at runtime
+set(DUXRT_LIB_PATH "$<TARGET_FILE:duxrt>")
+set(DUXRT_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime")
 
 # ─── Code generation ──────────────────────────────────────────────────────────
 set(GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
@@ -79,9 +109,12 @@ target_include_directories(dux PRIVATE
     ${LLVM_INCLUDE_DIRS}
 )
 
+# Bake duxrt paths into the compiler so --compile works from any directory
 target_compile_definitions(dux PRIVATE
     DUX_VERSION="${PROJECT_VERSION}"
     ${LLVM_DEFINITIONS}
+    DUXRT_LIB_PATH="${DUXRT_LIB_PATH}"
+    DUXRT_INCLUDE_DIR="${DUXRT_INCLUDE_DIR}"
 )
 
 target_link_libraries(dux PRIVATE ${LLVM_LIBS})
@@ -101,7 +134,10 @@ endif()
 
 # ─── Install ──────────────────────────────────────────────────────────────────
 include(GNUInstallDirs)
-install(TARGETS dux RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS dux    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS duxrt  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(FILES   src/runtime/duxrt.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/duxrt)
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 enable_testing()
@@ -170,4 +206,24 @@ foreach(F ${DUX_CODEGEN_OK})
         NAME    codegen_ok_${name}
         COMMAND dux --emit-ir ${F} -o /dev/null
     )
+endforeach()
+
+# run_ok: files that must compile and run, producing correct output
+# Each test has a .dux source and a .expected file with expected stdout.
+file(GLOB DUX_RUN_OK "${CMAKE_SOURCE_DIR}/tests/run_ok/*.dux")
+foreach(F ${DUX_RUN_OK})
+    cmake_path(GET F STEM name)
+    set(EXPECTED "${CMAKE_SOURCE_DIR}/tests/run_ok/${name}.expected")
+    if(EXISTS "${EXPECTED}")
+        add_test(
+            NAME    run_ok_${name}
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_test.sh
+                    $<TARGET_FILE:dux>
+                    ${F}
+                    ${EXPECTED}
+        )
+        set_tests_properties(run_ok_${name} PROPERTIES
+            DEPENDS duxrt
+        )
+    endif()
 endforeach()
