@@ -3,21 +3,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-void duxrt_println_int(int64_t v)    { printf("%ld\n",  (long)v); }
-void duxrt_println_double(double v)  { printf("%g\n",   v); }
-void duxrt_println_str(const char* s){ puts(s ? s : "(null)"); }
+void duxrt_println_int(int64_t v)    { printf("%ld\n", (long)v); }
+void duxrt_println_double(double v)  { printf("%g\n",  v); }
+void duxrt_println_str(DuxStr* s)    { puts(s ? s->data : "(null)"); }
 
-void duxrt_print_int(int64_t v)      { printf("%ld",    (long)v); }
-void duxrt_print_double(double v)    { printf("%g",     v); }
-void duxrt_print_str(const char* s)  { fputs(s ? s : "(null)", stdout); }
+void duxrt_print_int(int64_t v)      { printf("%ld",   (long)v); }
+void duxrt_print_double(double v)    { printf("%g",    v); }
+void duxrt_print_str(DuxStr* s)      { fputs(s ? s->data : "(null)", stdout); }
 
-char* duxrt_readline(void) {
+DuxStr* duxrt_readline(void) {
     char buf[4096];
-    if (!fgets(buf, sizeof(buf), stdin)) return NULL;
+    if (!fgets(buf, sizeof(buf), stdin)) return duxrt_str_new("", 0);
     size_t n = strlen(buf);
     if (n > 0 && buf[n - 1] == '\n') buf[--n] = '\0';
-    char* out = (char*)malloc(n + 1);
-    if (!out) abort();
-    memcpy(out, buf, n + 1);
-    return out;
+    return duxrt_str_new(buf, (int64_t)n);
 }
