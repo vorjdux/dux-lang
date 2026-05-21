@@ -22,6 +22,25 @@ endif()
 find_package(FLEX  2.6  REQUIRED)
 find_package(BISON 3.8  REQUIRED)
 
+# Satisfy LLVM's dependency on zstd (needed when LLVM is built with zstd support)
+find_library(ZSTD_LIBRARY zstd)
+if(ZSTD_LIBRARY AND NOT TARGET zstd::libzstd_shared)
+    add_library(zstd::libzstd_shared SHARED IMPORTED)
+    set_target_properties(zstd::libzstd_shared PROPERTIES
+        IMPORTED_LOCATION "${ZSTD_LIBRARY}")
+endif()
+
+# LLVM ≥ 17 required (opaque-pointer IR by default)
+find_package(LLVM CONFIG REQUIRED)
+if(LLVM_VERSION_MAJOR LESS 17)
+    message(FATAL_ERROR "LLVM >= 17 required, found ${LLVM_PACKAGE_VERSION}")
+endif()
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} at ${LLVM_DIR}")
+llvm_map_components_to_libnames(LLVM_LIBS
+    core support irreader passes
+    x86codegen x86asmparser x86info
+)
+
 # ─── Code generation ──────────────────────────────────────────────────────────
 set(GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${GEN_DIR})
@@ -49,6 +68,7 @@ add_executable(dux
     src/sema/types.cpp
     src/sema/symbol.cpp
     src/sema/sema.cpp
+    src/codegen/codegen.cpp
     ${FLEX_DuxLexer_OUTPUTS}
     ${BISON_DuxParser_OUTPUTS}
 )
@@ -56,13 +76,17 @@ add_executable(dux
 target_include_directories(dux PRIVATE
     src
     ${GEN_DIR}
+    ${LLVM_INCLUDE_DIRS}
 )
 
 target_compile_definitions(dux PRIVATE
     DUX_VERSION="${PROJECT_VERSION}"
+    ${LLVM_DEFINITIONS}
 )
 
-# Warnings
+target_link_libraries(dux PRIVATE ${LLVM_LIBS})
+
+# Warnings — suppress LLVM header noise
 target_compile_options(dux PRIVATE
     -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-function
     $<$<CONFIG:Debug>:   -g3 -O0>
@@ -135,5 +159,15 @@ foreach(F ${DUX_SEMA_FAIL})
     )
     set_tests_properties(sema_fail_${name} PROPERTIES
         WILL_FAIL TRUE
+    )
+endforeach()
+
+# codegen_ok: files that must compile to IR (exit 0 with --emit-ir)
+file(GLOB DUX_CODEGEN_OK "${CMAKE_SOURCE_DIR}/tests/codegen_ok/*.dux")
+foreach(F ${DUX_CODEGEN_OK})
+    cmake_path(GET F STEM name)
+    add_test(
+        NAME    codegen_ok_${name}
+        COMMAND dux --emit-ir ${F} -o /dev/null
     )
 endforeach()

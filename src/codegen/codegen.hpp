@@ -1,0 +1,202 @@
+#pragma once
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+// Suppress LLVM header warnings
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wshadow"
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#pragma GCC diagnostic pop
+
+// Forward declarations for less-used LLVM types
+namespace llvm {
+class Function;
+class BasicBlock;
+class Value;
+class Type;
+class StructType;
+class DIBuilder;
+} // namespace llvm
+
+#include "ast/ast.hpp"
+#include "sema/types.hpp"
+#include "sema/symbol.hpp"
+
+class Driver;
+
+namespace dux::codegen {
+
+using sema::TypeId;
+using sema::TypeRegistry;
+using sema::ScopeStack;
+using sema::Symbol;
+using sema::SymKind;
+
+// ─── Per-class layout info ───────────────────────────────────────────────────
+
+struct FieldInfo {
+    std::string name;
+    TypeId      type;
+    unsigned    index; // struct field index (0 = vtable ptr)
+};
+
+struct MethodInfo {
+    std::string    name;
+    unsigned       vtable_slot;
+    llvm::Function* fn{nullptr};
+};
+
+struct ClassLayout {
+    std::string              class_name;
+    llvm::StructType*        struct_type{nullptr};
+    llvm::Value*             vtable_global{nullptr};
+    std::vector<FieldInfo>   fields;   // excludes vtable ptr
+    std::vector<MethodInfo>  methods;  // virtual methods
+};
+
+// ─── Loop context (for break/continue) ──────────────────────────────────────
+
+struct LoopCtx {
+    llvm::BasicBlock* header{nullptr};  // continue target
+    llvm::BasicBlock* exit{nullptr};    // break target
+};
+
+// ─── Codegen ─────────────────────────────────────────────────────────────────
+
+class Codegen {
+public:
+    explicit Codegen(Driver& driver);
+    ~Codegen();
+
+    // Generate IR for the whole program. Returns true on success.
+    bool run(const ast::Program& prog, const std::string& module_name = "dux_module");
+
+    // Emit LLVM IR text to a file path ("-" or "" = stdout).
+    bool emit_ir(const std::string& path) const;
+
+    // Emit a native object file (.o).
+    bool emit_object(const std::string& path) const;
+
+    int error_count() const { return error_count_; }
+
+private:
+    Driver&      driver_;
+    sema::TypeRegistry types_;   // shared with sema (re-run after sema populates it)
+
+    // LLVM objects
+    std::unique_ptr<llvm::LLVMContext> ctx_;
+    std::unique_ptr<llvm::Module>      mod_;
+    std::unique_ptr<llvm::IRBuilder<>> builder_;
+
+    // Bookkeeping
+    int error_count_{0};
+
+    // ── Value environment (name → alloca) ────────────────────────────────
+    // Stack of scopes: each scope is a map name → alloca (or global Value*)
+    std::vector<std::unordered_map<std::string, llvm::Value*>> env_;
+
+    // Per-class layouts
+    std::unordered_map<std::string, ClassLayout> layouts_;
+
+    // Maps alloca → its element type (needed for opaque-pointer loads)
+    std::unordered_map<llvm::Value*, llvm::Type*> alloca_type_;
+
+    // Loop stack for break/continue
+    std::vector<LoopCtx> loop_stack_;
+
+    // Current function context
+    llvm::Function* current_fn_{nullptr};
+    TypeId          current_ret_type_{TypeRegistry::TID_VOID};
+    std::string     current_class_;
+
+    // ── Type lowering (#14) ──────────────────────────────────────────────
+    llvm::Type* lower_type(TypeId tid);
+    llvm::Type* lower_type_expr(const ast::TypeExpr& te);
+    llvm::Type* ptr_type();   // opaque ptr (LLVM 15+ ptr)
+
+    // ── Class layout building ────────────────────────────────────────────
+    void build_layouts(const ast::DeclList& decls);
+    void build_class_layout(const ast::ClassDecl& c);
+
+    // ── Hoisting pass: declare all functions/methods before bodies ───────
+    void declare_functions(const ast::DeclList& decls, const std::string& prefix = "");
+    void declare_class_methods(const ast::ClassDecl& c);
+    llvm::Function* declare_function(const ast::FunctionDecl& f,
+                                     const std::string& mangled);
+
+    // ── Top-level codegen ────────────────────────────────────────────────
+    void gen_decl(const ast::Decl& d, const std::string& prefix = "");
+    void gen_func(const ast::FunctionDecl& f, const std::string& mangled,
+                  TypeId class_type = TypeRegistry::TID_UNKNOWN);
+    void gen_class(const ast::ClassDecl& c);
+    void gen_namespace(const ast::NamespaceDecl& ns);
+
+    // ── Statement codegen ────────────────────────────────────────────────
+    void gen_stmts(const ast::StmtList& stmts);
+    void gen_stmt(const ast::Stmt& s);
+    void gen_block(const ast::BlockStmt& b);
+    void gen_if(const ast::IfStmt& s);
+    void gen_while(const ast::WhileStmt& s);
+    void gen_do_while(const ast::DoWhileStmt& s);
+    void gen_for_in(const ast::ForInStmt& s);
+    void gen_for_c(const ast::ForCStmt& s);
+    void gen_switch(const ast::SwitchStmt& s);
+    void gen_try_catch(const ast::TryCatchStmt& s);
+    void gen_return(const ast::ReturnStmt& s);
+    void gen_var_decl(const ast::VarDeclStmt& s);
+    void gen_assert(const ast::AssertStmt& s);
+    void gen_delete(const ast::DeleteStmt& s);
+
+    // ── Expression codegen ───────────────────────────────────────────────
+    llvm::Value* gen_expr(const ast::Expr& e);
+    llvm::Value* gen_assign(const ast::AssignExpr& e);
+    llvm::Value* gen_binary(const ast::BinaryExpr& e);
+    llvm::Value* gen_unary(const ast::UnaryExpr& e);
+    llvm::Value* gen_call(const ast::CallExpr& e);
+    llvm::Value* gen_member(const ast::MemberExpr& e);
+    llvm::Value* gen_index(const ast::IndexExpr& e);
+    llvm::Value* gen_new(const ast::NewExpr& e);
+    llvm::Value* gen_list(const ast::ListExpr& e);
+    llvm::Value* gen_dict(const ast::DictExpr& e);
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+    llvm::Value* load_var(const std::string& name, const ast::SourceLoc& loc);
+    llvm::Value* lvalue_of(const ast::Expr& e);
+    llvm::Value* coerce(llvm::Value* val, TypeId from, TypeId to);
+    llvm::Value* to_bool(llvm::Value* val, TypeId t);
+
+    // Environment helpers
+    void   env_push();
+    void   env_pop();
+    void   env_define(const std::string& name, llvm::Value* alloca);
+    llvm::Value* env_lookup(const std::string& name) const;
+
+    // Create an alloca, register its element type, and define it in the current scope
+    llvm::Value* make_alloca(llvm::Type* t, const std::string& name);
+
+    // Mangling
+    static std::string mangle(const std::string& cls, const std::string& method);
+
+    // Runtime call helpers (intrinsics / duxrt stubs)
+    llvm::Value* rt_malloc(llvm::Value* size);
+    llvm::Value* rt_println_int(llvm::Value* v);
+    llvm::Value* rt_println_double(llvm::Value* v);
+    llvm::Value* rt_println_str(llvm::Value* v);
+    llvm::Value* rt_println(llvm::Value* v, TypeId t);
+    llvm::Function* get_or_declare_rt(const std::string& name,
+                                      llvm::Type* ret,
+                                      std::vector<llvm::Type*> params,
+                                      bool vararg = false);
+
+    TypeId type_id_of(const ast::Expr& e) const;
+
+    void err(const ast::SourceLoc& loc, const std::string& msg);
+};
+
+} // namespace dux::codegen
