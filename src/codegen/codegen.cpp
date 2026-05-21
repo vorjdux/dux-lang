@@ -74,6 +74,9 @@ bool Codegen::run(const ast::Program& prog, const std::string& module_name) {
 
     env_pop();
 
+    // Wrap void @main() → i32 @main() so the C runtime gets a valid exit code
+    emit_main_wrapper();
+
     // Verify the module
     std::string err_str;
     llvm::raw_string_ostream es(err_str);
@@ -107,7 +110,8 @@ bool Codegen::emit_object(const std::string& path) const {
 
     llvm::TargetOptions opts;
     auto tm = std::unique_ptr<llvm::TargetMachine>(
-        target->createTargetMachine(triple, "generic", "", opts, {}));
+        target->createTargetMachine(triple, "generic", "", opts,
+                                    llvm::Reloc::PIC_));
     mod_->setDataLayout(tm->createDataLayout());
 
     std::error_code ec;
@@ -405,6 +409,25 @@ void Codegen::gen_class(const ast::ClassDecl& c) {
     }
 
     current_class_ = saved_cls;
+}
+
+void Codegen::emit_main_wrapper() {
+    Function* user_main = mod_->getFunction("main");
+    if (!user_main) return;
+
+    bool returns_void = user_main->getReturnType()->isVoidTy();
+    if (!returns_void) return; // already returns int, nothing to do
+
+    // Rename void @main → @dux_main
+    user_main->setName("dux_main");
+
+    // Create i32 @main() { call void @dux_main(); ret i32 0 }
+    auto* ft  = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_), false);
+    auto* fn  = Function::Create(ft, Function::ExternalLinkage, "main", *mod_);
+    auto* bb  = BasicBlock::Create(*ctx_, "entry", fn);
+    builder_->SetInsertPoint(bb);
+    builder_->CreateCall(user_main, {});
+    builder_->CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
 }
 
 void Codegen::gen_namespace(const ast::NamespaceDecl& ns) {
