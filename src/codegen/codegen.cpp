@@ -209,6 +209,7 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
             fi.name  = fd->name;
             fi.type  = types_.from_type_expr(fd->type);
             fi.index = static_cast<unsigned>(layout.fields.size()) + 1; // +1 for vtable
+            fi.decl  = fd;
             layout.fields.push_back(fi);
         }
     }
@@ -433,13 +434,24 @@ void Codegen::gen_class(const ast::ClassDecl& c) {
 }
 
 void Codegen::emit_main_wrapper() {
+    // Find the user's main: first try plain @main, then namespace-qualified *__main
     Function* user_main = mod_->getFunction("main");
+    if (!user_main) {
+        for (auto& f : *mod_) {
+            llvm::StringRef n = f.getName();
+            if ((n.ends_with("__main") || n == "main") &&
+                f.arg_size() == 0) {
+                user_main = &f;
+                break;
+            }
+        }
+    }
     if (!user_main) return;
 
     bool returns_void = user_main->getReturnType()->isVoidTy();
     if (!returns_void) return; // already returns int, nothing to do
 
-    // Rename void @main → @dux_main
+    // Rename void @<whatever_main> → @dux_main
     user_main->setName("dux_main");
 
     // Create i32 @main() { call void @dux_main(); ret i32 0 }
@@ -660,19 +672,39 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     if (auto* sw = dynamic_cast<const ast::SwitchStmt*>(&s))   { gen_switch(*sw);  return; }
     if (auto* tc = dynamic_cast<const ast::TryCatchStmt*>(&s)) { gen_try_catch(*tc);return;}
     if (auto* r  = dynamic_cast<const ast::ReturnStmt*>(&s))   { gen_return(*r);   return; }
-    if (dynamic_cast<const ast::BreakStmt*>(&s)) {
-        if (!loop_stack_.empty())
-            builder_->CreateBr(loop_stack_.back().exit);
+    if (auto* br = dynamic_cast<const ast::BreakStmt*>(&s)) {
+        if (loop_stack_.empty()) return;
+        if (br->label) {
+            for (int i = static_cast<int>(loop_stack_.size()) - 1; i >= 0; --i)
+                if (loop_stack_[static_cast<std::size_t>(i)].label == *br->label) {
+                    builder_->CreateBr(loop_stack_[static_cast<std::size_t>(i)].exit);
+                    return;
+                }
+        }
+        builder_->CreateBr(loop_stack_.back().exit);
         return;
     }
-    if (dynamic_cast<const ast::ContinueStmt*>(&s)) {
-        if (!loop_stack_.empty())
-            builder_->CreateBr(loop_stack_.back().header);
+    if (auto* co = dynamic_cast<const ast::ContinueStmt*>(&s)) {
+        if (loop_stack_.empty()) return;
+        if (co->label) {
+            for (int i = static_cast<int>(loop_stack_.size()) - 1; i >= 0; --i)
+                if (loop_stack_[static_cast<std::size_t>(i)].label == *co->label) {
+                    builder_->CreateBr(loop_stack_[static_cast<std::size_t>(i)].header);
+                    return;
+                }
+        }
+        builder_->CreateBr(loop_stack_.back().header);
         return;
     }
     if (auto* a = dynamic_cast<const ast::AssertStmt*>(&s))    { gen_assert(*a);   return; }
     if (auto* d = dynamic_cast<const ast::DeleteStmt*>(&s))    { gen_delete(*d);   return; }
-    if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))  { gen_stmt(*ls->stmt); return; }
+    if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))  {
+        // Propagate label into the inner loop/while statement
+        pending_label_ = ls->label;
+        gen_stmt(*ls->stmt);
+        pending_label_.clear();
+        return;
+    }
 }
 
 void Codegen::gen_block(const ast::BlockStmt& b) {
@@ -718,7 +750,9 @@ void Codegen::gen_while(const ast::WhileStmt& s) {
     builder_->CreateCondBr(cond, body_bb, exit_bb);
 
     builder_->SetInsertPoint(body_bb);
-    loop_stack_.push_back({hdr_bb, exit_bb});
+    std::string lbl = s.label ? *s.label : pending_label_;
+    pending_label_.clear();
+    loop_stack_.push_back({hdr_bb, exit_bb, lbl});
     gen_stmt(*s.body);
     loop_stack_.pop_back();
     if (!builder_->GetInsertBlock()->getTerminator())
@@ -735,7 +769,8 @@ void Codegen::gen_do_while(const ast::DoWhileStmt& s) {
 
     builder_->CreateBr(body_bb);
     builder_->SetInsertPoint(body_bb);
-    loop_stack_.push_back({cond_bb, exit_bb});
+    loop_stack_.push_back({cond_bb, exit_bb, pending_label_});
+    pending_label_.clear();
     gen_stmt(*s.body);
     loop_stack_.pop_back();
     if (!builder_->GetInsertBlock()->getTerminator())
@@ -781,6 +816,19 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
             hi_val = gen_expr(*bin->right);
         }
     }
+    // range(n) → 0..<n
+    if (!is_range) {
+        if (auto* call = dynamic_cast<const ast::CallExpr*>(s.iterable.get())) {
+            if (auto* id = dynamic_cast<const ast::IdentExpr*>(call->callee.get())) {
+                if (id->name == "range" && call->args.size() == 1) {
+                    is_range = true;
+                    inclusive = false;
+                    lo_val = llvm::ConstantInt::get(var_t, 0);
+                    hi_val = gen_expr(*call->args[0]);
+                }
+            }
+        }
+    }
 
     if (is_range) {
         // i = lo
@@ -799,16 +847,15 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
             : builder_->CreateICmpSLT(i, hi_val, "for.cond");
         builder_->CreateCondBr(cond, body_bb, exit_bb);
     } else {
-        // Non-range: generate iterable, skip to body immediately (simplified)
-        gen_expr(*s.iterable);
-        builder_->CreateBr(hdr_bb);
+        // Non-range iterable: skip body (not yet supported)
+        builder_->CreateBr(exit_bb);
         builder_->SetInsertPoint(hdr_bb);
-        builder_->CreateBr(body_bb); // always execute at least once? No, for loop semantics
-        // For simplicity: treat as infinite loop with break (real iterator protocol in M4)
+        builder_->CreateBr(exit_bb);
     }
 
     builder_->SetInsertPoint(body_bb);
-    loop_stack_.push_back({incr_bb, exit_bb});
+    loop_stack_.push_back({incr_bb, exit_bb, pending_label_});
+    pending_label_.clear();
     gen_stmt(*s.body);
     loop_stack_.pop_back();
     if (!builder_->GetInsertBlock()->getTerminator())
@@ -854,7 +901,8 @@ void Codegen::gen_for_c(const ast::ForCStmt& s) {
     builder_->CreateCondBr(cond, body_bb, exit_bb);
 
     builder_->SetInsertPoint(body_bb);
-    loop_stack_.push_back({incr_bb, exit_bb});
+    loop_stack_.push_back({incr_bb, exit_bb, pending_label_});
+    pending_label_.clear();
     gen_stmt(*s.body);
     loop_stack_.pop_back();
     if (!builder_->GetInsertBlock()->getTerminator())
@@ -880,7 +928,7 @@ void Codegen::gen_switch(const ast::SwitchStmt& s) {
     auto* sw_inst = builder_->CreateSwitch(sw_val, exit_bb,
                                            static_cast<unsigned>(s.cases.size()));
 
-    loop_stack_.push_back({nullptr, exit_bb}); // break goes to exit
+    loop_stack_.push_back({nullptr, exit_bb, {}}); // break goes to exit
 
     for (const auto& c : s.cases) {
         BasicBlock* case_bb;
@@ -975,6 +1023,9 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
             builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
         }
         env_define(name, alloca);
+        // Track variable→class for member access resolution
+        if (!s.type.name.empty() && layouts_.count(s.type.name))
+            var_class_[name] = s.type.name;
     }
 }
 
@@ -1078,6 +1129,10 @@ Value* Codegen::gen_assign(const ast::AssignExpr& e) {
             // Try to infer from lhs
             if (lhs_tid != TR::TID_UNKNOWN) load_t = lower_type(lhs_tid);
             Value* cur = builder_->CreateLoad(load_t, slot);
+            // Promote integer types to match the lhs
+            if (cur->getType()->isIntegerTy() && rhs->getType()->isIntegerTy() &&
+                cur->getType() != rhs->getType())
+                rhs = builder_->CreateIntCast(rhs, cur->getType(), true);
             Value* result = nullptr;
             bool is_fp = load_t->isFloatingPointTy();
             if      (e.op == "+=") result = is_fp ? builder_->CreateFAdd(cur, rhs)
@@ -1141,6 +1196,13 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
             L = builder_->CreateSIToFP(L, llvm::Type::getDoubleTy(*ctx_));
         if (R->getType()->isIntegerTy())
             R = builder_->CreateSIToFP(R, llvm::Type::getDoubleTy(*ctx_));
+    } else if (L->getType()->isIntegerTy() && R->getType()->isIntegerTy() &&
+               L->getType() != R->getType()) {
+        // Integer promotion: widen the narrower operand
+        unsigned lw = L->getType()->getIntegerBitWidth();
+        unsigned rw = R->getType()->getIntegerBitWidth();
+        if (lw < rw) L = builder_->CreateSExt(L, R->getType());
+        else         R = builder_->CreateSExt(R, L->getType());
     }
 
     // String + string via rt call
@@ -1267,13 +1329,27 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
         // Look up a declared function
         Function* fn = mod_->getFunction(name);
         if (!fn) {
-            // Try namespace-prefixed
-            // fallback: return null
             return llvm::ConstantPointerNull::get(
                 llvm::cast<llvm::PointerType>(ptr_type()));
         }
         std::vector<Value*> args;
-        for (const auto& a : e.args) args.push_back(gen_expr(*a));
+        auto param_it = fn->arg_begin();
+        for (const auto& a : e.args) {
+            Value* v = gen_expr(*a);
+            if (param_it != fn->arg_end()) {
+                llvm::Type* pt = param_it->getType();
+                if (v->getType() != pt) {
+                    if (pt->isIntegerTy() && v->getType()->isIntegerTy())
+                        v = builder_->CreateIntCast(v, pt, true);
+                    else if (pt->isFloatingPointTy() && v->getType()->isIntegerTy())
+                        v = builder_->CreateSIToFP(v, pt);
+                    else if (pt->isIntegerTy() && v->getType()->isFloatingPointTy())
+                        v = builder_->CreateFPToSI(v, pt);
+                }
+                ++param_it;
+            }
+            args.push_back(v);
+        }
         return builder_->CreateCall(fn, args);
     }
 
@@ -1286,9 +1362,32 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
         // Try direct (static) dispatch
         std::string mangled = mangle(cls_name, mem->member);
         Function* fn = mod_->getFunction(mangled);
+        if (!fn && !cls_name.empty()) {
+            // Try resolving via var_class_ if not already tried
+            if (auto* id = dynamic_cast<const ast::IdentExpr*>(mem->object.get()))
+                if (var_class_.count(id->name))
+                    mangled = mangle(var_class_.at(id->name), mem->member);
+            fn = mod_->getFunction(mangled);
+        }
         if (fn) {
             std::vector<Value*> args = {obj};
-            for (const auto& a : e.args) args.push_back(gen_expr(*a));
+            auto param_it = std::next(fn->arg_begin()); // skip 'this'
+            for (const auto& a : e.args) {
+                Value* v = gen_expr(*a);
+                if (param_it != fn->arg_end()) {
+                    llvm::Type* pt = param_it->getType();
+                    if (v->getType() != pt) {
+                        if (pt->isIntegerTy() && v->getType()->isIntegerTy())
+                            v = builder_->CreateIntCast(v, pt, true);
+                        else if (pt->isFloatingPointTy() && v->getType()->isIntegerTy())
+                            v = builder_->CreateSIToFP(v, pt);
+                        else if (pt->isIntegerTy() && v->getType()->isFloatingPointTy())
+                            v = builder_->CreateFPToSI(v, pt);
+                    }
+                    ++param_it;
+                }
+                args.push_back(v);
+            }
             return builder_->CreateCall(fn, args);
         }
         // Fallback: return null
@@ -1305,17 +1404,34 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
 Value* Codegen::gen_member(const ast::MemberExpr& e) {
     Value* obj = gen_expr(*e.object);
     TypeId obj_tid = type_id_of(*e.object);
+
+    // Resolve class name: prefer type registry lookup, fall back to 'this' context
     std::string cls_name = types_.name_of(obj_tid);
+    if (!layouts_.count(cls_name)) {
+        // If object is 'this' or 'super', use current class
+        if (dynamic_cast<const ast::ThisExpr*>(e.object.get()) ||
+            dynamic_cast<const ast::SuperExpr*>(e.object.get()))
+            cls_name = current_class_;
+        // If object is an identifier, look up its class from the var→class map
+        if (!layouts_.count(cls_name)) {
+            if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.object.get()))
+                cls_name = var_class_.count(id->name) ? var_class_.at(id->name) : "";
+        }
+    }
 
     if (layouts_.count(cls_name)) {
         const ClassLayout& layout = layouts_[cls_name];
         for (const auto& f : layout.fields) {
             if (f.name == e.member) {
-                // GEP into struct at field index
                 Value* gep = builder_->CreateStructGEP(
                     layout.struct_type, obj, f.index, e.member);
                 return builder_->CreateLoad(lower_type(f.type), gep, e.member);
             }
+        }
+        // Member is a method — return the function pointer
+        for (const auto& mi : layout.methods) {
+            if (mi.name == e.member && mi.fn)
+                return mi.fn;
         }
     }
     // Unknown member — return null
@@ -1368,6 +1484,22 @@ Value* Codegen::gen_new(const ast::NewExpr& e) {
     if (layout.vtable_global) {
         Value* vtable_gep = builder_->CreateStructGEP(st, raw, 0, "vtable.ptr");
         builder_->CreateStore(layout.vtable_global, vtable_gep);
+    }
+
+    // Apply field default initializers before the constructor runs
+    for (const auto& fi : layout.fields) {
+        if (fi.decl && fi.decl->init) {
+            Value* gep = builder_->CreateStructGEP(st, raw, fi.index, fi.name + ".init");
+            Value* init_val = gen_expr(*fi.decl->init.value());
+            llvm::Type* field_ty = lower_type(fi.type);
+            if (init_val->getType() != field_ty) {
+                if (field_ty->isIntegerTy() && init_val->getType()->isIntegerTy())
+                    init_val = builder_->CreateIntCast(init_val, field_ty, true);
+                else if (field_ty->isDoubleTy() && init_val->getType()->isIntegerTy())
+                    init_val = builder_->CreateSIToFP(init_val, field_ty);
+            }
+            builder_->CreateStore(init_val, gep);
+        }
     }
 
     // Call constructor if present
@@ -1480,13 +1612,21 @@ Value* Codegen::lvalue_of(const ast::Expr& e) {
         Value* obj = gen_expr(*mem->object);
         TypeId obj_tid = type_id_of(*mem->object);
         std::string cls_name = types_.name_of(obj_tid);
+        if (!layouts_.count(cls_name)) {
+            if (dynamic_cast<const ast::ThisExpr*>(mem->object.get()) ||
+                dynamic_cast<const ast::SuperExpr*>(mem->object.get()))
+                cls_name = current_class_;
+            if (!layouts_.count(cls_name)) {
+                if (auto* id = dynamic_cast<const ast::IdentExpr*>(mem->object.get()))
+                    cls_name = var_class_.count(id->name) ? var_class_.at(id->name) : "";
+            }
+        }
         if (layouts_.count(cls_name)) {
             const ClassLayout& layout = layouts_[cls_name];
-            for (const auto& f : layout.fields) {
+            for (const auto& f : layout.fields)
                 if (f.name == mem->member)
                     return builder_->CreateStructGEP(
                         layout.struct_type, obj, f.index);
-            }
         }
         return nullptr;
     }
@@ -1586,6 +1726,12 @@ Value* Codegen::rt_malloc(Value* size) {
 }
 
 Value* Codegen::rt_println(Value* v, TypeId t) {
+    // Infer type from LLVM value when TypeId is unknown (e.g. member call returns)
+    if (t == TR::TID_UNKNOWN) {
+        if (v->getType()->isIntegerTy()) t = TR::TID_INT;
+        else if (v->getType()->isFloatingPointTy()) t = TR::TID_DOUBLE;
+        else t = TR::TID_STR;
+    }
     if (t == TR::TID_INT || t == TR::TID_LONG || t == TR::TID_BOOL) {
         auto* fn = get_or_declare_rt("duxrt_println_int",
             llvm::Type::getVoidTy(*ctx_), {llvm::Type::getInt64Ty(*ctx_)});

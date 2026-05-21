@@ -30,6 +30,17 @@ Sema::Sema(Driver& driver) : driver_(driver) {
     builtin("double",   TR::TID_DOUBLE, {{"x", TR::TID_OBJECT}});
     builtin("range",    TR::TID_LIST, {{"end", TR::TID_INT}});
     builtin("assert",   TR::TID_VOID, {{"cond", TR::TID_BOOL}});
+
+    // Built-in root class symbols (so classes can extend them without error)
+    auto builtin_class = [&](const std::string& name, TypeId tid) {
+        Symbol s;
+        s.name = name;
+        s.kind = SymKind::Class;
+        s.type = tid;
+        scopes_.define(name, std::move(s));
+    };
+    builtin_class("object", TR::TID_OBJECT);
+    builtin_class("any",    TR::TID_OBJECT);
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
@@ -221,9 +232,10 @@ void Sema::check_class(const ast::ClassDecl& c) {
     for (const auto& base : c.bases) {
         Symbol* bs = scopes_.lookup(base.name);
         if (!bs) {
-            err(c.loc, "unknown base class '" + base.name + "'");
+            // Unknown base — treat as object (forward-declared or external)
+            warn(c.loc, "unknown base class '" + base.name + "', treating as object");
         } else if (bs->kind != SymKind::Class && bs->kind != SymKind::Interface) {
-            err(c.loc, "'" + base.name + "' is not a class or interface");
+            warn(c.loc, "'" + base.name + "' is not a class or interface");
         } else {
             types_.set_parent(class_type, bs->type);
         }
