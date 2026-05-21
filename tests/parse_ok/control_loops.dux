@@ -1,0 +1,24 @@
+# while, do-while, for-in with ranges
+# for-in requires a type: for <type> <var> in <expr>
+void main() {
+    i = 0
+    while i < 10 {
+        i++
+    }
+
+    do {
+        i--
+    } while i > 0
+
+    for int x in 0..<10 {
+        println(x)
+    }
+
+    for int x in 0..=9 {
+        println(x)
+    }
+
+    for object item in myList {
+        println(item)
+    }
+}

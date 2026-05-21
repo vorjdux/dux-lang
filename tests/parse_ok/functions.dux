@@ -1,0 +1,22 @@
+# Functions: definitions, calls
+# for-in requires type annotation: for <type> <var> in <expr>
+void noArgs() {
+}
+
+int add(int a, int b) {
+    return a + b
+}
+
+str repeat(str s, int n) {
+    result = ""
+    for int i in 0..<n {
+        result += s
+    }
+    return result
+}
+
+void main() {
+    noArgs()
+    x = add(1, 2)
+    y = repeat("ha", 3)
+}

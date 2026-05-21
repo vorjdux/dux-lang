@@ -1,0 +1,17 @@
+# try / catch blocks
+# catch-all: catch ...
+# typed catch: catch(ExceptionType varName)
+void main() {
+    try {
+        x = riskyOp()
+        println(x)
+    } catch ... {
+        println("error caught")
+    }
+
+    try {
+        doSomething()
+    } catch(Exception err) {
+        println(err)
+    }
+}
