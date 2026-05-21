@@ -1,7 +1,17 @@
 # Dux Lang
 
-An experimental compiled programming language that fuses Python's elegance with C++'s
-strength — statically typed, compiles to native code via LLVM IR.
+## Why did we create yet another programming language?
+
+- We love a good challenge
+- Why not?
+- We've seen plenty of languages drowning in crazy syntax sugar — but really, *do we need all that*?
+- Our goal: fuse the elegance of Python with the strength of C++, without going completely insane *(just a little bit 😄)*
+- And it **compiles**! Yeahhh \nn/_
+
+---
+
+An experimental compiled programming language that targets native code via LLVM IR.
+Statically typed, clean syntax, no runtime surprises.
 
 ## Status
 
@@ -133,38 +143,6 @@ More examples in [`examples/`](examples/), including the full language showcase 
 
 See [`docs/spec.md`](docs/spec.md) for the full language specification and
 [`docs/stdlib/math.md`](docs/stdlib/math.md) for the standard library API.
-
-## Project layout
-
-```
-src/
-  lexer/dux.l         — Flex lexer (ASI, string literals, range ops)
-  parser/dux.y        — Bison 3.8 LALR(1) grammar
-  ast/ast.hpp         — 40+ AST node types + Visitor interface
-  ast/ast.cpp         — accept() implementations
-  ast/printer.hpp     — AST pretty-printer
-  driver/driver.hpp   — orchestrates parse → sema → codegen
-  sema/sema.cpp       — type checker, symbol resolution
-  sema/types.cpp      — TypeRegistry, subtyping, coercion rules
-  codegen/codegen.cpp — LLVM IR emitter
-  main.cpp            — CLI entry point
-runtime/
-  duxrt.c             — runtime library (println, list, dict, math shims)
-examples/
-  design.dux          — full language feature showcase
-  euler12.dux         — Project Euler #12 benchmark (842161320)
-tests/
-  run_ok/             — compile-and-run tests with golden output
-  sema_ok/            — sema tests expected to pass
-  sema_fail/          — sema tests expected to fail with errors
-  parse_ok/           — parser tests expected to pass
-  parse_fail/         — parser tests expected to fail
-  codegen_ok/         — IR emission tests
-docs/
-  spec.md             — language specification v0.1
-  stdlib/math.md      — math module API reference
-CMakeLists.txt
-```
 
 ## License
 
