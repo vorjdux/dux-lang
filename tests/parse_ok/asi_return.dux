@@ -1,0 +1,12 @@
+# ASI: return with no value on its own line
+int add(int a, int b) {
+    return a + b
+}
+
+str greet() {
+    return "hello"
+}
+
+void bail() {
+    return
+}

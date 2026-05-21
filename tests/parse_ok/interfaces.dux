@@ -1,0 +1,32 @@
+# Interface declarations require () in the declaration
+# Method bodies are omitted; ends with semicolon
+interface Printable() {
+    str toString()
+}
+
+interface Comparable() {
+    int compareTo(object other)
+    bool equals(object other)
+}
+
+class Point(Printable, Comparable) {
+    int x
+    int y
+
+    Point(int x, int y) {
+        this.x = x
+        this.y = y
+    }
+
+    str toString() {
+        return "Point"
+    }
+
+    int compareTo(object other) {
+        return 0
+    }
+
+    bool equals(object other) {
+        return false
+    }
+}

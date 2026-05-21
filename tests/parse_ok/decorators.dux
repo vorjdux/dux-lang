@@ -1,0 +1,16 @@
+# Decorators on class members (no inline access modifier with decorator)
+class MyService {
+    @override
+    str toString() {
+        return "MyService"
+    }
+
+    @deprecated
+    void oldMethod() {
+    }
+
+    @inject
+    @singleton
+    void setup() {
+    }
+}

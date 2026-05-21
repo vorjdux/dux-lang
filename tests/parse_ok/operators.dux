@@ -1,0 +1,29 @@
+# All operators and precedence
+void main() {
+    a = 1 + 2 * 3
+    b = (1 + 2) * 3
+    c = 10 / 2 - 1
+    d = 10 % 3
+    e = a == b
+    f = a != b
+    g = a < b
+    h = a > b
+    i = a <= b
+    j = a >= b
+    k = true and false
+    l = true or false
+    m = not true
+    n = a && b
+    o = a || b
+    p = !a
+    q = a += 1
+    r = a -= 1
+    s = a *= 2
+    t = a /= 2
+    u = a %= 3
+    v = a++
+    w = a--
+    x = ~a
+    y = -a
+    z = +a
+}

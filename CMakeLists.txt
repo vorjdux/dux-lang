@@ -84,7 +84,30 @@ file(GLOB DUX_EXAMPLES "${CMAKE_SOURCE_DIR}/examples/*.dux")
 foreach(EX ${DUX_EXAMPLES})
     cmake_path(GET EX STEM name)
     add_test(
-        NAME    parse_${name}
+        NAME    example_${name}
         COMMAND dux --dump-ast ${EX}
+    )
+endforeach()
+
+# parse_ok: files that must parse cleanly (exit 0)
+file(GLOB DUX_PARSE_OK "${CMAKE_SOURCE_DIR}/tests/parse_ok/*.dux")
+foreach(F ${DUX_PARSE_OK})
+    cmake_path(GET F STEM name)
+    add_test(
+        NAME    parse_ok_${name}
+        COMMAND dux --dump-ast ${F}
+    )
+endforeach()
+
+# parse_fail: files that must fail to parse (exit non-zero)
+file(GLOB DUX_PARSE_FAIL "${CMAKE_SOURCE_DIR}/tests/parse_fail/*.dux")
+foreach(F ${DUX_PARSE_FAIL})
+    cmake_path(GET F STEM name)
+    add_test(
+        NAME    parse_fail_${name}
+        COMMAND dux ${F}
+    )
+    set_tests_properties(parse_fail_${name} PROPERTIES
+        WILL_FAIL TRUE
     )
 endforeach()
