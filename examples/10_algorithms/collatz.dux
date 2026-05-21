@@ -1,0 +1,101 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+# Collatz conjecture: starting from any positive integer n,
+# repeatedly apply: n = n/2 if even, n = 3n+1 if odd.
+# The sequence always reaches 1 (unproven in general, true for all tested n).
+
+int collatz_length(int n) {
+    int steps = 0
+    while (n != 1) {
+        if (n % 2 == 0) {
+            n = n / 2
+        } else {
+            n = 3 * n + 1
+        }
+        steps = steps + 1
+    }
+    return steps
+}
+
+void print_collatz(int n) {
+    print(int_to_str(n))
+    while (n != 1) {
+        if (n % 2 == 0) {
+            n = n / 2
+        } else {
+            n = 3 * n + 1
+        }
+        print(" -> " + int_to_str(n))
+    }
+    println("")
+}
+
+int longest_collatz_under(int limit) {
+    int best_start = 1
+    int best_len   = 0
+    int n = 1
+    while (n < limit) {
+        int cl = collatz_length(n)
+        if (cl > best_len) {
+            best_len   = cl
+            best_start = n
+        }
+        n = n + 1
+    }
+    return best_start
+}
+
+void main() {
+    # Print the sequence for a few starting values
+    print_collatz(6)    # 6 -> 3 -> 10 -> 5 -> 16 -> 8 -> 4 -> 2 -> 1
+    print_collatz(27)   # long sequence
+
+    # Lengths for 1..20
+    for int i in 1..=20 {
+        println(collatz_length(i))
+    }
+
+    # Which n < 1000 has the longest Collatz sequence?
+    int best = longest_collatz_under(1000)
+    println(best)            # 871  (sequence length 178)
+    println(collatz_length(best))
+}
