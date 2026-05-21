@@ -65,6 +65,12 @@ namespace com.vorjdux.lang {
             return year - this._age
         }
 
+        str set_name(str name, int age) {
+            this._name = name
+            this._age = age
+            return this._name
+        }
+
         int get_age() {
             return this._age
         }

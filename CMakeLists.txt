@@ -38,9 +38,10 @@ if(LLVM_VERSION_MAJOR LESS 17)
     message(FATAL_ERROR "LLVM >= 17 required, found ${LLVM_PACKAGE_VERSION}")
 endif()
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} at ${LLVM_DIR}")
+# Use native target so the compiler works on x86, ARM, RISC-V, etc.
 llvm_map_components_to_libnames(LLVM_LIBS
     core support irreader passes
-    x86codegen x86asmparser x86info
+    native nativecodegen
 )
 
 # ─── duxrt: runtime library ───────────────────────────────────────────────────
@@ -53,6 +54,7 @@ add_library(duxrt STATIC
     src/runtime/range.c
     src/runtime/math_rt.c
     src/runtime/exceptions.c
+    src/runtime/gc.c
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)
@@ -147,7 +149,7 @@ set(CPACK_PACKAGE_NAME        "dux-lang")
 set(CPACK_PACKAGE_VERSION     "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The Dux programming language compiler")
 set(CPACK_PACKAGE_VENDOR      "Dux Lang")
-set(CPACK_PACKAGE_CONTACT     "dux@example.com")
+set(CPACK_PACKAGE_CONTACT     "vorj.dux@gmail.com")
 
 # Source strip prefix so installed paths are relative
 set(CPACK_STRIP_FILES         TRUE)
