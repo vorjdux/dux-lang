@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 
+
 /* ─── Flex interface ────────────────────────────────────────────────────── */
 extern int   yylex_destroy();
 extern FILE* yyin;
@@ -108,4 +109,20 @@ dux::ast::SourceLoc Driver::make_loc(const yy::location& l) const {
     sl.line = l.begin.line;
     sl.col  = l.begin.column;
     return sl;
+}
+
+void Driver::error(const dux::ast::SourceLoc& sl, const std::string& msg) {
+    yy::position p;
+    p.filename = &filename_;
+    p.line     = static_cast<unsigned>(sl.line > 0 ? sl.line : 1);
+    p.column   = static_cast<unsigned>(sl.col  > 0 ? sl.col  : 1);
+    error(yy::location(p, p), msg);
+}
+
+void Driver::warning(const dux::ast::SourceLoc& sl, const std::string& msg) {
+    yy::position p;
+    p.filename = &filename_;
+    p.line     = static_cast<unsigned>(sl.line > 0 ? sl.line : 1);
+    p.column   = static_cast<unsigned>(sl.col  > 0 ? sl.col  : 1);
+    warning(yy::location(p, p), msg);
 }

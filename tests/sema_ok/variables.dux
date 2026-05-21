@@ -1,0 +1,13 @@
+# Explicit typed declarations and implicit assignments
+void main() {
+    int x = 5
+    str msg = "hello"
+    bool flag = true
+    double pi = 3.14159
+
+    # implicit assignment (type inferred from rhs)
+    y = x + 1
+    greeting = msg + " world"
+    println(y)
+    println(greeting)
+}

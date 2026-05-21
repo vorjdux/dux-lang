@@ -1,0 +1,21 @@
+int add(int a, int b) {
+    return a + b
+}
+
+str repeat(str s, int n) {
+    result = s
+    return result
+}
+
+bool isPositive(int x) {
+    return x > 0
+}
+
+void main() {
+    int r = add(3, 4)
+    str t = repeat("ha", 3)
+    bool pos = isPositive(5)
+    println(r)
+    println(t)
+    println(pos)
+}

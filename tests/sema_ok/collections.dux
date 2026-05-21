@@ -1,0 +1,10 @@
+void main() {
+    list nums = [1, 2, 3, 4, 5]
+    println(len(nums))
+
+    dict person = {'name': "Alice", 'age': 30}
+    println(person['name'])
+
+    first = nums[0]
+    println(first)
+}

@@ -1,0 +1,30 @@
+class Point {
+    int x
+    int y
+
+    Point(int x, int y) {
+        this.x = x
+        this.y = y
+    }
+
+    int getX() {
+        return this.x
+    }
+
+    int getY() {
+        return this.y
+    }
+
+    str toString() {
+        return "Point"
+    }
+}
+
+void main() {
+    p = new Point(3, 4)
+    px = p.getX()
+    py = p.getY()
+    println(px)
+    println(py)
+    delete p
+}
