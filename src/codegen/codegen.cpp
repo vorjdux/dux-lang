@@ -171,13 +171,8 @@ llvm::Type* Codegen::lower_type(TypeId tid) {
         case TR::TID_TUPLE:  return ptr_type();
         case TR::TID_OBJECT: return ptr_type();
         case TR::TID_NULL:   return ptr_type();
-        default: {
-            // User-defined class type → pointer to struct
-            const std::string& name = types_.name_of(tid);
-            if (!name.empty() && layouts_.count(name))
-                return ptr_type();
-            return ptr_type();
-        }
+        default:
+            return ptr_type(); // user-defined class types are heap-allocated
     }
 }
 
@@ -344,9 +339,9 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
     BasicBlock* entry = BasicBlock::Create(*ctx_, "entry", fn);
     builder_->SetInsertPoint(entry);
 
-    // DWARF: attach subprogram metadata
     debug_func(f, fn, mangled);
 
+    var_class_.clear(); // var→class map is local to each function body
     env_push();
 
     // If method: bind 'this'
@@ -438,9 +433,7 @@ void Codegen::emit_main_wrapper() {
     Function* user_main = mod_->getFunction("main");
     if (!user_main) {
         for (auto& f : *mod_) {
-            llvm::StringRef n = f.getName();
-            if ((n.ends_with("__main") || n == "main") &&
-                f.arg_size() == 0) {
+            if (f.getName().ends_with("__main") && f.arg_size() == 0) {
                 user_main = &f;
                 break;
             }
@@ -675,11 +668,8 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     if (auto* br = dynamic_cast<const ast::BreakStmt*>(&s)) {
         if (loop_stack_.empty()) return;
         if (br->label) {
-            for (int i = static_cast<int>(loop_stack_.size()) - 1; i >= 0; --i)
-                if (loop_stack_[static_cast<std::size_t>(i)].label == *br->label) {
-                    builder_->CreateBr(loop_stack_[static_cast<std::size_t>(i)].exit);
-                    return;
-                }
+            for (auto it = loop_stack_.rbegin(); it != loop_stack_.rend(); ++it)
+                if (it->label == *br->label) { builder_->CreateBr(it->exit); return; }
         }
         builder_->CreateBr(loop_stack_.back().exit);
         return;
@@ -687,11 +677,8 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     if (auto* co = dynamic_cast<const ast::ContinueStmt*>(&s)) {
         if (loop_stack_.empty()) return;
         if (co->label) {
-            for (int i = static_cast<int>(loop_stack_.size()) - 1; i >= 0; --i)
-                if (loop_stack_[static_cast<std::size_t>(i)].label == *co->label) {
-                    builder_->CreateBr(loop_stack_[static_cast<std::size_t>(i)].header);
-                    return;
-                }
+            for (auto it = loop_stack_.rbegin(); it != loop_stack_.rend(); ++it)
+                if (it->label == *co->label) { builder_->CreateBr(it->header); return; }
         }
         builder_->CreateBr(loop_stack_.back().header);
         return;
@@ -1336,18 +1323,8 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
         auto param_it = fn->arg_begin();
         for (const auto& a : e.args) {
             Value* v = gen_expr(*a);
-            if (param_it != fn->arg_end()) {
-                llvm::Type* pt = param_it->getType();
-                if (v->getType() != pt) {
-                    if (pt->isIntegerTy() && v->getType()->isIntegerTy())
-                        v = builder_->CreateIntCast(v, pt, true);
-                    else if (pt->isFloatingPointTy() && v->getType()->isIntegerTy())
-                        v = builder_->CreateSIToFP(v, pt);
-                    else if (pt->isIntegerTy() && v->getType()->isFloatingPointTy())
-                        v = builder_->CreateFPToSI(v, pt);
-                }
-                ++param_it;
-            }
+            if (param_it != fn->arg_end())
+                v = coerce_to_llvm_type(v, (param_it++)->getType());
             args.push_back(v);
         }
         return builder_->CreateCall(fn, args);
@@ -1359,33 +1336,17 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
         TypeId obj_tid = type_id_of(*mem->object);
         std::string cls_name = types_.name_of(obj_tid);
 
-        // Try direct (static) dispatch
+        // Use full class resolution (same fallback as gen_member / lvalue_of)
+        cls_name = resolve_class_name(*mem->object, obj_tid);
         std::string mangled = mangle(cls_name, mem->member);
         Function* fn = mod_->getFunction(mangled);
-        if (!fn && !cls_name.empty()) {
-            // Try resolving via var_class_ if not already tried
-            if (auto* id = dynamic_cast<const ast::IdentExpr*>(mem->object.get()))
-                if (var_class_.count(id->name))
-                    mangled = mangle(var_class_.at(id->name), mem->member);
-            fn = mod_->getFunction(mangled);
-        }
         if (fn) {
             std::vector<Value*> args = {obj};
             auto param_it = std::next(fn->arg_begin()); // skip 'this'
             for (const auto& a : e.args) {
                 Value* v = gen_expr(*a);
-                if (param_it != fn->arg_end()) {
-                    llvm::Type* pt = param_it->getType();
-                    if (v->getType() != pt) {
-                        if (pt->isIntegerTy() && v->getType()->isIntegerTy())
-                            v = builder_->CreateIntCast(v, pt, true);
-                        else if (pt->isFloatingPointTy() && v->getType()->isIntegerTy())
-                            v = builder_->CreateSIToFP(v, pt);
-                        else if (pt->isIntegerTy() && v->getType()->isFloatingPointTy())
-                            v = builder_->CreateFPToSI(v, pt);
-                    }
-                    ++param_it;
-                }
+                if (param_it != fn->arg_end())
+                    v = coerce_to_llvm_type(v, (param_it++)->getType());
                 args.push_back(v);
             }
             return builder_->CreateCall(fn, args);
@@ -1403,24 +1364,11 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
 
 Value* Codegen::gen_member(const ast::MemberExpr& e) {
     Value* obj = gen_expr(*e.object);
-    TypeId obj_tid = type_id_of(*e.object);
+    std::string cls_name = resolve_class_name(*e.object, type_id_of(*e.object));
 
-    // Resolve class name: prefer type registry lookup, fall back to 'this' context
-    std::string cls_name = types_.name_of(obj_tid);
-    if (!layouts_.count(cls_name)) {
-        // If object is 'this' or 'super', use current class
-        if (dynamic_cast<const ast::ThisExpr*>(e.object.get()) ||
-            dynamic_cast<const ast::SuperExpr*>(e.object.get()))
-            cls_name = current_class_;
-        // If object is an identifier, look up its class from the var→class map
-        if (!layouts_.count(cls_name)) {
-            if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.object.get()))
-                cls_name = var_class_.count(id->name) ? var_class_.at(id->name) : "";
-        }
-    }
-
-    if (layouts_.count(cls_name)) {
-        const ClassLayout& layout = layouts_[cls_name];
+    auto layout_it = layouts_.find(cls_name);
+    if (layout_it != layouts_.end()) {
+        const ClassLayout& layout = layout_it->second;
         for (const auto& f : layout.fields) {
             if (f.name == e.member) {
                 Value* gep = builder_->CreateStructGEP(
@@ -1428,7 +1376,6 @@ Value* Codegen::gen_member(const ast::MemberExpr& e) {
                 return builder_->CreateLoad(lower_type(f.type), gep, e.member);
             }
         }
-        // Member is a method — return the function pointer
         for (const auto& mi : layout.methods) {
             if (mi.name == e.member && mi.fn)
                 return mi.fn;
@@ -1491,13 +1438,7 @@ Value* Codegen::gen_new(const ast::NewExpr& e) {
         if (fi.decl && fi.decl->init) {
             Value* gep = builder_->CreateStructGEP(st, raw, fi.index, fi.name + ".init");
             Value* init_val = gen_expr(*fi.decl->init.value());
-            llvm::Type* field_ty = lower_type(fi.type);
-            if (init_val->getType() != field_ty) {
-                if (field_ty->isIntegerTy() && init_val->getType()->isIntegerTy())
-                    init_val = builder_->CreateIntCast(init_val, field_ty, true);
-                else if (field_ty->isDoubleTy() && init_val->getType()->isIntegerTy())
-                    init_val = builder_->CreateSIToFP(init_val, field_ty);
-            }
+            init_val = coerce_to_llvm_type(init_val, lower_type(fi.type));
             builder_->CreateStore(init_val, gep);
         }
     }
@@ -1610,23 +1551,13 @@ Value* Codegen::lvalue_of(const ast::Expr& e) {
     }
     if (auto* mem = dynamic_cast<const ast::MemberExpr*>(&e)) {
         Value* obj = gen_expr(*mem->object);
-        TypeId obj_tid = type_id_of(*mem->object);
-        std::string cls_name = types_.name_of(obj_tid);
-        if (!layouts_.count(cls_name)) {
-            if (dynamic_cast<const ast::ThisExpr*>(mem->object.get()) ||
-                dynamic_cast<const ast::SuperExpr*>(mem->object.get()))
-                cls_name = current_class_;
-            if (!layouts_.count(cls_name)) {
-                if (auto* id = dynamic_cast<const ast::IdentExpr*>(mem->object.get()))
-                    cls_name = var_class_.count(id->name) ? var_class_.at(id->name) : "";
-            }
-        }
-        if (layouts_.count(cls_name)) {
-            const ClassLayout& layout = layouts_[cls_name];
-            for (const auto& f : layout.fields)
+        std::string cls_name = resolve_class_name(*mem->object, type_id_of(*mem->object));
+        auto it = layouts_.find(cls_name);
+        if (it != layouts_.end()) {
+            for (const auto& f : it->second.fields)
                 if (f.name == mem->member)
                     return builder_->CreateStructGEP(
-                        layout.struct_type, obj, f.index);
+                        it->second.struct_type, obj, f.index);
         }
         return nullptr;
     }
@@ -1661,6 +1592,33 @@ Value* Codegen::coerce(Value* val, TypeId from, TypeId to) {
     if (types_.is_integral(to) && val->getType() == llvm::Type::getInt1Ty(*ctx_))
         return builder_->CreateZExt(val, lower_type(to));
     return val;
+}
+
+Value* Codegen::coerce_to_llvm_type(Value* v, llvm::Type* pt) {
+    if (!pt || !v || v->getType() == pt) return v;
+    if (pt->isIntegerTy() && v->getType()->isIntegerTy())
+        return builder_->CreateIntCast(v, pt, true);
+    if (pt->isFloatingPointTy() && v->getType()->isIntegerTy())
+        return builder_->CreateSIToFP(v, pt);
+    if (pt->isIntegerTy() && v->getType()->isFloatingPointTy())
+        return builder_->CreateFPToSI(v, pt);
+    return v;
+}
+
+std::string Codegen::resolve_class_name(const ast::Expr& obj, TypeId obj_tid) const {
+    std::string cls = types_.name_of(obj_tid);
+    if (!layouts_.count(cls)) {
+        if (dynamic_cast<const ast::ThisExpr*>(&obj) ||
+            dynamic_cast<const ast::SuperExpr*>(&obj))
+            cls = current_class_;
+        if (!layouts_.count(cls)) {
+            if (auto* id = dynamic_cast<const ast::IdentExpr*>(&obj)) {
+                auto it = var_class_.find(id->name);
+                cls = (it != var_class_.end()) ? it->second : "";
+            }
+        }
+    }
+    return cls;
 }
 
 Value* Codegen::to_bool(Value* val, TypeId t) {
