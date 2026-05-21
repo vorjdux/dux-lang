@@ -5,11 +5,11 @@
 
 void duxrt_println_int(int64_t v)    { printf("%ld\n", (long)v); }
 void duxrt_println_double(double v)  { printf("%g\n",  v); }
-void duxrt_println_str(DuxStr* s)    { puts(s ? s->data : "(null)"); }
+void duxrt_println_str(DuxStr* s)    { const char* p = duxrt_str_cstr(s); puts(p ? p : "(null)"); }
 
 void duxrt_print_int(int64_t v)      { printf("%ld",   (long)v); }
 void duxrt_print_double(double v)    { printf("%g",    v); }
-void duxrt_print_str(DuxStr* s)      { fputs(s ? s->data : "(null)", stdout); }
+void duxrt_print_str(DuxStr* s)      { const char* p = duxrt_str_cstr(s); fputs(p ? p : "(null)", stdout); }
 
 DuxStr* duxrt_readline(void) {
     char buf[4096];
