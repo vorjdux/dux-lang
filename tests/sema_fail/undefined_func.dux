@@ -1,0 +1,3 @@
+void main() {
+    result = nonExistentFunction(1, 2)
+}

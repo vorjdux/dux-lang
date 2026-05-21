@@ -1,0 +1,9 @@
+void main() {
+    const int MAX = 100
+    const str GREETING = "Hello"
+    const bool DEBUG = false
+
+    println(MAX)
+    println(GREETING)
+    println(DEBUG)
+}
