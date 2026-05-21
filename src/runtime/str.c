@@ -9,6 +9,9 @@ static inline const char* sdata(const DuxStr* s) {
 }
 
 DuxStr* duxrt_str_new(const char* src, int64_t len) {
+    if (len < 0 || len > INT32_MAX) {
+        fputs("duxrt: string length exceeds 2 GiB limit\n", stderr); abort();
+    }
     DuxStr* s;
     if (len <= DUXSTR_INLINE_MAX) {
         /* Short path: single allocation, data embedded in FAM. */
