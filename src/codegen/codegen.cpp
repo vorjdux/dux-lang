@@ -24,7 +24,8 @@
 #include <llvm/TargetParser/Host.h>
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/IR/LegacyPassManager.h>
-// New pass manager (optimization pipeline)
+// NOTE: legacy::PassManager is still required for machine-code emission in LLVM 17-18.
+// TargetMachine::addPassesToEmitFile has no new-PM equivalent yet in these versions.
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Analysis/LoopAnalysisManager.h>
 #include <llvm/Analysis/CGSCCPassManager.h>
@@ -329,6 +330,10 @@ void Codegen::gen_decl(const ast::Decl& d, const std::string& prefix) {
 void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
                        TypeId class_type) {
     if (!f.body) return;
+    if (f.modifier && (*f.modifier == "get" || *f.modifier == "set")) {
+        driver_.warning(f.loc, "property " + std::string(*f.modifier == "get" ? "getter" : "setter") +
+                        " '" + f.name + "' is parsed but not yet implemented as a property; compiling as a regular method");
+    }
 
     Function* fn = mod_->getFunction(mangled);
     if (!fn) {
@@ -388,6 +393,9 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
 }
 
 void Codegen::gen_class(const ast::ClassDecl& c) {
+    for (const auto& d : c.decorators)
+        driver_.warning(d.loc, "decorator '@" + d.name + "' is not yet implemented and will be ignored");
+
     ClassLayout& layout = layouts_[c.name];
 
     // Emit vtable as a global array of function pointers
@@ -419,6 +427,10 @@ void Codegen::gen_class(const ast::ClassDecl& c) {
     // Generate all methods
     for (const auto& m : c.members) {
         if (!m.decl) continue;
+        if (!m.decorators.empty()) {
+            for (const auto& d : m.decorators)
+                driver_.warning(d.loc, "decorator '@" + d.name + "' is not yet implemented and will be ignored");
+        }
         if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
             std::string mangled = mangle(c.name, f->name);
             gen_func(*f, mangled, cls_type);
@@ -834,10 +846,77 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
             : builder_->CreateICmpSLT(i, hi_val, "for.cond");
         builder_->CreateCondBr(cond, body_bb, exit_bb);
     } else {
-        // Non-range iterable: skip body (not yet supported)
-        builder_->CreateBr(exit_bb);
-        builder_->SetInsertPoint(hdr_bb);
-        builder_->CreateBr(exit_bb);
+        // Check if iterable is a list type
+        TypeId iter_tid = type_id_of(*s.iterable);
+        bool is_list = (iter_tid == TR::TID_LIST || iter_tid == TR::TID_UNKNOWN);
+
+        if (is_list) {
+            // List iteration: evaluate iterable, get length, iterate with index
+            Value* list_val = gen_expr(*s.iterable);
+
+            auto* len_fn = get_or_declare_rt("duxrt_list_len",
+                llvm::Type::getInt64Ty(*ctx_), {ptr_type()});
+            Value* len_val = builder_->CreateCall(len_fn, {list_val}, "list.len");
+
+            // Allocate storage for list pointer and length (must survive across BBs)
+            Value* list_ptr_alloca = make_alloca(ptr_type(), "list.ptr");
+            builder_->CreateStore(list_val, list_ptr_alloca);
+
+            Value* len_alloca = make_alloca(llvm::Type::getInt64Ty(*ctx_), "list.len");
+            builder_->CreateStore(len_val, len_alloca);
+
+            Value* idx_alloca = make_alloca(llvm::Type::getInt64Ty(*ctx_), "for.idx");
+            builder_->CreateStore(
+                llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), 0), idx_alloca);
+
+            builder_->CreateBr(hdr_bb);
+
+            // hdr_bb: check idx < len
+            builder_->SetInsertPoint(hdr_bb);
+            Value* idx_hdr = builder_->CreateLoad(
+                llvm::Type::getInt64Ty(*ctx_), idx_alloca, "idx");
+            Value* len_hdr = builder_->CreateLoad(
+                llvm::Type::getInt64Ty(*ctx_), len_alloca, "len");
+            Value* cond = builder_->CreateICmpSLT(idx_hdr, len_hdr, "for.cond");
+            builder_->CreateCondBr(cond, body_bb, exit_bb);
+
+            // body_bb: load element into var_alloca, then gen_stmt
+            builder_->SetInsertPoint(body_bb);
+            Value* list_v = builder_->CreateLoad(ptr_type(), list_ptr_alloca, "list.v");
+            Value* idx_body = builder_->CreateLoad(
+                llvm::Type::getInt64Ty(*ctx_), idx_alloca, "idx.body");
+            auto* get_fn = get_or_declare_rt("duxrt_list_get",
+                ptr_type(), {ptr_type(), llvm::Type::getInt64Ty(*ctx_)});
+            Value* elem = builder_->CreateCall(get_fn, {list_v, idx_body}, "elem");
+            if (var_t == ptr_type())
+                builder_->CreateStore(elem, var_alloca);
+
+            loop_stack_.push_back({incr_bb, exit_bb, pending_label_});
+            pending_label_.clear();
+            gen_stmt(*s.body);
+            loop_stack_.pop_back();
+            if (!builder_->GetInsertBlock()->getTerminator())
+                builder_->CreateBr(incr_bb);
+
+            // incr_bb: idx++
+            builder_->SetInsertPoint(incr_bb);
+            Value* idx_incr = builder_->CreateLoad(
+                llvm::Type::getInt64Ty(*ctx_), idx_alloca, "idx.incr");
+            Value* next_idx = builder_->CreateAdd(
+                idx_incr,
+                llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), 1));
+            builder_->CreateStore(next_idx, idx_alloca);
+            builder_->CreateBr(hdr_bb);
+
+            builder_->SetInsertPoint(exit_bb);
+            env_pop();
+            return;
+        } else {
+            driver_.warning(s.loc, "for-in over non-list iterables not yet supported");
+            builder_->CreateBr(exit_bb);
+            builder_->SetInsertPoint(hdr_bb);
+            builder_->CreateBr(exit_bb);
+        }
     }
 
     builder_->SetInsertPoint(body_bb);
@@ -942,31 +1021,51 @@ void Codegen::gen_switch(const ast::SwitchStmt& s) {
 }
 
 void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
-    // Simplified: generate try body in current block; catch body in a separate block.
-    // Full EH (invoke/landingpad) requires personality function — deferred to when
-    // duxrt exception ABI is ready (#32). For now: emit both blocks sequentially.
-    Function* fn   = builder_->GetInsertBlock()->getParent();
+    Function* fn = builder_->GetInsertBlock()->getParent();
+
     auto* try_bb   = BasicBlock::Create(*ctx_, "try.body",  fn);
     auto* catch_bb = BasicBlock::Create(*ctx_, "try.catch", fn);
     auto* end_bb   = BasicBlock::Create(*ctx_, "try.end",   fn);
 
-    builder_->CreateBr(try_bb);
+    // Slot for the exception pointer (filled by duxrt_try_enter on longjmp)
+    Value* ex_slot = make_alloca(ptr_type(), "ex.slot");
+    builder_->CreateStore(
+        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptr_type())), ex_slot);
 
+    // duxrt_try_enter(&ex_slot) returns 0 on first entry (try path), 1 after longjmp (catch path)
+    auto* enter_fn = get_or_declare_rt("duxrt_try_enter",
+        llvm::Type::getInt32Ty(*ctx_), {ptr_type()});
+    Value* in_catch = builder_->CreateCall(enter_fn, {ex_slot}, "in.catch");
+    Value* is_catch = builder_->CreateICmpNE(in_catch,
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0), "is.catch");
+    builder_->CreateCondBr(is_catch, catch_bb, try_bb);
+
+    // try body
     builder_->SetInsertPoint(try_bb);
     gen_stmt(*s.try_body);
-    if (!builder_->GetInsertBlock()->getTerminator())
-        builder_->CreateBr(end_bb); // on success, skip catch
+    if (!builder_->GetInsertBlock()->getTerminator()) {
+        auto* exit_fn = get_or_declare_rt("duxrt_try_exit",
+            llvm::Type::getVoidTy(*ctx_), {});
+        builder_->CreateCall(exit_fn, {});
+        builder_->CreateBr(end_bb);
+    }
 
+    // catch body
     builder_->SetInsertPoint(catch_bb);
     env_push();
+    Value* ex_ptr = builder_->CreateLoad(ptr_type(), ex_slot, "ex.ptr");
     if (s.catch_var && !s.catch_all) {
-        // Allocate catch variable as null ptr placeholder
         Value* ex_alloca = make_alloca(ptr_type(), *s.catch_var);
-        builder_->CreateStore(llvm::ConstantPointerNull::get(
-            llvm::cast<llvm::PointerType>(ptr_type())), ex_alloca);
+        builder_->CreateStore(ex_ptr, ex_alloca);
         env_define(*s.catch_var, ex_alloca);
     }
     gen_stmt(*s.catch_body);
+    // Free the exception object after the catch block executes
+    if (!builder_->GetInsertBlock()->getTerminator()) {
+        auto* free_fn = get_or_declare_rt("duxrt_exception_free",
+            llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+        builder_->CreateCall(free_fn, {ex_ptr});
+    }
     env_pop();
     if (!builder_->GetInsertBlock()->getTerminator())
         builder_->CreateBr(end_bb);

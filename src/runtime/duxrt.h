@@ -98,6 +98,10 @@ double  duxrt_math_log2(double x);
 double  duxrt_math_sin(double x);
 double  duxrt_math_cos(double x);
 
+/* ── String arena (bump-pointer allocator, freed at program exit) ─────── */
+void* duxrt_str_arena_alloc(size_t size);
+void  duxrt_str_arena_free_all(void);
+
 /* ── Exceptions ──────────────────────────────────────────────────────────── */
 typedef struct DuxException {
     const char* type_name;
