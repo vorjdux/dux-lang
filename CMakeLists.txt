@@ -55,6 +55,10 @@ target_include_directories(dux PRIVATE
     ${GEN_DIR}
 )
 
+target_compile_definitions(dux PRIVATE
+    DUX_VERSION="${PROJECT_VERSION}"
+)
+
 # Warnings
 target_compile_options(dux PRIVATE
     -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-function
