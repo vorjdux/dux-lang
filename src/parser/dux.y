@@ -70,7 +70,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token <bool>        BOOL_LIT   "bool literal"
 
 /* Keywords */
-%token KW_NAMESPACE KW_IMPORT KW_CLASS KW_INTERFACE
+%token KW_NAMESPACE KW_IMPORT KW_FROM KW_CLASS KW_INTERFACE
 %token KW_PUBLIC KW_PRIVATE KW_PROTECTED
 %token KW_NEW KW_DELETE KW_THIS KW_SUPER KW_NULL
 %token KW_RETURN KW_BREAK KW_CONTINUE
@@ -137,6 +137,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 /* Access */
 %type <AccessMod>                        access_mod
 %type <std::string>                      dotted_name
+%type <std::vector<std::string>>         ident_list
 /* Statements */
 %type <StmtList>                         stmt_list block_body
 %type <StmtPtr>  stmt simple_stmt
@@ -257,6 +258,19 @@ import_decl
             n->path = $2;
             $$ = std::move(n);
         }
+    | KW_IMPORT LBRACE ident_list RBRACE KW_FROM dotted_name SEMI
+        {
+            auto n     = mk<ImportDecl>();
+            n->loc     = sl(@$, driver);
+            n->path    = $6;
+            n->symbols = std::move($3);
+            $$ = std::move(n);
+        }
+    ;
+
+ident_list
+    : IDENT                        { $$.push_back($1); }
+    | ident_list COMMA IDENT       { $1.push_back($3); $$ = std::move($1); }
     ;
 
 /* =====================================================================

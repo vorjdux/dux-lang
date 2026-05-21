@@ -318,7 +318,16 @@ private:
     }
 
     void visit(const ImportDecl& n) override {
-        out_ << pad() << "import " << n.path << '\n';
+        if (n.symbols.empty()) {
+            out_ << pad() << "import " << n.path << '\n';
+        } else {
+            out_ << pad() << "import { ";
+            for (std::size_t i = 0; i < n.symbols.size(); ++i) {
+                if (i) out_ << ", ";
+                out_ << n.symbols[i];
+            }
+            out_ << " } from " << n.path << '\n';
+        }
     }
 
     void visit(const NamespaceDecl& n) override {

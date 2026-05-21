@@ -1,0 +1,58 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+str repeat(str s, int n) {
+    str result = ""
+    for int i in range(n) {
+        result = result + s
+    }
+    return result
+}
+
+str pad_left(str s, int width) {
+    int spaces = width - len(s)
+    if (spaces <= 0) {
+        return s
+    }
+    str padding = repeat(" ", spaces)
+    str result = padding + s
+    return result
+}
