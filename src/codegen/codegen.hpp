@@ -211,7 +211,9 @@ private:
     llvm::Value* load_var(const std::string& name, const ast::SourceLoc& loc);
     llvm::Value* lvalue_of(const ast::Expr& e);
     llvm::Value* coerce(llvm::Value* val, TypeId from, TypeId to);
+    llvm::Value* coerce_to_llvm_type(llvm::Value* v, llvm::Type* target);
     llvm::Value* to_bool(llvm::Value* val, TypeId t);
+    std::string  resolve_class_name(const ast::Expr& obj, TypeId obj_tid) const;
 
     // Environment helpers
     void   env_push();
@@ -227,9 +229,6 @@ private:
 
     // Runtime call helpers (intrinsics / duxrt stubs)
     llvm::Value* rt_malloc(llvm::Value* size);
-    llvm::Value* rt_println_int(llvm::Value* v);
-    llvm::Value* rt_println_double(llvm::Value* v);
-    llvm::Value* rt_println_str(llvm::Value* v);
     llvm::Value* rt_println(llvm::Value* v, TypeId t);
     llvm::Function* get_or_declare_rt(const std::string& name,
                                       llvm::Type* ret,
