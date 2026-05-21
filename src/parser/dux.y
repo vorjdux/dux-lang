@@ -195,6 +195,7 @@ top_decl_list
     : %empty                          { $$ = DeclList{}; }
     | top_decl_list SEMI              { $$ = std::move($1); }
     | top_decl_list top_decl          { $1.push_back(std::move($2)); $$ = std::move($1); }
+    | top_decl_list error SEMI        { $$ = std::move($1); yyerrok; }
     ;
 
 top_decl : decl { $$ = std::move($1); } ;
@@ -235,6 +236,8 @@ namespace_body
         { $1->stmts.push_back(std::move($2)); $$ = std::move($1); }
     | namespace_body simple_stmt SEMI
         { $1->stmts.push_back(std::move($2)); $$ = std::move($1); }
+    | namespace_body error SEMI
+        { $$ = std::move($1); yyerrok; }
     ;
 
 dotted_name
@@ -318,6 +321,8 @@ class_members
         { $1.push_back(std::move($2)); $$ = std::move($1); }
     | class_members SEMI
         { $$ = std::move($1); }
+    | class_members error SEMI
+        { $$ = std::move($1); yyerrok; }
     ;
 
 class_member
@@ -367,6 +372,8 @@ interface_members
     | interface_members SEMI              { $$ = std::move($1); }
     | interface_members interface_member
         { $1.push_back(std::move($2)); $$ = std::move($1); }
+    | interface_members error SEMI
+        { $$ = std::move($1); yyerrok; }
     ;
 
 interface_member
@@ -590,6 +597,7 @@ stmt_list
     : %empty                    { $$ = StmtList{}; }
     | stmt_list SEMI            { $$ = std::move($1); }
     | stmt_list stmt            { $1.push_back(std::move($2)); $$ = std::move($1); }
+    | stmt_list error SEMI      { $$ = std::move($1); yyerrok; }
     ;
 
 stmt
@@ -957,6 +965,6 @@ arg_list_ne
 %%
 
 /* ===================================================================== */
-void yy::parser::error(const location_type& loc, const std::string& msg) {
-    std::cerr << loc << ": error: " << msg << '\n';
+void yy::parser::error(const location_type& l, const std::string& msg) {
+    driver.error(l, msg);
 }
