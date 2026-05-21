@@ -1,0 +1,17 @@
+void risky() {
+    println("risky operation")
+}
+
+void main() {
+    try {
+        risky()
+    } catch ... {
+        println("caught")
+    }
+
+    try {
+        risky()
+    } catch(Exception e) {
+        println(e)
+    }
+}

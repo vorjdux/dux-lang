@@ -1,0 +1,14 @@
+str greet(str name) {
+    return "Hello, " + name
+}
+
+void main() {
+    str msg = greet("World")
+    println(msg)
+    println(len(msg))
+
+    str a = "foo"
+    str b = "bar"
+    str ab = a + b
+    println(ab)
+}
