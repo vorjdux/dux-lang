@@ -1,0 +1,8 @@
+# assert statements require parentheses
+void main() {
+    x = 5
+    assert(x > 0)
+    assert(x == 5)
+    assert(x != 0)
+    assert(true)
+}

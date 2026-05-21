@@ -1,0 +1,5 @@
+# Import declarations use dot-separated paths
+import std.io
+import std.math
+import std.collections.List
+import std.collections.Dict

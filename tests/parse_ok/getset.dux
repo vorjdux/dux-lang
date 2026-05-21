@@ -1,0 +1,22 @@
+# get/set property accessors
+class Temperature {
+    private:
+    real celsius_
+
+    Temperature(real c) {
+        this.celsius_ = c
+    }
+
+    public:
+    real celsius() get {
+        return this.celsius_
+    }
+
+    void celsius(real value) set {
+        this.celsius_ = value
+    }
+
+    real fahrenheit() get {
+        return this.celsius_ * 1.8 + 32.0
+    }
+}
