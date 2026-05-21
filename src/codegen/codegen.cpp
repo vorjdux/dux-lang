@@ -1,8 +1,3 @@
-/*
- * Dux LLVM IR code generator
- * Covers M3 issues #14–#24: type lowering, literals, operators, variables,
- * control flow, functions, classes, constructors, vtable, try/catch, assert.
- */
 #include "codegen/codegen.hpp"
 #include "driver/driver.hpp"
 
@@ -10,6 +5,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -18,6 +14,8 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/GlobalVariable.h>
+#include <llvm/IR/DIBuilder.h>
+#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/TargetSelect.h>
@@ -26,8 +24,13 @@
 #include <llvm/TargetParser/Host.h>
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/IR/LegacyPassManager.h>
+// New pass manager (optimization pipeline)
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Analysis/LoopAnalysisManager.h>
+#include <llvm/Analysis/CGSCCPassManager.h>
 #pragma GCC diagnostic pop
 
+#include <filesystem>
 #include <sstream>
 #include <stdexcept>
 
@@ -46,9 +49,10 @@ Codegen::Codegen(Driver& driver) : driver_(driver) {
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
 
-    ctx_     = std::make_unique<llvm::LLVMContext>();
-    mod_     = std::make_unique<llvm::Module>("dux", *ctx_);
-    builder_ = std::make_unique<llvm::IRBuilder<>>(*ctx_);
+    ctx_        = std::make_unique<llvm::LLVMContext>();
+    mod_        = std::make_unique<llvm::Module>("dux", *ctx_);
+    builder_    = std::make_unique<llvm::IRBuilder<>>(*ctx_);
+    source_file_ = driver_.filename();
 }
 
 Codegen::~Codegen() = default;
@@ -60,22 +64,36 @@ bool Codegen::run(const ast::Program& prog, const std::string& module_name) {
     mod_->setSourceFileName(module_name);
     mod_->setTargetTriple(llvm::sys::getDefaultTargetTriple());
 
+    // DWARF: initialise debug info builder
+    if (emit_debug_) debug_init(source_file_);
+
     env_push(); // global env
 
-    // Pass 1: build struct layouts for all classes
+    // Pass 1: process imports (stdlib + file)
+    for (const auto& d : prog.decls)
+        if (auto* imp = dynamic_cast<const ast::ImportDecl*>(d.get()))
+            process_import(*imp);
+
+    // Pass 2: build struct layouts for all classes
     build_layouts(prog.decls);
 
-    // Pass 2: declare all top-level functions (forward declare)
+    // Pass 3: declare all top-level functions (forward declare)
     declare_functions(prog.decls);
 
-    // Pass 3: generate bodies
+    // Pass 4: generate bodies
     for (const auto& d : prog.decls) gen_decl(*d);
     gen_stmts(prog.stmts);
 
     env_pop();
 
-    // Wrap void @main() → i32 @main() so the C runtime gets a valid exit code
+    // Finalise DWARF metadata
+    if (emit_debug_ && dibuilder_) dibuilder_->finalize();
+
+    // Wrap void @main() → i32 @main()
     emit_main_wrapper();
+
+    // Run optimisation passes
+    if (opt_level_ > 0) optimize();
 
     // Verify the module
     std::string err_str;
@@ -325,6 +343,9 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
     BasicBlock* entry = BasicBlock::Create(*ctx_, "entry", fn);
     builder_->SetInsertPoint(entry);
 
+    // DWARF: attach subprogram metadata
+    debug_func(f, fn, mangled);
+
     env_push();
 
     // If method: bind 'this'
@@ -437,6 +458,186 @@ void Codegen::gen_namespace(const ast::NamespaceDecl& ns) {
     gen_stmts(ns.stmts);
 }
 
+// ─── Optimization pipeline (#37) ─────────────────────────────────────────────
+
+void Codegen::optimize() {
+    llvm::PassBuilder pb;
+    llvm::LoopAnalysisManager     lam;
+    llvm::FunctionAnalysisManager fam;
+    llvm::CGSCCAnalysisManager    cgam;
+    llvm::ModuleAnalysisManager   mam;
+
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+
+    llvm::OptimizationLevel lvl = llvm::OptimizationLevel::O0;
+    switch (opt_level_) {
+        case 1: lvl = llvm::OptimizationLevel::O1; break;
+        case 2: lvl = llvm::OptimizationLevel::O2; break;
+        case 3: lvl = llvm::OptimizationLevel::O3; break;
+        default: break;
+    }
+
+    llvm::ModulePassManager mpm = pb.buildPerModuleDefaultPipeline(lvl);
+    mpm.run(*mod_, mam);
+}
+
+// ─── DWARF debug info (#36) ───────────────────────────────────────────────────
+
+void Codegen::debug_init(const std::string& source_path) {
+    dibuilder_ = std::make_unique<llvm::DIBuilder>(*mod_);
+
+    std::string dir  = ".";
+    std::string file = source_path;
+    if (!source_path.empty()) {
+        std::filesystem::path p(source_path);
+        dir  = p.parent_path().empty() ? "." : p.parent_path().string();
+        file = p.filename().string();
+    }
+
+    di_file_ = dibuilder_->createFile(file, dir);
+    di_cu_   = dibuilder_->createCompileUnit(
+        llvm::dwarf::DW_LANG_C,   // closest to Dux semantics
+        di_file_,
+        "dux " DUX_VERSION,
+        /*isOptimized=*/opt_level_ > 0,
+        /*Flags=*/"",
+        /*RuntimeVersion=*/0);
+}
+
+llvm::DISubprogram* Codegen::debug_func(const ast::FunctionDecl& f,
+                                         llvm::Function* fn,
+                                         const std::string& mangled) {
+    if (!emit_debug_ || !dibuilder_ || !di_file_) return nullptr;
+
+    // Build a simple subroutine type (no parameter types for now)
+    auto* sub_type = dibuilder_->createSubroutineType(
+        dibuilder_->getOrCreateTypeArray({}));
+
+    unsigned line = f.loc.line > 0 ? (unsigned)f.loc.line : 1;
+    auto* sp = dibuilder_->createFunction(
+        di_cu_, f.name, mangled, di_file_,
+        line, sub_type,
+        line,
+        llvm::DINode::FlagPrototyped,
+        llvm::DISubprogram::SPFlagDefinition);
+
+    fn->setSubprogram(sp);
+    return sp;
+}
+
+void Codegen::debug_set_loc(const ast::SourceLoc& loc) {
+    if (!emit_debug_ || !builder_->GetInsertBlock()) return;
+    auto* sp = builder_->GetInsertBlock()->getParent()
+                   ? builder_->GetInsertBlock()->getParent()->getSubprogram()
+                   : nullptr;
+    if (!sp) return;
+    unsigned line = loc.line > 0 ? (unsigned)loc.line : 1;
+    unsigned col  = loc.col  > 0 ? (unsigned)loc.col  : 0;
+    builder_->SetCurrentDebugLocation(
+        llvm::DILocation::get(*ctx_, line, col, sp));
+}
+
+// ─── Module / import system (#35) ────────────────────────────────────────────
+
+// Stdlib dispatch table: module → { fn_name → (rt_sym, ret_tid, {param_tids}) }
+struct StdlibFn {
+    std::string rt_sym;   // duxrt_* symbol name
+    TypeId      ret;
+    std::vector<TypeId> params;
+};
+
+using StdlibMod = std::unordered_map<std::string, StdlibFn>;
+
+static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
+    static const std::unordered_map<std::string, StdlibMod> tbl = {
+        {"math", {
+            {"sqrt",  {"duxrt_math_sqrt",   TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
+            {"pow",   {"duxrt_math_pow",    TR::TID_DOUBLE, {TR::TID_DOUBLE, TR::TID_DOUBLE}}},
+            {"floor", {"duxrt_math_floor",  TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
+            {"ceil",  {"duxrt_math_ceil",   TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
+            {"abs",   {"duxrt_math_abs_d",  TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
+            {"log",   {"duxrt_math_log",    TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
+            {"log2",  {"duxrt_math_log2",   TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
+            {"sin",   {"duxrt_math_sin",    TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
+            {"cos",   {"duxrt_math_cos",    TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
+            {"min",   {"duxrt_math_min_d",  TR::TID_DOUBLE, {TR::TID_DOUBLE, TR::TID_DOUBLE}}},
+            {"max",   {"duxrt_math_max_d",  TR::TID_DOUBLE, {TR::TID_DOUBLE, TR::TID_DOUBLE}}},
+        }},
+        {"str", {
+            {"concat",      {"duxrt_str_concat",      TR::TID_STR, {TR::TID_STR, TR::TID_STR}}},
+            {"from_int",    {"duxrt_str_from_int",    TR::TID_STR, {TR::TID_LONG}}},
+            {"from_double", {"duxrt_str_from_double", TR::TID_STR, {TR::TID_DOUBLE}}},
+            {"length",      {"duxrt_str_length",      TR::TID_LONG, {TR::TID_STR}}},
+            {"slice",       {"duxrt_str_slice",       TR::TID_STR, {TR::TID_STR, TR::TID_LONG, TR::TID_LONG}}},
+        }},
+        {"io", {
+            {"println",  {"duxrt_println_str",  TR::TID_VOID, {TR::TID_STR}}},
+            {"print",    {"duxrt_print_str",    TR::TID_VOID, {TR::TID_STR}}},
+            {"readline", {"duxrt_readline",     TR::TID_STR,  {}}},
+        }},
+    };
+    return tbl;
+}
+
+void Codegen::process_import(const ast::ImportDecl& imp) {
+    if (imp.path.empty()) return;
+    // path is a dotted string like "math" or "dux.math"; use the last component
+    const std::string& full = imp.path;
+    std::string mod = full.substr(full.rfind('.') == std::string::npos ? 0 : full.rfind('.') + 1);
+
+    if (stdlib_table().count(mod)) {
+        stdlib_imports_.insert(mod);
+        // Pre-declare all stdlib functions so they appear in IR
+        const auto& fns = stdlib_table().at(mod);
+        for (const auto& [fn_name, sf] : fns) {
+            std::vector<llvm::Type*> ptypes;
+            for (auto tid : sf.params) ptypes.push_back(lower_type(tid));
+            get_or_declare_rt(sf.rt_sym, lower_type(sf.ret), ptypes);
+        }
+    }
+    // File-based imports would be handled here in a future pass
+}
+
+Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
+    auto* mem = dynamic_cast<const ast::MemberExpr*>(e.callee.get());
+    if (!mem) return nullptr;
+    auto* id = dynamic_cast<const ast::IdentExpr*>(mem->object.get());
+    if (!id) return nullptr;
+
+    const std::string& mod = id->name;
+    if (!stdlib_imports_.count(mod)) return nullptr;
+
+    auto it_mod = stdlib_table().find(mod);
+    if (it_mod == stdlib_table().end()) return nullptr;
+
+    auto it_fn = it_mod->second.find(mem->member);
+    if (it_fn == it_mod->second.end()) return nullptr;
+
+    const StdlibFn& sf = it_fn->second;
+    Function* fn = mod_->getFunction(sf.rt_sym);
+    if (!fn) return nullptr;
+
+    std::vector<Value*> args;
+    auto param_it = fn->arg_begin();
+    for (std::size_t i = 0; i < e.args.size() && param_it != fn->arg_end(); ++i, ++param_it) {
+        Value* v = gen_expr(*e.args[i]);
+        // Coerce to expected type
+        llvm::Type* expected = param_it->getType();
+        if (v->getType() != expected) {
+            if (expected->isDoubleTy() && v->getType()->isIntegerTy())
+                v = builder_->CreateSIToFP(v, expected);
+            else if (expected->isIntegerTy() && v->getType()->isDoubleTy())
+                v = builder_->CreateFPToSI(v, expected);
+        }
+        args.push_back(v);
+    }
+    return builder_->CreateCall(fn, args);
+}
+
 // ─── Statements ──────────────────────────────────────────────────────────────
 
 void Codegen::gen_stmts(const ast::StmtList& stmts) {
@@ -447,6 +648,7 @@ void Codegen::gen_stmts(const ast::StmtList& stmts) {
 }
 
 void Codegen::gen_stmt(const ast::Stmt& s) {
+    debug_set_loc(s.loc);
     if (auto* b  = dynamic_cast<const ast::BlockStmt*>(&s))    { gen_block(*b);    return; }
     if (auto* e  = dynamic_cast<const ast::ExprStmt*>(&s))     { gen_expr(*e->expr); return; }
     if (auto* v  = dynamic_cast<const ast::VarDeclStmt*>(&s))  { gen_var_decl(*v); return; }
@@ -458,12 +660,12 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     if (auto* sw = dynamic_cast<const ast::SwitchStmt*>(&s))   { gen_switch(*sw);  return; }
     if (auto* tc = dynamic_cast<const ast::TryCatchStmt*>(&s)) { gen_try_catch(*tc);return;}
     if (auto* r  = dynamic_cast<const ast::ReturnStmt*>(&s))   { gen_return(*r);   return; }
-    if (auto* br = dynamic_cast<const ast::BreakStmt*>(&s)) {
+    if (dynamic_cast<const ast::BreakStmt*>(&s)) {
         if (!loop_stack_.empty())
             builder_->CreateBr(loop_stack_.back().exit);
         return;
     }
-    if (auto* co = dynamic_cast<const ast::ContinueStmt*>(&s)) {
+    if (dynamic_cast<const ast::ContinueStmt*>(&s)) {
         if (!loop_stack_.empty())
             builder_->CreateBr(loop_stack_.back().header);
         return;
@@ -1018,6 +1220,9 @@ Value* Codegen::gen_unary(const ast::UnaryExpr& e) {
 }
 
 Value* Codegen::gen_call(const ast::CallExpr& e) {
+    // Stdlib module call (e.g. math.sqrt, str.concat)
+    if (Value* v = try_stdlib_call(e)) return v;
+
     // Built-in println / print
     if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.callee.get())) {
         const std::string& name = id->name;

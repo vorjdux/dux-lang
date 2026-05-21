@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // Suppress LLVM header warnings
@@ -74,6 +75,12 @@ public:
     explicit Codegen(Driver& driver);
     ~Codegen();
 
+    // Optimization level (0–3); must be set before run().
+    void set_opt_level(int level) { opt_level_ = level; }
+
+    // Enable DWARF debug info generation (must be set before run()).
+    void set_debug(bool on) { emit_debug_ = on; }
+
     // Generate IR for the whole program. Returns true on success.
     bool run(const ast::Program& prog, const std::string& module_name = "dux_module");
 
@@ -87,18 +94,27 @@ public:
 
 private:
     Driver&      driver_;
-    sema::TypeRegistry types_;   // shared with sema (re-run after sema populates it)
+    sema::TypeRegistry types_;
 
     // LLVM objects
     std::unique_ptr<llvm::LLVMContext> ctx_;
     std::unique_ptr<llvm::Module>      mod_;
     std::unique_ptr<llvm::IRBuilder<>> builder_;
 
+    // DWARF debug info builder (only active when emit_debug_ == true)
+    std::unique_ptr<llvm::DIBuilder>   dibuilder_;
+    llvm::DIFile*                      di_file_{nullptr};
+    llvm::DICompileUnit*               di_cu_{nullptr};
+
+    // Options
+    int  opt_level_{0};
+    bool emit_debug_{false};
+
     // Bookkeeping
     int error_count_{0};
+    std::string source_file_;
 
     // ── Value environment (name → alloca) ────────────────────────────────
-    // Stack of scopes: each scope is a map name → alloca (or global Value*)
     std::vector<std::unordered_map<std::string, llvm::Value*>> env_;
 
     // Per-class layouts
@@ -109,6 +125,9 @@ private:
 
     // Loop stack for break/continue
     std::vector<LoopCtx> loop_stack_;
+
+    // Stdlib modules imported in this compilation unit (e.g. "math")
+    std::unordered_set<std::string> stdlib_imports_;
 
     // Current function context
     llvm::Function* current_fn_{nullptr};
@@ -129,6 +148,21 @@ private:
     void declare_class_methods(const ast::ClassDecl& c);
     llvm::Function* declare_function(const ast::FunctionDecl& f,
                                      const std::string& mangled);
+
+    // ── Optimization pass (#37) ──────────────────────────────────────────
+    void optimize();
+
+    // ── DWARF debug info (#36) ───────────────────────────────────────────
+    void debug_init(const std::string& source_path);
+    llvm::DISubprogram* debug_func(const ast::FunctionDecl& f,
+                                   llvm::Function* fn,
+                                   const std::string& mangled);
+    void debug_set_loc(const ast::SourceLoc& loc);
+
+    // ── Stdlib module dispatch (#35) ─────────────────────────────────────
+    // Returns non-null Value if callee is a stdlib module call (e.g. math.sqrt)
+    llvm::Value* try_stdlib_call(const ast::CallExpr& e);
+    void process_import(const ast::ImportDecl& imp);
 
     // ── Top-level codegen ────────────────────────────────────────────────
     void gen_decl(const ast::Decl& d, const std::string& prefix = "");

@@ -1,0 +1,10 @@
+import math
+
+void main() {
+    double x = math.sqrt(4.0)
+    println(x)
+    double y = math.floor(3.7)
+    println(y)
+    double z = math.pow(2.0, 3.0)
+    println(z)
+}

@@ -1,0 +1,12 @@
+import math
+
+void main() {
+    double r = math.sqrt(9.0)
+    double p = math.pow(2.0, 10.0)
+    double s = math.sin(0.0)
+    double c = math.cos(0.0)
+    println(r)
+    println(p)
+    println(s)
+    println(c)
+}
