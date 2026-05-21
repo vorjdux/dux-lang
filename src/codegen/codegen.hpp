@@ -119,6 +119,13 @@ private:
     // ── Value environment (name → alloca) ────────────────────────────────
     std::vector<std::unordered_map<std::string, llvm::Value*>> env_;
 
+    // Parallel to env_: each scope level holds allocas of str-typed variables
+    // so env_pop can emit duxrt_str_release calls for them.
+    std::vector<std::vector<llvm::Value*>> str_scopes_;
+
+    // Cache of immortal DuxStr* globals for string literals (keyed by value).
+    std::unordered_map<std::string, llvm::GlobalVariable*> str_lit_cache_;
+
     // Per-class layouts
     std::unordered_map<std::string, ClassLayout> layouts_;
 
@@ -218,7 +225,9 @@ private:
     // Environment helpers
     void   env_push();
     void   env_pop();
-    void   env_define(const std::string& name, llvm::Value* alloca);
+    // Pass tid=TID_STR to register this alloca for release on scope exit.
+    void   env_define(const std::string& name, llvm::Value* alloca,
+                      TypeId tid = TypeRegistry::TID_UNKNOWN);
     llvm::Value* env_lookup(const std::string& name) const;
 
     // Create an alloca, register its element type, and define it in the current scope
@@ -234,6 +243,15 @@ private:
                                       llvm::Type* ret,
                                       std::vector<llvm::Type*> params,
                                       bool vararg = false);
+
+    // String reference-counting helpers
+    llvm::Value* str_literal(const std::string& s);   // immortal DuxStr* global
+    llvm::Value* emit_str_retain(llvm::Value* v);
+    void         emit_str_release(llvm::Value* v);
+    // Retain v only when it is NOT already a consuming result (CallInst/GlobalVariable).
+    llvm::Value* maybe_retain_str(llvm::Value* v);
+    // Emit releases for every str alloca across all active scopes (used by gen_return).
+    void         emit_all_str_releases();
 
     TypeId type_id_of(const ast::Expr& e) const;
 
