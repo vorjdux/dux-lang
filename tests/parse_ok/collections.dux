@@ -1,0 +1,23 @@
+# List and dict literals, indexing, member access
+void main() {
+    nums = [1, 2, 3, 4, 5]
+    first = nums[0]
+    last = nums[4]
+
+    empty_list = []
+
+    person = {
+        'name': "Alice",
+        'age': 30,
+    }
+
+    empty_dict = {}
+
+    nested = {
+        'coords': [1, 2, 3],
+        'label': "point",
+    }
+
+    name = person['name']
+    x = nested['coords'][0]
+}

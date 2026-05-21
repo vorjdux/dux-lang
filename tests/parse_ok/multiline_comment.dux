@@ -1,0 +1,12 @@
+"""
+This is a multi-line comment.
+It can span multiple lines.
+"""
+
+void main() {
+    """
+    This comment is inside a function.
+    It should be ignored by the parser.
+    """
+    x = 42
+}

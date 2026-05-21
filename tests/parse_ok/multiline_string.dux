@@ -1,0 +1,8 @@
+# Strings spanning multiple lines
+void main() {
+    s = "line one
+line two
+line three"
+    t = 'also
+multiline'
+}

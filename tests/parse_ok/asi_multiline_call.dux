@@ -1,0 +1,13 @@
+# ASI: no semicolon injected inside parens/brackets
+void main() {
+    result = someFunc(
+        arg1,
+        arg2,
+        arg3
+    )
+    arr = [
+        1,
+        2,
+        3
+    ]
+}

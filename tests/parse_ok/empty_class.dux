@@ -1,0 +1,10 @@
+# Empty class and interface bodies
+# Interfaces require () in declaration
+class Empty {
+}
+
+interface IEmpty() {
+}
+
+class EmptyChild(Empty) {
+}

@@ -1,0 +1,16 @@
+# Literals: integers, floats, strings, bools, null
+void main() {
+    x = 0
+    x = 42
+    x = 9999999999
+    x = 3.14
+    x = .5
+    x = 0.0
+    x = "hello"
+    x = 'world'
+    x = "escape \n \t \r \\ \" \'"
+    x = 'single \n \t'
+    x = true
+    x = false
+    x = null
+}
