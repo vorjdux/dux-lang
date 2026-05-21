@@ -1829,21 +1829,26 @@ Value* Codegen::str_literal(const std::string& s) {
 
     std::string idx = std::to_string(str_lit_cache_.size());
 
-    // Build one global that mirrors the FAM C struct layout:
-    //   @.duxstr.N = private constant { i32, i64, [len+1 x i8] }
-    //                                 { -1,  len,  c"...\00" }
+    // Build one global that mirrors the hybrid DuxStr layout:
+    //   @.duxstr.N = private constant { i32, i64, ptr, [len+1 x i8] }
+    //                                 { -1,  len, null, c"...\00"    }
     //
-    // The [len+1 x i8] array sits at the same offset as DuxStr::data[],
-    // so duxrt_* C functions see the embedded bytes directly via s->data.
+    // Offsets on LP64 (matching sizeof(DuxStr) == 24):
+    //   0: i32 refcount   8: i64 len   16: ptr ext=null   24: data[]
+    //
+    // ext=null tells duxrt_str_cstr to return &s->data[0], so all C
+    // runtime functions see the embedded bytes at offset 24 correctly.
     auto* data_arr = llvm::ConstantDataArray::getString(*ctx_, s, /*AddNull=*/true);
     auto* str_ty   = llvm::StructType::get(*ctx_, {
         llvm::Type::getInt32Ty(*ctx_),   // refcount  (offset  0)
-        llvm::Type::getInt64Ty(*ctx_),   // len       (offset  8, after 4-byte pad)
-        data_arr->getType()              // data[]    (offset 16)
+        llvm::Type::getInt64Ty(*ctx_),   // len       (offset  8)
+        ptr_type(),                       // ext=null  (offset 16)
+        data_arr->getType()              // data[]    (offset 24)
     });
     auto* str_init = llvm::ConstantStruct::get(str_ty, {
         llvm::ConstantInt::getSigned(llvm::Type::getInt32Ty(*ctx_), -1),
         llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), (uint64_t)s.size()),
+        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptr_type())),
         data_arr
     });
     auto* str_gv = new llvm::GlobalVariable(*mod_, str_ty,

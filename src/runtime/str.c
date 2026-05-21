@@ -3,14 +3,31 @@
 #include <stdlib.h>
 #include <string.h>
 
-DuxStr* duxrt_str_new(const char* data, int64_t len) {
-    /* Single allocation: struct header + embedded char data[len+1] */
-    DuxStr* s = (DuxStr*)malloc(sizeof(DuxStr) + (size_t)(len + 1));
-    if (!s) { fputs("duxrt: out of memory\n", stderr); abort(); }
+/* Internal accessor — avoids function-call overhead inside str.c */
+static inline const char* sdata(const DuxStr* s) {
+    return s->ext ? s->ext : s->data;
+}
+
+DuxStr* duxrt_str_new(const char* src, int64_t len) {
+    DuxStr* s;
+    if (len <= DUXSTR_INLINE_MAX) {
+        /* Short path: single allocation, data embedded in FAM. */
+        s = (DuxStr*)malloc(sizeof(DuxStr) + (size_t)(len + 1));
+        if (!s) { fputs("duxrt: out of memory\n", stderr); abort(); }
+        s->ext = NULL;
+        if (src) memcpy(s->data, src, (size_t)len);
+        s->data[len] = '\0';
+    } else {
+        /* Long path: header only, data in a separate heap buffer. */
+        s = (DuxStr*)malloc(sizeof(DuxStr));
+        if (!s) { fputs("duxrt: out of memory\n", stderr); abort(); }
+        s->ext = (char*)malloc((size_t)(len + 1));
+        if (!s->ext) { fputs("duxrt: out of memory\n", stderr); abort(); }
+        if (src) memcpy(s->ext, src, (size_t)len);
+        s->ext[len] = '\0';
+    }
     s->refcount = 1;
     s->len      = len;
-    if (data) memcpy(s->data, data, (size_t)len);
-    s->data[len] = '\0';
     return s;
 }
 
@@ -21,22 +38,26 @@ DuxStr* duxrt_str_retain(DuxStr* s) {
 
 void duxrt_str_release(DuxStr* s) {
     if (!s || s->refcount == -1) return;   /* null or immortal */
-    if (--s->refcount == 0) free(s);       /* data is embedded — single free */
+    if (--s->refcount == 0) {
+        if (s->ext) free(s->ext);          /* long strings: free external buffer */
+        free(s);                            /* always: free the header */
+    }
 }
 
 const char* duxrt_str_cstr(DuxStr* s) {
-    return s ? s->data : NULL;
+    return s ? sdata(s) : NULL;
 }
 
 DuxStr* duxrt_str_concat(DuxStr* a, DuxStr* b) {
-    const char* pa = a ? a->data : "";
-    const char* pb = b ? b->data : "";
+    const char* pa = a ? sdata(a) : "";
+    const char* pb = b ? sdata(b) : "";
     int64_t la = a ? a->len : 0;
     int64_t lb = b ? b->len : 0;
     DuxStr* out = duxrt_str_new(NULL, la + lb);
-    memcpy(out->data,      pa, (size_t)la);
-    memcpy(out->data + la, pb, (size_t)lb);
-    out->data[la + lb] = '\0';
+    char* dst = out->ext ? out->ext : out->data;
+    memcpy(dst,      pa, (size_t)la);
+    memcpy(dst + la, pb, (size_t)lb);
+    dst[la + lb] = '\0';
     return out;
 }
 
@@ -60,22 +81,22 @@ DuxStr* duxrt_str_index(DuxStr* s, int64_t i) {
     if (!s) return duxrt_str_new("", 0);
     if (i < 0) i += s->len;
     if (i < 0 || i >= s->len) return duxrt_str_new("", 0);
-    return duxrt_str_new(s->data + i, 1);
+    return duxrt_str_new(sdata(s) + i, 1);
 }
 
 DuxStr* duxrt_str_slice(DuxStr* s, int64_t start, int64_t end) {
     if (!s) return duxrt_str_new("", 0);
-    if (start < 0)      start = 0;
-    if (end > s->len)   end   = s->len;
-    if (start >= end)   return duxrt_str_new("", 0);
-    return duxrt_str_new(s->data + start, end - start);
+    if (start < 0)    start = 0;
+    if (end > s->len) end   = s->len;
+    if (start >= end) return duxrt_str_new("", 0);
+    return duxrt_str_new(sdata(s) + start, end - start);
 }
 
 int duxrt_str_eq(DuxStr* a, DuxStr* b) {
     if (!a && !b) return 1;
     if (!a || !b) return 0;
     if (a->len != b->len) return 0;
-    return memcmp(a->data, b->data, (size_t)a->len) == 0;
+    return memcmp(sdata(a), sdata(b), (size_t)a->len) == 0;
 }
 
 int64_t duxrt_len(DuxStr* s) {

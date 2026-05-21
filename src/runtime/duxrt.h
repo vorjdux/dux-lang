@@ -30,14 +30,31 @@ void  duxrt_print_double(double v);
  * refcount == 0   →  freed (invalid, should not be accessed)
  * refcount >  0   →  live; each variable holding the pointer counts +1
  *
- * Memory: a single malloc(sizeof(DuxStr) + len + 1) block; the char data
- * is embedded immediately after the header via a flexible array member.
- * This gives one allocation, one free, and contiguous header+data layout.
+ * Hybrid allocation strategy:
+ *   short strings (len <= DUXSTR_INLINE_MAX):
+ *       single malloc(sizeof(DuxStr) + len + 1)  — ext is NULL, data in FAM
+ *   long strings  (len >  DUXSTR_INLINE_MAX):
+ *       malloc(sizeof(DuxStr)) for the header    — ext points to heap buffer
+ *
+ * sizeof(DuxStr) = 24 bytes on LP64:
+ *   offset  0: int32_t refcount
+ *   offset  4: [4 bytes padding]
+ *   offset  8: int64_t len
+ *   offset 16: char*   ext     (NULL = inline)
+ *   offset 24: char    data[]  (FAM — inline data for short strings)
+ *
+ * LLVM literal globals use { i32, i64, ptr, [N+1 x i8] } which produces the
+ * same offsets, so immortal literals always have ext=null and the string bytes
+ * at offset 24 — duxrt_str_cstr() returns s->data for them correctly.
  */
+#define DUXSTR_INLINE_MAX  63   /* strings <= 63 bytes are stored inline (FAM) */
+
 typedef struct DuxStr {
     int32_t  refcount;
     int64_t  len;
-    char     data[];   /* flexible array member — data starts right after header */
+    char*    ext;    /* NULL  → data inline in FAM below (short strings)
+                        non-NULL → separate heap buffer    (long strings)  */
+    char     data[]; /* inline storage — only valid when ext == NULL */
 } DuxStr;
 
 /* Allocate a new DuxStr (refcount=1) copying len bytes from data. */
