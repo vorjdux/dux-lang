@@ -1,0 +1,387 @@
+#pragma once
+#include <memory>
+#include <optional>
+#include <string>
+#include <variant>
+#include <vector>
+
+namespace dux::ast {
+
+struct Visitor;
+
+// ─── Source location (decoupled from bison) ───────────────────────────────────
+struct SourceLoc {
+    std::string file;
+    int line{0}, col{0};
+};
+
+// ─── Base node ────────────────────────────────────────────────────────────────
+struct Node {
+    SourceLoc loc;
+    virtual ~Node() = default;
+    virtual void accept(Visitor&) const = 0;
+};
+
+// ─── Type expressions ─────────────────────────────────────────────────────────
+struct TypeExpr {
+    std::string name;          // "int", "str", "MyClass", etc.
+    bool        is_const{false};
+    SourceLoc   loc;
+};
+
+// ─── Expressions ─────────────────────────────────────────────────────────────
+
+struct Expr : Node {};
+using ExprPtr  = std::unique_ptr<Expr>;
+using ExprList = std::vector<ExprPtr>;
+
+struct IntLitExpr final : Expr {
+    long long value{};
+    void accept(Visitor& v) const override;
+};
+
+struct FloatLitExpr final : Expr {
+    double value{};
+    void accept(Visitor& v) const override;
+};
+
+struct StringLitExpr final : Expr {
+    std::string value;
+    void accept(Visitor& v) const override;
+};
+
+struct BoolLitExpr final : Expr {
+    bool value{};
+    void accept(Visitor& v) const override;
+};
+
+struct NullLitExpr final : Expr {
+    void accept(Visitor& v) const override;
+};
+
+struct IdentExpr final : Expr {
+    std::string name;
+    void accept(Visitor& v) const override;
+};
+
+struct ThisExpr final : Expr {
+    void accept(Visitor& v) const override;
+};
+
+struct SuperExpr final : Expr {
+    void accept(Visitor& v) const override;
+};
+
+struct BinaryExpr final : Expr {
+    std::string op;
+    ExprPtr     left;
+    ExprPtr     right;
+    void accept(Visitor& v) const override;
+};
+
+struct UnaryExpr final : Expr {
+    std::string op;
+    ExprPtr     operand;
+    bool        prefix{true};
+    void accept(Visitor& v) const override;
+};
+
+struct AssignExpr final : Expr {
+    std::string op;   // "=", "+=", "-=", etc.
+    ExprPtr     target;
+    ExprPtr     value;
+    void accept(Visitor& v) const override;
+};
+
+struct CallExpr final : Expr {
+    ExprPtr  callee;
+    ExprList args;
+    void accept(Visitor& v) const override;
+};
+
+struct MemberExpr final : Expr {
+    ExprPtr     object;
+    std::string member;
+    void accept(Visitor& v) const override;
+};
+
+struct IndexExpr final : Expr {
+    ExprPtr object;
+    ExprPtr index;
+    void accept(Visitor& v) const override;
+};
+
+struct NewExpr final : Expr {
+    TypeExpr type;
+    ExprList args;
+    void accept(Visitor& v) const override;
+};
+
+struct FormatExpr final : Expr {
+    ExprPtr tmpl;
+    ExprPtr args;   // ListExpr or DictExpr
+    void accept(Visitor& v) const override;
+};
+
+struct ListExpr final : Expr {
+    ExprList elements;
+    void accept(Visitor& v) const override;
+};
+
+struct DictExpr final : Expr {
+    std::vector<std::pair<ExprPtr, ExprPtr>> pairs;
+    void accept(Visitor& v) const override;
+};
+
+// ─── Statements ──────────────────────────────────────────────────────────────
+
+struct Stmt : Node {};
+using StmtPtr  = std::unique_ptr<Stmt>;
+using StmtList = std::vector<StmtPtr>;
+
+struct BlockStmt final : Stmt {
+    StmtList body;
+    void accept(Visitor& v) const override;
+};
+
+struct ExprStmt final : Stmt {
+    ExprPtr expr;
+    void accept(Visitor& v) const override;
+};
+
+struct VarDeclStmt final : Stmt {
+    TypeExpr                                     type;
+    bool                                         is_const{false};
+    std::vector<std::pair<std::string, ExprPtr>> decls;
+    void accept(Visitor& v) const override;
+};
+
+struct IfStmt final : Stmt {
+    ExprPtr cond;
+    StmtPtr then_br;
+    StmtPtr else_br;   // may be null
+    void accept(Visitor& v) const override;
+};
+
+struct WhileStmt final : Stmt {
+    std::optional<std::string> label;
+    ExprPtr                    cond;
+    StmtPtr                    body;
+    void accept(Visitor& v) const override;
+};
+
+struct DoWhileStmt final : Stmt {
+    StmtPtr body;
+    ExprPtr cond;
+    void accept(Visitor& v) const override;
+};
+
+struct ForInStmt final : Stmt {
+    TypeExpr    var_type;
+    std::string var_name;
+    ExprPtr     iterable;
+    StmtPtr     body;
+    void accept(Visitor& v) const override;
+};
+
+struct ForCStmt final : Stmt {
+    TypeExpr    var_type;
+    std::string var_name;
+    ExprPtr     init;
+    ExprPtr     cond;
+    ExprPtr     incr;
+    StmtPtr     body;
+    void accept(Visitor& v) const override;
+};
+
+struct SwitchCase {
+    std::optional<ExprPtr> value;   // nullopt == default
+    StmtList               body;
+};
+
+struct SwitchStmt final : Stmt {
+    ExprPtr                 expr;
+    std::vector<SwitchCase> cases;
+    void accept(Visitor& v) const override;
+};
+
+struct TryCatchStmt final : Stmt {
+    StmtPtr                    try_body;
+    bool                       catch_all{false};
+    std::optional<TypeExpr>    catch_type;
+    std::optional<std::string> catch_var;
+    StmtPtr                    catch_body;
+    void accept(Visitor& v) const override;
+};
+
+struct ReturnStmt final : Stmt {
+    std::optional<ExprPtr> value;
+    void accept(Visitor& v) const override;
+};
+
+struct BreakStmt final : Stmt {
+    std::optional<std::string> label;
+    void accept(Visitor& v) const override;
+};
+
+struct ContinueStmt final : Stmt {
+    std::optional<std::string> label;
+    void accept(Visitor& v) const override;
+};
+
+struct AssertStmt final : Stmt {
+    ExprPtr cond;
+    void accept(Visitor& v) const override;
+};
+
+struct DeleteStmt final : Stmt {
+    ExprPtr expr;
+    void accept(Visitor& v) const override;
+};
+
+struct LabeledStmt final : Stmt {
+    std::string label;
+    StmtPtr     stmt;
+    void accept(Visitor& v) const override;
+};
+
+// ─── Declarations ────────────────────────────────────────────────────────────
+
+struct Decl : Node {};
+using DeclPtr  = std::unique_ptr<Decl>;
+using DeclList = std::vector<DeclPtr>;
+
+struct Param {
+    TypeExpr    type;
+    std::string name;
+};
+
+struct Decorator {
+    std::string name;   // "doc" or "doc::markdown"
+    ExprList    args;
+    SourceLoc   loc;
+};
+
+enum class AccessMod { None, Public, Private, Protected };
+
+struct InitEntry {
+    std::string field;
+    ExprList    args;
+};
+
+struct FunctionDecl final : Decl {
+    TypeExpr                   return_type;
+    std::string                name;
+    std::vector<Param>         params;
+    std::optional<std::string> modifier;   // "get" or "set"
+    std::optional<BlockStmt>   body;
+    bool                       is_ctor{false};
+    bool                       is_dtor{false};
+    std::vector<InitEntry>     init_list;
+    void accept(Visitor& v) const override;
+};
+
+struct FieldDecl final : Decl {
+    TypeExpr               type;
+    std::string            name;
+    std::optional<ExprPtr> init;
+    void accept(Visitor& v) const override;
+};
+
+struct ClassMember {
+    AccessMod              access{AccessMod::None};
+    std::vector<Decorator> decorators;
+    DeclPtr                decl;
+};
+
+struct BaseClass {
+    AccessMod   access{AccessMod::None};
+    std::string name;
+};
+
+struct ClassDecl final : Decl {
+    std::vector<Decorator>   decorators;
+    std::string              name;
+    std::vector<BaseClass>   bases;
+    std::vector<ClassMember> members;
+    void accept(Visitor& v) const override;
+};
+
+struct InterfaceDecl final : Decl {
+    std::string              name;
+    std::vector<ClassMember> members;
+    void accept(Visitor& v) const override;
+};
+
+struct ImportDecl final : Decl {
+    std::string path;
+    void accept(Visitor& v) const override;
+};
+
+struct NamespaceDecl final : Decl {
+    std::string name;
+    DeclList    decls;
+    StmtList    stmts;
+    void accept(Visitor& v) const override;
+};
+
+// ─── Program ─────────────────────────────────────────────────────────────────
+
+struct Program final : Node {
+    DeclList decls;
+    StmtList stmts;
+    void accept(Visitor& v) const override;
+};
+
+// ─── Visitor interface ────────────────────────────────────────────────────────
+
+struct Visitor {
+    virtual ~Visitor() = default;
+
+    virtual void visit(const IntLitExpr&)    = 0;
+    virtual void visit(const FloatLitExpr&)  = 0;
+    virtual void visit(const StringLitExpr&) = 0;
+    virtual void visit(const BoolLitExpr&)   = 0;
+    virtual void visit(const NullLitExpr&)   = 0;
+    virtual void visit(const IdentExpr&)     = 0;
+    virtual void visit(const ThisExpr&)      = 0;
+    virtual void visit(const SuperExpr&)     = 0;
+    virtual void visit(const BinaryExpr&)    = 0;
+    virtual void visit(const UnaryExpr&)     = 0;
+    virtual void visit(const AssignExpr&)    = 0;
+    virtual void visit(const CallExpr&)      = 0;
+    virtual void visit(const MemberExpr&)    = 0;
+    virtual void visit(const IndexExpr&)     = 0;
+    virtual void visit(const NewExpr&)       = 0;
+    virtual void visit(const FormatExpr&)    = 0;
+    virtual void visit(const ListExpr&)      = 0;
+    virtual void visit(const DictExpr&)      = 0;
+
+    virtual void visit(const BlockStmt&)     = 0;
+    virtual void visit(const ExprStmt&)      = 0;
+    virtual void visit(const VarDeclStmt&)   = 0;
+    virtual void visit(const IfStmt&)        = 0;
+    virtual void visit(const WhileStmt&)     = 0;
+    virtual void visit(const DoWhileStmt&)   = 0;
+    virtual void visit(const ForInStmt&)     = 0;
+    virtual void visit(const ForCStmt&)      = 0;
+    virtual void visit(const SwitchStmt&)    = 0;
+    virtual void visit(const TryCatchStmt&)  = 0;
+    virtual void visit(const ReturnStmt&)    = 0;
+    virtual void visit(const BreakStmt&)     = 0;
+    virtual void visit(const ContinueStmt&)  = 0;
+    virtual void visit(const AssertStmt&)    = 0;
+    virtual void visit(const DeleteStmt&)    = 0;
+    virtual void visit(const LabeledStmt&)   = 0;
+
+    virtual void visit(const FunctionDecl&)  = 0;
+    virtual void visit(const FieldDecl&)     = 0;
+    virtual void visit(const ClassDecl&)     = 0;
+    virtual void visit(const InterfaceDecl&) = 0;
+    virtual void visit(const ImportDecl&)    = 0;
+    virtual void visit(const NamespaceDecl&) = 0;
+
+    virtual void visit(const Program&)       = 0;
+};
+
+} // namespace dux::ast
