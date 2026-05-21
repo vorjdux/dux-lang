@@ -18,24 +18,55 @@ void  duxrt_assert_fail(const char* file, int line, const char* msg);
 /* ── I/O ─────────────────────────────────────────────────────────────────── */
 void  duxrt_println_int(int64_t v);
 void  duxrt_println_double(double v);
-void  duxrt_println_str(const char* s);
 void  duxrt_print_int(int64_t v);
 void  duxrt_print_double(double v);
-void  duxrt_print_str(const char* s);
-char* duxrt_readline(void);          /* caller must duxrt_free() result */
 
-/* ── String ──────────────────────────────────────────────────────────────── */
-char* duxrt_str_new(const char* data, int64_t len);  /* copies, null-terminates */
-char* duxrt_str_concat(const char* a, const char* b);
-char* duxrt_str_from_int(int64_t v);
-char* duxrt_str_from_double(double v);
-int64_t duxrt_str_length(const char* s);
-char* duxrt_str_index(const char* s, int64_t i);     /* single char as str */
-char* duxrt_str_slice(const char* s, int64_t start, int64_t end);
-int   duxrt_str_eq(const char* a, const char* b);
+/* ── String (reference-counted) ─────────────────────────────────────────── */
 
-/* ── Generic len (dispatches on type tag – simplified: works on str) ─────── */
-int64_t duxrt_len(const void* obj);
+/*
+ * DuxStr: reference-counted string.
+ *
+ * refcount == -1  →  immortal (string literal globals; never freed)
+ * refcount == 0   →  freed (invalid, should not be accessed)
+ * refcount >  0   →  live; each variable holding the pointer counts +1
+ *
+ * Heap layout: DuxStr* points to malloc'd block; data points to a separate
+ * malloc'd char buffer of size (len+1) with null terminator.
+ */
+typedef struct DuxStr {
+    int32_t  refcount;
+    int64_t  len;
+    char*    data;      /* null-terminated; separately malloc'd on heap */
+} DuxStr;
+
+/* Allocate a new DuxStr (refcount=1) copying len bytes from data. */
+DuxStr* duxrt_str_new(const char* data, int64_t len);
+
+/* Increment refcount (no-op on immortals). Returns s for convenience. */
+DuxStr* duxrt_str_retain(DuxStr* s);
+
+/* Decrement refcount; free data+struct when refcount reaches 0. */
+void    duxrt_str_release(DuxStr* s);
+
+/* Return the null-terminated char* inside a DuxStr (NULL-safe). */
+const char* duxrt_str_cstr(DuxStr* s);
+
+/* I/O helpers that accept DuxStr* */
+void    duxrt_println_str(DuxStr* s);
+void    duxrt_print_str(DuxStr* s);
+DuxStr* duxrt_readline(void);   /* caller owns the returned DuxStr (refcount=1) */
+
+/* String operations — all return a new DuxStr* (refcount=1, caller owns) */
+DuxStr* duxrt_str_concat(DuxStr* a, DuxStr* b);
+DuxStr* duxrt_str_from_int(int64_t v);
+DuxStr* duxrt_str_from_double(double v);
+int64_t duxrt_str_length(DuxStr* s);
+DuxStr* duxrt_str_index(DuxStr* s, int64_t i);   /* single char as new DuxStr */
+DuxStr* duxrt_str_slice(DuxStr* s, int64_t start, int64_t end);
+int     duxrt_str_eq(DuxStr* a, DuxStr* b);
+
+/* Generic len (dispatches to DuxStr.len for strings) */
+int64_t duxrt_len(DuxStr* s);
 
 /* ── List (dynamic array of void*) ──────────────────────────────────────── */
 typedef struct DuxList {
@@ -51,7 +82,7 @@ void     duxrt_list_set(DuxList* l, int64_t idx, void* val);
 int64_t  duxrt_list_len(DuxList* l);
 void     duxrt_list_free(DuxList* l);
 
-/* ── Dict (open-addressing hash map, string keys) ────────────────────────── */
+/* ── Dict (open-addressing hash map, char* keys) ─────────────────────────── */
 typedef struct DuxDictEntry {
     char* key;
     void* val;
@@ -97,10 +128,6 @@ double  duxrt_math_log(double x);
 double  duxrt_math_log2(double x);
 double  duxrt_math_sin(double x);
 double  duxrt_math_cos(double x);
-
-/* ── String arena (bump-pointer allocator, freed at program exit) ─────── */
-void* duxrt_str_arena_alloc(size_t size);
-void  duxrt_str_arena_free_all(void);
 
 /* ── Exceptions ──────────────────────────────────────────────────────────── */
 typedef struct DuxException {
