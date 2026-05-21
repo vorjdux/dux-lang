@@ -168,6 +168,8 @@ include(CPack)
 # ─── Tests ────────────────────────────────────────────────────────────────────
 enable_testing()
 
+add_subdirectory(tests/runtime)
+
 # Smoke test: parse all example files
 file(GLOB DUX_EXAMPLES "${CMAKE_SOURCE_DIR}/examples/*.dux")
 foreach(EX ${DUX_EXAMPLES})

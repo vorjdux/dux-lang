@@ -11,8 +11,6 @@ extern "C" {
 #endif
 
 /* ── Memory ──────────────────────────────────────────────────────────────── */
-void* duxrt_alloc(int64_t size);
-void  duxrt_free(void* ptr);
 void  duxrt_assert_fail(const char* file, int line, const char* msg);
 
 /* ── I/O ─────────────────────────────────────────────────────────────────── */
