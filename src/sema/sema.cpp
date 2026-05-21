@@ -1,6 +1,7 @@
 #include "sema/sema.hpp"
 #include "driver/driver.hpp"
 #include <sstream>
+#include <unordered_set>
 
 namespace dux::sema {
 
@@ -238,6 +239,31 @@ void Sema::check_class(const ast::ClassDecl& c) {
             warn(c.loc, "'" + base.name + "' is not a class or interface");
         } else {
             types_.set_parent(class_type, bs->type);
+        }
+    }
+
+    // Collect methods defined in this class
+    std::unordered_set<std::string> defined_methods;
+    for (const auto& m : c.members) {
+        if (!m.decl) continue;
+        if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get()))
+            if (!f->is_ctor && !f->is_dtor)
+                defined_methods.insert(f->name);
+    }
+
+    // Verify that all interface contracts are satisfied
+    for (const auto& base : c.bases) {
+        Symbol* bs = scopes_.lookup(base.name);
+        if (!bs || bs->kind != SymKind::Interface) continue;
+        auto* iface = dynamic_cast<const ast::InterfaceDecl*>(bs->decl);
+        if (!iface) continue;
+        for (const auto& m : iface->members) {
+            if (!m.decl) continue;
+            if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
+                if (!defined_methods.count(f->name))
+                    err(c.loc, "class '" + c.name + "' implements interface '" +
+                        base.name + "' but does not define method '" + f->name + "'");
+            }
         }
     }
 

@@ -31,8 +31,8 @@ typedef struct {
     DuxException* exception;
 } TryFrame;
 
-static TryFrame  try_stack[MAX_TRY_DEPTH];
-static int       try_depth = 0;
+static _Thread_local TryFrame  try_stack[MAX_TRY_DEPTH];
+static _Thread_local int       try_depth = 0;
 
 /*
  * Call at the start of a try block.

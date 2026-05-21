@@ -4,8 +4,7 @@
 #include <string.h>
 
 char* duxrt_str_new(const char* data, int64_t len) {
-    char* s = (char*)malloc((size_t)(len + 1));
-    if (!s) abort();
+    char* s = (char*)duxrt_str_arena_alloc((size_t)(len + 1));
     if (data) memcpy(s, data, (size_t)len);
     s[len] = '\0';
     return s;
@@ -15,8 +14,7 @@ char* duxrt_str_concat(const char* a, const char* b) {
     if (!a) a = "";
     if (!b) b = "";
     size_t la = strlen(a), lb = strlen(b);
-    char* out = (char*)malloc(la + lb + 1);
-    if (!out) abort();
+    char* out = (char*)duxrt_str_arena_alloc(la + lb + 1);
     memcpy(out, a, la);
     memcpy(out + la, b, lb + 1);
     return out;
