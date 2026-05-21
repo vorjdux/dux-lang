@@ -27,7 +27,7 @@ DuxStr* duxrt_str_new(const char* src, int64_t len) {
         s->ext[len] = '\0';
     }
     s->refcount = 1;
-    s->len      = len;
+    s->len      = (int32_t)len;   /* int32_t field; caller ensures len <= INT32_MAX */
     return s;
 }
 
@@ -74,7 +74,7 @@ DuxStr* duxrt_str_from_double(double v) {
 }
 
 int64_t duxrt_str_length(DuxStr* s) {
-    return s ? s->len : 0;
+    return s ? (int64_t)s->len : 0;
 }
 
 DuxStr* duxrt_str_index(DuxStr* s, int64_t i) {
@@ -100,5 +100,5 @@ int duxrt_str_eq(DuxStr* a, DuxStr* b) {
 }
 
 int64_t duxrt_len(DuxStr* s) {
-    return s ? s->len : 0;
+    return s ? (int64_t)s->len : 0;
 }
