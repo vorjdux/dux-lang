@@ -1,0 +1,6 @@
+void main() {
+    int x = 42
+    assert(x > 0)
+    assert(x == 42)
+    println("assertions passed")
+}

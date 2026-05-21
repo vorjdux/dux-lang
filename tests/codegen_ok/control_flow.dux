@@ -1,0 +1,14 @@
+void main() {
+    int x = 5
+    if (x > 3) {
+        println("big")
+    } else {
+        println("small")
+    }
+
+    int i = 0
+    while (i < 3) {
+        i = i + 1
+    }
+    println(i)
+}
