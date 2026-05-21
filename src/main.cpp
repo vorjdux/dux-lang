@@ -4,6 +4,8 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "ast/printer.hpp"
 #include "driver/driver.hpp"
@@ -95,13 +97,29 @@ Options parse_args(std::span<char*> args) {
 
 // Invoke system linker to link object file into executable.
 bool link_executable(const std::string& obj_path, const std::string& out_path) {
-    std::string cmd = "cc "
-        + obj_path + " "
-        + DUXRT_LIB_PATH + " "
-        "-lm -o " + out_path;
-    int rc = std::system(cmd.c_str());
-    if (rc != 0) {
-        std::cerr << "dux: linker failed (exit " << rc << ")\n";
+    pid_t pid = fork();
+    if (pid < 0) {
+        std::perror("dux: fork");
+        return false;
+    }
+    if (pid == 0) {
+        // child process: exec cc directly (no shell involved)
+        const char* argv[] = {
+            "cc",
+            obj_path.c_str(),
+            DUXRT_LIB_PATH,
+            "-lm",
+            "-o", out_path.c_str(),
+            nullptr
+        };
+        execvp("cc", const_cast<char* const*>(argv));
+        std::perror("dux: execvp cc");
+        _exit(1);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        std::cerr << "dux: linker failed\n";
         return false;
     }
     return true;

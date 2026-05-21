@@ -52,3 +52,26 @@ jobs:
 
       - name: Test Release
         run: ctest --test-dir build-rel --output-on-failure
+
+  build-macos:
+    name: macOS (AppleSilicon)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake flex bison llvm@18
+          echo "$(brew --prefix llvm@18)/bin" >> $GITHUB_PATH
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_DIR=$(brew --prefix llvm@18)/lib/cmake/llvm
+
+      - name: Build
+        run: cmake --build build -j$(sysctl -n hw.logicalcpu)
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
