@@ -1,10 +1,13 @@
 #include "driver.hpp"
 #include "parser.hpp"   /* generated — full yy::parser definition */
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 
+namespace fs = std::filesystem;
 
 /* ─── Flex interface ────────────────────────────────────────────────────── */
 extern int   yylex_destroy();
@@ -60,6 +63,129 @@ int Driver::parse(const std::string& filename) {
     if (yyin != stdin) std::fclose(yyin);
     yylex_destroy();
     return rc;
+}
+
+/* ─── Import resolution ─────────────────────────────────────────────────── */
+
+// Known stdlib module names — these are handled by codegen, not file loading.
+static const std::unordered_set<std::string> kStdlibModules = {"math", "str", "io"};
+
+// Convert a dotted import path to a filesystem path.
+// "utils"           → "<base>/utils.dux"
+// "geometry.shapes" → "<base>/geometry/shapes.dux"
+static std::string find_import_file(const std::string& import_path,
+                                    const std::string& base_dir) {
+    // Replace dots (except trailing component) with path separators
+    std::string rel = import_path;
+    for (char& c : rel)
+        if (c == '.') c = '/';
+    rel += ".dux";
+
+    fs::path candidate = fs::path(base_dir) / rel;
+    std::error_code ec;
+    candidate = fs::canonical(candidate, ec);
+    if (!ec && fs::exists(candidate))
+        return candidate.string();
+    return {};
+}
+
+// Extract the last dotted component: "geometry.shapes" → "shapes"
+static std::string last_component(const std::string& path) {
+    auto pos = path.rfind('.');
+    return pos == std::string::npos ? path : path.substr(pos + 1);
+}
+
+void Driver::resolve_imports(dux::ast::Program& prog,
+                             const std::string& base_dir,
+                             std::unordered_set<std::string>& visited) {
+    using namespace dux::ast;
+
+    // Collect import declarations and build the injection list in one pass.
+    // We operate on a snapshot of decls so we can append without invalidating.
+    std::vector<std::unique_ptr<Decl>> injected;
+
+    for (auto& dp : prog.decls) {
+        auto* imp = dynamic_cast<ImportDecl*>(dp.get());
+        if (!imp) continue;
+
+        // Leave stdlib imports for codegen to handle.
+        const std::string mod = last_component(imp->path);
+        if (kStdlibModules.count(mod)) continue;
+
+        // Find the file on disk.
+        std::string filepath = find_import_file(imp->path, base_dir);
+        if (filepath.empty()) {
+            std::cerr << "dux: import: module '" << imp->path
+                      << "' not found (looked in '" << base_dir << "')\n";
+            continue;
+        }
+
+        // Cycle guard.
+        if (visited.count(filepath)) continue;
+        visited.insert(filepath);
+
+        // Parse the imported file with a fresh Driver instance.
+        Driver sub;
+        if (sub.parse(filepath) != 0) {
+            std::cerr << "dux: import: errors in '" << filepath << "'\n";
+            continue;
+        }
+
+        // Recursively resolve imports inside the imported file.
+        std::string sub_dir = fs::path(filepath).parent_path().string();
+        resolve_imports(*sub.result, sub_dir, visited);
+
+        // Separate ImportDecl nodes from real declarations inside the sub-program.
+        // stdlib imports (e.g. `import math` inside an imported file) must be
+        // hoisted to the top level of the parent prog so codegen's pass 1 sees them.
+        std::vector<std::unique_ptr<Decl>> sub_imports;
+        std::vector<std::unique_ptr<Decl>> sub_decls;
+        for (auto& d : sub.result->decls) {
+            if (dynamic_cast<ImportDecl*>(d.get()))
+                sub_imports.push_back(std::move(d));
+            else
+                sub_decls.push_back(std::move(d));
+        }
+        // Hoist stdlib imports into the parent (non-stdlib ones were already
+        // resolved recursively and their declarations injected above).
+        for (auto& d : sub_imports)
+            injected.push_back(std::move(d));
+
+        if (imp->symbols.empty()) {
+            // ── Full import ───────────────────────────────────────────────────
+            // Wrap all declarations in a NamespaceDecl so the caller accesses
+            // them as  mod.fn(args).  Top-level statements are not re-executed.
+            auto ns   = std::make_unique<NamespaceDecl>();
+            ns->name  = mod;
+            ns->decls = std::move(sub_decls);
+            injected.push_back(std::move(ns));
+        } else {
+            // ── Selective import ──────────────────────────────────────────────
+            // All declarations are injected into global scope so that private
+            // helpers used by requested symbols compile correctly.
+            // The symbols list documents which names the caller relies on.
+            for (auto& d : sub_decls)
+                injected.push_back(std::move(d));
+        }
+    }
+
+    // Prepend injected declarations.  ImportDecl nodes (stdlib re-exports) must
+    // come before any function declarations that reference their modules, so
+    // split into imports-first then everything else.
+    std::vector<std::unique_ptr<Decl>> imports_first, decls_rest;
+    for (auto& d : injected) {
+        if (dynamic_cast<ImportDecl*>(d.get()))
+            imports_first.push_back(std::move(d));
+        else
+            decls_rest.push_back(std::move(d));
+    }
+
+    // Insert non-import declarations then imports, both at front, so that
+    // after insertion the order is:  [imports_first] [decls_rest] [original]
+    for (int i = static_cast<int>(decls_rest.size()) - 1; i >= 0; --i)
+        prog.decls.insert(prog.decls.begin(), std::move(decls_rest[static_cast<std::size_t>(i)]));
+    for (int i = static_cast<int>(imports_first.size()) - 1; i >= 0; --i)
+        prog.decls.insert(prog.decls.begin(), std::move(imports_first[static_cast<std::size_t>(i)]));
 }
 
 /* ─── Diagnostics ───────────────────────────────────────────────────────── */

@@ -317,7 +317,8 @@ struct InterfaceDecl final : Decl {
 };
 
 struct ImportDecl final : Decl {
-    std::string path;
+    std::string              path;     // dotted module path, e.g. "utils" or "geometry.shapes"
+    std::vector<std::string> symbols;  // empty = full import; non-empty = selective
     void accept(Visitor& v) const override;
 };
 

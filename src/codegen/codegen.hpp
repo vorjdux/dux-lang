@@ -141,10 +141,15 @@ private:
     // Stdlib modules imported in this compilation unit (e.g. "math")
     std::unordered_set<std::string> stdlib_imports_;
 
+    // User-defined modules imported via file (e.g. "utils" from utils.dux).
+    // Calls like utils.fn(args) are dispatched through mangle("utils","fn").
+    std::unordered_set<std::string> user_module_imports_;
+
     // Current function context
     llvm::Function* current_fn_{nullptr};
     TypeId          current_ret_type_{TypeRegistry::TID_VOID};
     std::string     current_class_;
+    std::string     current_namespace_;  // set while generating a namespace body
     std::string     pending_label_;   // label from &label before a loop stmt
 
     // ── Type lowering (#14) ──────────────────────────────────────────────
