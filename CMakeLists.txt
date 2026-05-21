@@ -46,6 +46,9 @@ add_executable(dux
     src/main.cpp
     src/ast/ast.cpp
     src/driver/driver.cpp
+    src/sema/types.cpp
+    src/sema/symbol.cpp
+    src/sema/sema.cpp
     ${FLEX_DuxLexer_OUTPUTS}
     ${BISON_DuxParser_OUTPUTS}
 )
@@ -108,6 +111,29 @@ foreach(F ${DUX_PARSE_FAIL})
         COMMAND dux ${F}
     )
     set_tests_properties(parse_fail_${name} PROPERTIES
+        WILL_FAIL TRUE
+    )
+endforeach()
+
+# sema_ok: files that must pass semantic analysis (exit 0 with --check)
+file(GLOB DUX_SEMA_OK "${CMAKE_SOURCE_DIR}/tests/sema_ok/*.dux")
+foreach(F ${DUX_SEMA_OK})
+    cmake_path(GET F STEM name)
+    add_test(
+        NAME    sema_ok_${name}
+        COMMAND dux --check ${F}
+    )
+endforeach()
+
+# sema_fail: files that must fail semantic analysis (exit non-zero with --check)
+file(GLOB DUX_SEMA_FAIL "${CMAKE_SOURCE_DIR}/tests/sema_fail/*.dux")
+foreach(F ${DUX_SEMA_FAIL})
+    cmake_path(GET F STEM name)
+    add_test(
+        NAME    sema_fail_${name}
+        COMMAND dux --check ${F}
+    )
+    set_tests_properties(sema_fail_${name} PROPERTIES
         WILL_FAIL TRUE
     )
 endforeach()

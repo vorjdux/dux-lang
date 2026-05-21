@@ -6,6 +6,7 @@
 
 #include "ast/printer.hpp"
 #include "driver/driver.hpp"
+#include "sema/sema.hpp"
 
 #ifndef DUX_VERSION
 #define DUX_VERSION "0.1.0-dev"
@@ -16,6 +17,7 @@ namespace {
 struct Options {
     std::string  input;
     bool         dump_ast{false};
+    bool         check{false};
     bool         trace_lex{false};
     bool         trace_parse{false};
     bool         help{false};
@@ -28,6 +30,7 @@ void usage(std::string_view prog) {
         "\n"
         "Options:\n"
         "  --dump-ast      Print the parsed AST to stdout\n"
+        "  --check         Run semantic analysis and report errors\n"
         "  --trace-lex     Enable flex debug output\n"
         "  --trace-parse   Enable bison debug output\n"
         "  --version       Print version and exit\n"
@@ -41,6 +44,7 @@ Options parse_args(std::span<char*> args) {
     for (std::size_t i = 1; i < args.size(); ++i) {
         std::string_view a = args[i];
         if      (a == "--dump-ast")            { opts.dump_ast    = true; }
+        else if (a == "--check")               { opts.check       = true; }
         else if (a == "--trace-lex")           { opts.trace_lex   = true; }
         else if (a == "--trace-parse")         { opts.trace_parse = true; }
         else if (a == "--version")             { opts.version     = true; }
@@ -75,6 +79,13 @@ int main(int argc, char** argv) {
     driver.trace_parsing  = opts.trace_parse;
 
     int rc = driver.parse(opts.input);
+    if (rc != 0) return EXIT_FAILURE;
+
+    if (opts.check && driver.result) {
+        dux::sema::Sema sema(driver);
+        sema.run(*driver.result);
+        if (sema.error_count() > 0) rc = 1;
+    }
 
     if (opts.dump_ast && driver.result && driver.error_count() == 0) {
         dux::ast::Printer printer(std::cout);

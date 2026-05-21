@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,7 +32,9 @@ struct TypeExpr {
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
 
-struct Expr : Node {};
+struct Expr : Node {
+    mutable int32_t type_id{-1};  // filled in by sema pass; -1 = unresolved
+};
 using ExprPtr  = std::unique_ptr<Expr>;
 using ExprList = std::vector<ExprPtr>;
 

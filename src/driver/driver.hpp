@@ -30,13 +30,15 @@ public:
     // Emit a clang-style error with source context. Throws DiagnosticAbort
     // once kMaxErrors have been accumulated.
     void error(const yy::location& l, const std::string& msg);
+    void error(const dux::ast::SourceLoc& l, const std::string& msg);
 
     // Emit a warning (never throws, never increments error count).
     void warning(const yy::location& l, const std::string& msg);
+    void warning(const dux::ast::SourceLoc& l, const std::string& msg);
 
     int  error_count() const { return error_count_; }
 
-    // ─── Called by the lexer ─────────────────────────────────────────────────
+    // ─── Location conversions ────────────────────────────────────────────────
     dux::ast::SourceLoc make_loc(const yy::location& l) const;
 
     // String accumulation buffer for multi-character literals.
