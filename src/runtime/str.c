@@ -4,12 +4,11 @@
 #include <string.h>
 
 DuxStr* duxrt_str_new(const char* data, int64_t len) {
-    DuxStr* s = (DuxStr*)malloc(sizeof(DuxStr));
-    if (!s) { fputs("duxrt: out of memory (DuxStr header)\n", stderr); abort(); }
+    /* Single allocation: struct header + embedded char data[len+1] */
+    DuxStr* s = (DuxStr*)malloc(sizeof(DuxStr) + (size_t)(len + 1));
+    if (!s) { fputs("duxrt: out of memory\n", stderr); abort(); }
     s->refcount = 1;
     s->len      = len;
-    s->data     = (char*)malloc((size_t)(len + 1));
-    if (!s->data) { fputs("duxrt: out of memory (DuxStr data)\n", stderr); abort(); }
     if (data) memcpy(s->data, data, (size_t)len);
     s->data[len] = '\0';
     return s;
@@ -22,10 +21,7 @@ DuxStr* duxrt_str_retain(DuxStr* s) {
 
 void duxrt_str_release(DuxStr* s) {
     if (!s || s->refcount == -1) return;   /* null or immortal */
-    if (--s->refcount == 0) {
-        free(s->data);
-        free(s);
-    }
+    if (--s->refcount == 0) free(s);       /* data is embedded — single free */
 }
 
 const char* duxrt_str_cstr(DuxStr* s) {

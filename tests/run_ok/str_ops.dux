@@ -1,0 +1,43 @@
+str join(str a, str b) {
+    return a + " " + b
+}
+
+str repeat(str s, int n) {
+    str result = ""
+    int i = 0
+    while (i < n) {
+        result = result + s
+        i = i + 1
+    }
+    return result
+}
+
+str annotate(str s) {
+    return s + " (modified)"
+}
+
+void main() {
+    str hello = "Hello"
+    str world = "World"
+    str greeting = join(hello, world)
+    println(greeting)
+
+    println(len("test string"))
+
+    str stars = repeat("*", 5)
+    println(stars)
+
+    str s = "first"
+    s = "second"
+    s = "third"
+    println(s)
+
+    str modified = annotate("original")
+    println(modified)
+
+    if (len(greeting) > 0) {
+        str local = "inside"
+        println(local)
+    }
+    println("done")
+}
