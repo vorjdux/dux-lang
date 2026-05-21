@@ -30,13 +30,36 @@ void  duxrt_print_double(double v);
  * refcount == 0   →  freed (invalid, should not be accessed)
  * refcount >  0   →  live; each variable holding the pointer counts +1
  *
- * Heap layout: DuxStr* points to malloc'd block; data points to a separate
- * malloc'd char buffer of size (len+1) with null terminator.
+ * Hybrid allocation strategy:
+ *   short strings (len <= DUXSTR_INLINE_MAX):
+ *       single malloc(sizeof(DuxStr) + len + 1)  — ext is NULL, data in FAM
+ *   long strings  (len >  DUXSTR_INLINE_MAX):
+ *       malloc(sizeof(DuxStr)) for the header    — ext points to heap buffer
+ *
+ * sizeof(DuxStr) = 16 bytes on LP64:
+ *   offset  0: int32_t refcount
+ *   offset  4: int32_t len      (max 2 GiB; int32_t avoids padding after refcount)
+ *   offset  8: char*   ext      (NULL = inline)
+ *   offset 16: char    data[]   (FAM — inline data for short strings)
+ *
+ * Using int32_t for len instead of int64_t eliminates 4 bytes of alignment
+ * padding, shrinking the header from 24 to 16 bytes.  Short strings then
+ * allocate malloc(16+len+1), landing in the same allocator size-class as a
+ * pure-FAM struct — eliminating the bin-boundary penalty seen with 24-byte
+ * headers.
+ *
+ * LLVM literal globals use { i32, i32, ptr, [N+1 x i8] } which produces the
+ * same offsets, so immortal literals always have ext=null and the string bytes
+ * at offset 16 — duxrt_str_cstr() returns s->data for them correctly.
  */
+#define DUXSTR_INLINE_MAX  63   /* strings <= 63 bytes are stored inline (FAM) */
+
 typedef struct DuxStr {
     int32_t  refcount;
-    int64_t  len;
-    char*    data;      /* null-terminated; separately malloc'd on heap */
+    int32_t  len;    /* int32_t: no padding after refcount → header = 16 bytes */
+    char*    ext;    /* NULL  → data inline in FAM below (short strings)
+                        non-NULL → separate heap buffer    (long strings)  */
+    char     data[]; /* inline storage — only valid when ext == NULL */
 } DuxStr;
 
 /* Allocate a new DuxStr (refcount=1) copying len bytes from data. */
