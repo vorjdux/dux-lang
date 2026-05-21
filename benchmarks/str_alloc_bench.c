@@ -63,10 +63,14 @@ __attribute__((noinline))
 static void fam_free(FamStr* s) { free(s); }
 
 /* ── hybrid: FAM for short, two-alloc for long ───────────────────────────── */
-
+/*
+ * int32_t len (not int64_t) eliminates the 4-byte padding gap that would
+ * otherwise push sizeof to 24, landing short strings in a different allocator
+ * bin than FamStr.  With int32_t: sizeof = 16, same as FamStr → same bin.
+ */
 typedef struct HybStr {
     int32_t refcount;
-    int64_t len;
+    int32_t len;     /* int32_t: no padding after refcount → sizeof = 16 */
     char*   ext;     /* NULL = inline (short), non-NULL = heap (long) */
     char    data[];  /* FAM — only valid when ext == NULL */
 } HybStr;
@@ -83,7 +87,7 @@ static HybStr* hyb_new(const char* src, int64_t n) {
         s->ext = (char*)malloc((size_t)(n + 1));
         memcpy(s->ext, src, (size_t)(n + 1));
     }
-    s->refcount = 1; s->len = n;
+    s->refcount = 1; s->len = (int32_t)n;
     return s;
 }
 __attribute__((noinline))
@@ -141,12 +145,12 @@ static void bench_all(int str_len, const char* src) {
            elapsed, (double)TOTAL_OPS / elapsed / 1e6,
            (two_t - elapsed) / elapsed * 100.0);
 
-    /* hybrid */
+    /* hybrid — reads ->len for a fair comparison with fam-only */
     sink = 0;
     t0 = wallclock();
     for (int r = 0; r < REPS; r++) {
         for (int i = 0; i < BATCH; i++) ptrs[i] = hyb_new(src, str_len);
-        for (int i = 0; i < BATCH; i++) sink += (int64_t)strlen(hyb_data((HybStr*)ptrs[i]));
+        for (int i = 0; i < BATCH; i++) sink += ((HybStr*)ptrs[i])->len;
         for (int i = 0; i < BATCH; i++) hyb_free((HybStr*)ptrs[i]);
     }
     elapsed = wallclock() - t0;
