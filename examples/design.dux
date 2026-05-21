@@ -10,7 +10,7 @@ namespace com.vorjdux.lang {
     list names = []
 
     dict people = {
-        'nome': name
+        'nome': name,
     }
 
     tuple coordinates = [22,23]
@@ -121,14 +121,11 @@ namespace com.vorjdux.lang {
 
         assert(_name + _age == 'Matheus Santos33')
 
-        println('Hi, my name is {0} and I\'m {1} years old' % [name, age])
+        println('Hi, my name is someone and I am old')
 
-        str _text = 'Hi, my name is {0} and I\'m {1} years old' % [name, age]
+        str _text = 'Hi, my name is someone'
 
-        str _text = 'Hi, my name is {name} and I\'m {age} years old' % {
-            'name': name,
-            'age': age
-        }
+        str _fmt_args = 'name: ' + name + ', age: ' + _age
 
         int a = 1,
             b = 2,
@@ -206,5 +203,7 @@ namespace com.vorjdux.lang {
         } catch ... {
             println('Error')
         }
+
+    }
 
 }
