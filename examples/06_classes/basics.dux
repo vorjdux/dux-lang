@@ -1,0 +1,105 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+class Rectangle {
+    int width
+    int height
+
+    Rectangle(int w, int h) {
+        this.width  = w
+        this.height = h
+    }
+
+    int area() {
+        return this.width * this.height
+    }
+
+    int perimeter() {
+        return 2 * (this.width + this.height)
+    }
+
+    str describe() {
+        return "Rectangle " + int_to_str(this.width) + "x" + int_to_str(this.height)
+    }
+}
+
+class Counter {
+    int value
+
+    Counter(int start) {
+        this.value = start
+    }
+
+    void increment() {
+        this.value = this.value + 1
+    }
+
+    void decrement() {
+        this.value = this.value - 1
+    }
+
+    void add(int n) {
+        this.value = this.value + n
+    }
+
+    int getValue() {
+        return this.value
+    }
+}
+
+void main() {
+    Rectangle r = new Rectangle(5, 3)
+    println(r.area())        # 15
+    println(r.perimeter())   # 16
+    println(r.describe())    # Rectangle 5x3
+    delete r
+
+    Counter c = new Counter(0)
+    c.increment()
+    c.increment()
+    c.increment()
+    println(c.getValue())   # 3
+    c.add(10)
+    println(c.getValue())   # 13
+    c.decrement()
+    println(c.getValue())   # 12
+    delete c
+}

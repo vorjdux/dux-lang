@@ -1,0 +1,65 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+void main() {
+    # Strings can be formed by concatenating across multiple lines
+    str poem = "Roses are red,\n" +
+               "Violets are blue,\n" +
+               "Dux is fast,\n" +
+               "And memory-safe too."
+    println(poem)
+
+    # Escape sequences
+    str tab_sep = "col1\tcol2\tcol3"
+    println(tab_sep)
+
+    str with_quotes = "She said \"hello\""
+    println(with_quotes)
+
+    # Building long strings incrementally
+    str result = ""
+    int i = 1
+    while (i <= 5) {
+        result = result + int_to_str(i) + " "
+        i = i + 1
+    }
+    println(result)   # 1 2 3 4 5
+}

@@ -1,0 +1,59 @@
+import math
+
+void main() {
+    # Square root
+    println(math.sqrt(16.0))    # 4
+    println(math.sqrt(2.0))     # 1.41421...
+
+    # Power
+    println(math.pow(2.0, 10.0))  # 1024
+    println(math.pow(3.0, 3.0))   # 27
+
+    # Rounding
+    println(math.floor(3.9))   # 3
+    println(math.ceil(3.1))    # 4
+    println(math.floor(-2.3))  # -3
+    println(math.ceil(-2.7))   # -2
+
+    # Absolute value
+    println(math.abs(-5.5))    # 5.5
+    println(math.abs(3.2))     # 3.2
+
+    # Min and max
+    println(math.min(3.0, 7.0))   # 3
+    println(math.max(3.0, 7.0))   # 7
+
+    # Logarithms
+    println(math.log(2.71828))    # ~1 (natural log)
+    println(math.log2(8.0))       # 3
+
+    # Trigonometry (radians)
+    println(math.sin(0.0))    # 0
+    println(math.cos(0.0))    # 1
+
+    # Combining math operations
+    # Hypotenuse of a 3-4-5 triangle
+    double hyp = math.sqrt(math.pow(3.0, 2.0) + math.pow(4.0, 2.0))
+    println(hyp)   # 5
+
+    # Compound interest: A = P * (1 + r)^n
+    double principal = 1000.0
+    double rate      = 0.05
+    double years     = 10.0
+    double amount    = principal * math.pow(1.0 + rate, years)
+    println(amount)   # ~1628.89
+
+    # Approximating pi via Leibniz series
+    double pi = 0.0
+    int terms = 10000
+    for int i in range(terms) {
+        double t = 1.0 / (2.0 * i + 1.0)
+        if (i % 2 == 0) {
+            pi = pi + t
+        } else {
+            pi = pi - t
+        }
+    }
+    pi = pi * 4.0
+    println(pi)   # ~3.14159...
+}
