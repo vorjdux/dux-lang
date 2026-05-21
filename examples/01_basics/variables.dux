@@ -1,0 +1,45 @@
+void main() {
+    # Integer types
+    int count = 0
+    int age = 25
+    count = count + 1
+    println(count)
+
+    # 64-bit integer
+    long big = 9000000000
+    println(big)
+
+    # Floating-point
+    double pi = 3.14159
+    double e  = 2.71828
+    println(pi)
+    println(e)
+
+    # Strings
+    str name  = "Dux"
+    str greet = "Hello, " + name + "!"
+    println(greet)
+
+    # Booleans — non-zero is truthy
+    int flag = 1
+    int off  = 0
+
+    if (flag) {
+        println("flag is true")
+    }
+    if (!off) {
+        println("off is false")
+    }
+
+    # Constants — value cannot be reassigned
+    const int MAX = 100
+    const str VERSION = "1.0.0"
+    println(MAX)
+    println(VERSION)
+
+    # Multiple assignments
+    int x = 10
+    int y = 20
+    int z = x + y
+    println(z)
+}

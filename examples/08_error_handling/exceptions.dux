@@ -1,0 +1,100 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+# Error handling via return codes — return -1 for error, >= 0 for success.
+
+int safe_divide(int a, int b) {
+    if (b == 0) {
+        return -1
+    }
+    return a / b
+}
+
+int sqrt_int(int n) {
+    if (n < 0) {
+        return -1
+    }
+    int i = 0
+    while (i * i <= n) {
+        i = i + 1
+    }
+    return i - 1
+}
+
+# try/catch blocks catch runtime exceptions from the runtime.
+void demo_try_catch() {
+    try {
+        println("inside try block")
+        println("no exception raised here")
+    } catch ... {
+        println("caught a runtime exception")
+    }
+    println("execution continues after try/catch")
+}
+
+void main() {
+    # Division with error check
+    int result = safe_divide(10, 2)
+    if (result >= 0) {
+        println("10 / 2 = " + int_to_str(result))
+    }
+
+    int err = safe_divide(10, 0)
+    if (err < 0) {
+        println("error: division by zero")
+    }
+
+    # Square root with range check
+    int r1 = sqrt_int(25)
+    if (r1 >= 0) {
+        println("sqrt(25) = " + int_to_str(r1))
+    }
+
+    int r2 = sqrt_int(-4)
+    if (r2 < 0) {
+        println("error: sqrt of negative number")
+    }
+
+    # try/catch for runtime exceptions
+    demo_try_catch()
+
+    println("program completed normally")
+}

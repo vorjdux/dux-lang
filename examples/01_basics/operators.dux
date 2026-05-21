@@ -1,0 +1,56 @@
+void main() {
+    # ── Arithmetic ────────────────────────────────────────────────────────────
+    int a = 10
+    int b = 3
+    println(a + b)   # 13
+    println(a - b)   # 7
+    println(a * b)   # 30
+    println(a / b)   # 3  (integer division)
+    println(a % b)   # 1  (remainder)
+
+    # Floating-point division
+    double fa = 10.0
+    double fb = 3.0
+    println(fa / fb)  # 3.33333...
+
+    # Compound assignment
+    int n = 5
+    n = n + 1
+    println(n)   # 6
+
+    # ── Comparison (result used in if) ────────────────────────────────────────
+    if (a == 10) {
+        println("a equals 10")
+    }
+    if (a != b) {
+        println("a and b differ")
+    }
+    if (a > b) {
+        println("a is greater")
+    }
+    if (b < a) {
+        println("b is less")
+    }
+    if (a >= 10) {
+        println("a >= 10")
+    }
+    if (b <= 3) {
+        println("b <= 3")
+    }
+
+    # ── Logical ───────────────────────────────────────────────────────────────
+    int x = 5
+    if (x > 0 && x < 10) {
+        println("x is between 0 and 10")
+    }
+    if (x == 0 || x == 5) {
+        println("x is 0 or 5")
+    }
+    if (!0) {
+        println("not false is true")
+    }
+
+    # ── Unary ─────────────────────────────────────────────────────────────────
+    int neg = -a
+    println(neg)  # -10
+}

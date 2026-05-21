@@ -1,0 +1,79 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+void main() {
+    str text = "Hello, Dux!"
+
+    # Length
+    println(len(text))          # 11
+
+    # Index — returns a single-character string
+    str first = text[0]
+    str last  = text[-1]        # negative index from end
+    println(first)              # H
+    println(last)               # !
+
+    # Slice — extract a substring by iterating characters
+    str word = ""
+    int i = 7
+    while (i < 10) {
+        word = word + text[i]
+        i = i + 1
+    }
+    println(word)               # Dux
+
+    # Concatenation builds new strings
+    str a = "foo"
+    str b = "bar"
+    str c = a + b
+    println(c)                  # foobar
+
+    # Numbers to strings using int_to_str helper
+    println(int_to_str(123))    # 123
+
+    # Iterating over characters with a while loop
+    str chars = "Dux"
+    int j = 0
+    while (j < len(chars)) {
+        println(chars[j])       # D, u, x (one per line)
+        j = j + 1
+    }
+}

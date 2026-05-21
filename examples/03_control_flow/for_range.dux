@@ -1,0 +1,82 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+void main() {
+    # Exclusive range  ..<  (does not include end)
+    for int i in 0..<5 {
+        println(i)   # 0 1 2 3 4
+    }
+
+    # Inclusive range  ..=  (includes end)
+    for int i in 1..=5 {
+        println(i)   # 1 2 3 4 5
+    }
+
+    # range(n) shorthand  →  0..<n
+    for int i in range(3) {
+        println(i)   # 0 1 2
+    }
+
+    # Sum with for-range
+    int total = 0
+    for int i in 1..=10 {
+        total = total + i
+    }
+    println(total)   # 55
+
+    # Nested ranges — multiplication table 1..5
+    for int row in 1..=5 {
+        str line = ""
+        for int col in 1..=5 {
+            int product = row * col
+            line = line + int_to_str(product) + " "
+        }
+        println(line)
+    }
+
+    # Decrement: loop variable can be decremented manually
+    int k = 10
+    for int i in 0..<5 {
+        println(k)
+        k = k - 2
+    }
+    # Output: 10 8 6 4 2
+}
