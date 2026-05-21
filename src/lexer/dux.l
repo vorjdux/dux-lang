@@ -23,7 +23,7 @@
 #define YY_USER_ACTION  loc.columns(yyleng);
 
 static bool need_semi = false;
-static int  nesting   = 0;   /* depth of ( [ { — suppress SEMI when > 0 */
+static int  nesting   = 0;   /* depth of ( [ — suppress SEMI when > 0 */
 %}
 
 %option noyywrap nounput noinput batch
@@ -102,7 +102,7 @@ ALNUM   [a-zA-Z0-9_]
 "delete"     { need_semi = false; return yy::parser::make_KW_DELETE(loc);    }
 "this"       { need_semi = true;  return yy::parser::make_KW_THIS(loc);      }
 "super"      { need_semi = true;  return yy::parser::make_KW_SUPER(loc);     }
-"return"     { need_semi = false; return yy::parser::make_KW_RETURN(loc);    }
+"return"     { need_semi = true;  return yy::parser::make_KW_RETURN(loc);    }
 "break"      { need_semi = true;  return yy::parser::make_KW_BREAK(loc);     }
 "continue"   { need_semi = true;  return yy::parser::make_KW_CONTINUE(loc);  }
 "if"         { need_semi = false; return yy::parser::make_KW_IF(loc);        }

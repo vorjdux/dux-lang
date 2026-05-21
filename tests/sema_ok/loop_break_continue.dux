@@ -1,0 +1,11 @@
+void main() {
+    for int i in 0..<10 {
+        if i == 5 {
+            break
+        }
+        if i == 3 {
+            continue
+        }
+        println(i)
+    }
+}

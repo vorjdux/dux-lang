@@ -296,11 +296,9 @@ private:
         }
         out_ << " {\n";
         indent();
-        AccessMod cur = AccessMod::None;
         for (auto& m : n.members) {
             if (m.access != AccessMod::None && !m.decl) {
-                cur = m.access;
-                out_ << pad() << access_str(cur) << ":\n";
+                out_ << pad() << access_str(m.access) << ":\n";
                 continue;
             }
             if (m.decl) m.decl->accept(*this);

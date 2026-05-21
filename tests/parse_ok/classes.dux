@@ -1,0 +1,49 @@
+# Class declarations: fields, methods, constructors
+# Inheritance uses parens: class Dog(Animal)
+# Access modifiers are section headers: private:
+class Animal {
+    private:
+    str name
+    int age
+
+    Animal(str name, int age) {
+        this.name = name
+        this.age = age
+    }
+
+    public:
+    str getName() {
+        return this.name
+    }
+
+    int getAge() {
+        return this.age
+    }
+
+    str toString() {
+        return this.name
+    }
+}
+
+class Dog(Animal) {
+    private:
+    str breed
+
+    Dog(str name, int age, str breed) {
+        this.name = name
+        this.age = age
+        this.breed = breed
+    }
+
+    public:
+    str getBreed() {
+        return this.breed
+    }
+}
+
+void main() {
+    d = new Dog("Rex", 3, "Lab")
+    println(d.getName())
+    println(d.getBreed())
+    delete d
+}

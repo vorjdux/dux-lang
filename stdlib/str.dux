@@ -1,0 +1,8 @@
+// str — string utilities module
+// Usage: import str
+
+str concat(str a, str b)
+str from_int(long n)
+str from_double(double x)
+long length(str s)
+str slice(str s, long start, long end)

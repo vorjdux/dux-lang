@@ -1,0 +1,12 @@
+# Chained member access, method calls, indexing
+void main() {
+    x = obj.field
+    y = obj.method()
+    z = obj.nested.field
+    w = obj.method().field
+    v = obj.method(a, b).other()
+    u = arr[0].field
+    t = map['key'].toString()
+    s = a.b.c.d.e
+    r = foo().bar().baz()
+}

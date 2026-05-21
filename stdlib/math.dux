@@ -1,0 +1,23 @@
+// math — standard mathematics module
+// Usage: import math
+
+// Trigonometry
+double sin(double x)
+double cos(double x)
+
+// Roots and powers
+double sqrt(double x)
+double pow(double base, double exp)
+
+// Rounding
+double floor(double x)
+double ceil(double x)
+
+// Logarithms
+double log(double x)
+double log2(double x)
+
+// Absolute value and extrema
+double abs(double x)
+double min(double a, double b)
+double max(double a, double b)

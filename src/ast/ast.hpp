@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,7 +32,9 @@ struct TypeExpr {
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
 
-struct Expr : Node {};
+struct Expr : Node {
+    mutable int32_t type_id{-1};  // filled in by sema pass; -1 = unresolved
+};
 using ExprPtr  = std::unique_ptr<Expr>;
 using ExprList = std::vector<ExprPtr>;
 
@@ -289,9 +292,9 @@ struct FieldDecl final : Decl {
 };
 
 struct ClassMember {
-    AccessMod           access{AccessMod::None};
+    AccessMod              access{AccessMod::None};
     std::vector<Decorator> decorators;
-    DeclPtr             decl;
+    DeclPtr                decl;
 };
 
 struct BaseClass {
@@ -300,9 +303,9 @@ struct BaseClass {
 };
 
 struct ClassDecl final : Decl {
-    std::vector<Decorator>  decorators;
-    std::string             name;
-    std::vector<BaseClass>  bases;
+    std::vector<Decorator>   decorators;
+    std::string              name;
+    std::vector<BaseClass>   bases;
     std::vector<ClassMember> members;
     void accept(Visitor& v) const override;
 };

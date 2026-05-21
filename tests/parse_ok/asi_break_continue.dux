@@ -1,0 +1,12 @@
+# ASI: break and continue without explicit semicolons
+void main() {
+    for int x in 0..<10 {
+        if x == 5 {
+            break
+        }
+        if x == 3 {
+            continue
+        }
+        println(x)
+    }
+}
