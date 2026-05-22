@@ -120,11 +120,6 @@ struct NewExpr final : Expr {
     void accept(Visitor& v) const override;
 };
 
-struct FormatExpr final : Expr {
-    ExprPtr tmpl;
-    ExprPtr args;   // ListExpr or DictExpr
-    void accept(Visitor& v) const override;
-};
 
 struct ListExpr final : Expr {
     ExprList elements;
@@ -360,7 +355,6 @@ struct Visitor {
     virtual void visit(const MemberExpr&)    = 0;
     virtual void visit(const IndexExpr&)     = 0;
     virtual void visit(const NewExpr&)       = 0;
-    virtual void visit(const FormatExpr&)    = 0;
     virtual void visit(const ListExpr&)      = 0;
     virtual void visit(const DictExpr&)      = 0;
 

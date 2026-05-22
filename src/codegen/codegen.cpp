@@ -713,6 +713,8 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
         if (br->label) {
             for (auto it = loop_stack_.rbegin(); it != loop_stack_.rend(); ++it)
                 if (it->label == *br->label) { builder_->CreateBr(it->exit); return; }
+            err(br->loc, "label '" + *br->label + "' not found for break");
+            return;
         }
         builder_->CreateBr(loop_stack_.back().exit);
         return;
@@ -722,6 +724,8 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
         if (co->label) {
             for (auto it = loop_stack_.rbegin(); it != loop_stack_.rend(); ++it)
                 if (it->label == *co->label) { builder_->CreateBr(it->header); return; }
+            err(co->loc, "label '" + *co->label + "' not found for continue");
+            return;
         }
         builder_->CreateBr(loop_stack_.back().header);
         return;
@@ -1015,9 +1019,22 @@ void Codegen::gen_for_c(const ast::ForCStmt& s) {
 
 void Codegen::gen_switch(const ast::SwitchStmt& s) {
     Function* fn  = builder_->GetInsertBlock()->getParent();
-    Value* sw_val = gen_expr(*s.expr);
     auto* exit_bb = BasicBlock::Create(*ctx_, "sw.end", fn);
 
+    // Evaluate case constant values before creating the switch (constants don't
+    // emit instructions, but keep this order to avoid inserting after a terminator)
+    std::vector<llvm::ConstantInt*> case_consts;
+    case_consts.reserve(s.cases.size());
+    for (const auto& c : s.cases) {
+        if (c.value) {
+            Value* cv = gen_expr(**c.value);
+            case_consts.push_back(llvm::dyn_cast<llvm::ConstantInt>(cv));
+        } else {
+            case_consts.push_back(nullptr);
+        }
+    }
+
+    Value* sw_val = gen_expr(*s.expr);
     // Ensure integer type for switch
     if (!sw_val->getType()->isIntegerTy())
         sw_val = builder_->CreateFPToSI(sw_val, llvm::Type::getInt64Ty(*ctx_));
@@ -1025,26 +1042,34 @@ void Codegen::gen_switch(const ast::SwitchStmt& s) {
     auto* sw_inst = builder_->CreateSwitch(sw_val, exit_bb,
                                            static_cast<unsigned>(s.cases.size()));
 
-    loop_stack_.push_back({nullptr, exit_bb, {}}); // break goes to exit
-
-    for (const auto& c : s.cases) {
+    // Create all case entry blocks and register them with the switch instruction
+    std::vector<BasicBlock*> case_bbs;
+    case_bbs.reserve(s.cases.size());
+    for (std::size_t i = 0; i < s.cases.size(); ++i) {
         BasicBlock* case_bb;
-        if (c.value) {
+        if (s.cases[i].value) {
             case_bb = BasicBlock::Create(*ctx_, "sw.case", fn);
-            Value* case_val = gen_expr(**c.value);
-            if (auto* ci = llvm::dyn_cast<llvm::ConstantInt>(case_val))
-                sw_inst->addCase(ci, case_bb);
+            if (case_consts[i])
+                sw_inst->addCase(case_consts[i], case_bb);
         } else {
             case_bb = BasicBlock::Create(*ctx_, "sw.default", fn);
             sw_inst->setDefaultDest(case_bb);
         }
+        case_bbs.push_back(case_bb);
+    }
 
-        builder_->SetInsertPoint(case_bb);
+    loop_stack_.push_back({nullptr, exit_bb, {}}); // break goes to exit
+
+    // Generate case bodies; unterminated cases fall through to the next case
+    for (std::size_t i = 0; i < s.cases.size(); ++i) {
+        builder_->SetInsertPoint(case_bbs[i]);
         env_push();
-        gen_stmts(c.body);
+        gen_stmts(s.cases[i].body);
         env_pop();
-        if (!builder_->GetInsertBlock()->getTerminator())
-            builder_->CreateBr(exit_bb);
+        if (!builder_->GetInsertBlock()->getTerminator()) {
+            BasicBlock* next_bb = (i + 1 < case_bbs.size()) ? case_bbs[i + 1] : exit_bb;
+            builder_->CreateBr(next_bb);
+        }
     }
 
     loop_stack_.pop_back();
