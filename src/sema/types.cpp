@@ -95,6 +95,9 @@ bool TypeRegistry::assignable(TypeId from, TypeId to) const {
     if (from == TID_UNKNOWN || to == TID_UNKNOWN) return true;
     if (from == to) return true;
     if (to == TID_OBJECT) return true;
+    // ptr (TID_OBJECT) can be assigned to any heap type (enables unsafe blocks returning raw ptrs)
+    if (from == TID_OBJECT && (to == TID_STR || to == TID_LIST || to == TID_DICT))
+        return true;
     if (from == TID_NULL) {
         // null is assignable to any class/interface/list/dict/str
         const TypeInfo& ti = info(to);

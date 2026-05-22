@@ -263,6 +263,7 @@ namespace_body
 
 dotted_name
     : IDENT                     { $$ = $1; }
+    | KW_STR                    { $$ = "str"; }
     | dotted_name DOT IDENT     { $$ = $1 + '.' + $3; }
     ;
 
@@ -1075,6 +1076,8 @@ primary_expr
         { auto e = mk<NullLitExpr>(); e->loc = sl(@$, driver); $$ = std::move(e); }
     | IDENT
         { auto e = mk<IdentExpr>(); e->loc = sl(@$, driver); e->name = $1; $$ = std::move(e); }
+    | KW_STR
+        { auto e = mk<IdentExpr>(); e->loc = sl(@$, driver); e->name = "str"; $$ = std::move(e); }
     | KW_THIS
         { auto e = mk<ThisExpr>(); e->loc = sl(@$, driver); $$ = std::move(e); }
     | KW_SUPER
