@@ -1,0 +1,48 @@
+class Box<T> {
+    T value
+
+    Box(T v) {
+        this.value = v
+    }
+
+    T unwrap() {
+        return this.value
+    }
+}
+
+class Pair<A, B> {
+    A first
+    B second
+
+    Pair(A a, B b) {
+        this.first = a
+        this.second = b
+    }
+
+    A fst() {
+        return this.first
+    }
+
+    B snd() {
+        return this.second
+    }
+}
+
+int main() {
+    Box<int> b = new Box<int>(42)
+    println(b.unwrap())
+    println(b.value)
+
+    Box<str> bs = new Box<str>("hello")
+    println(bs.unwrap())
+
+    Pair<int, str> p = new Pair<int, str>(7, "seven")
+    println(p.fst())
+    println(p.snd())
+
+    Pair<str, int> q = new Pair<str, int>("ten", 10)
+    println(q.fst())
+    println(q.snd())
+
+    return 0
+}
