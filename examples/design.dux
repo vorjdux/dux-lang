@@ -144,12 +144,18 @@ int main() {
     println(d.born_year())
 
     # ── Closures / lambdas
-    fn(int) -> int sq = fn(int n) => n * n
+    fn(int) -> int sq = fn(int n) => n * n  # explicit type annotation
     println(sq(5))
+
+    sq_inf = fn(int n) => n * n  # inferred — no type prefix needed
+    println(sq_inf(5))
 
     int base = 100
     fn(int) -> int addBase = fn(int n) => n + base
     println(addBase(7))
+
+    addBase_inf = fn(int n) => n + base  # inferred with capture
+    println(addBase_inf(7))
 
     println(apply(sq, 6))
 
