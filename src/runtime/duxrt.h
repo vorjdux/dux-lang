@@ -10,6 +10,9 @@
 extern "C" {
 #endif
 
+/* Forward declaration needed by duxrt_str_join_list below. */
+typedef struct DuxList DuxList;
+
 /* ── Memory ──────────────────────────────────────────────────────────────── */
 void  duxrt_assert_fail(const char* file, int line, const char* msg);
 
@@ -85,6 +88,10 @@ int64_t duxrt_str_length(DuxStr* s);
 DuxStr* duxrt_str_index(DuxStr* s, int64_t i);   /* single char as new DuxStr */
 DuxStr* duxrt_str_slice(DuxStr* s, int64_t start, int64_t end);
 int     duxrt_str_eq(DuxStr* a, DuxStr* b);
+
+/* Efficiently joins all DuxStr* elements of a DuxList into one new DuxStr*.
+   Returns a new string with refcount=1 (caller owns). O(n) in total length. */
+DuxStr* duxrt_str_join_list(DuxList* parts, int64_t count);
 
 /* Generic len (dispatches to DuxStr.len for strings) */
 int64_t duxrt_len(DuxStr* s);

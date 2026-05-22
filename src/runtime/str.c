@@ -105,3 +105,26 @@ int duxrt_str_eq(DuxStr* a, DuxStr* b) {
 int64_t duxrt_len(DuxStr* s) {
     return s ? (int64_t)s->len : 0;
 }
+
+DuxStr* duxrt_str_join_list(DuxList* parts, int64_t count) {
+    if (!parts || count <= 0) return duxrt_str_new("", 0);
+    /* First pass: compute total length */
+    int64_t total = 0;
+    for (int64_t i = 0; i < count; i++) {
+        DuxStr* s = (DuxStr*)duxrt_list_get(parts, i);
+        if (s) total += (int64_t)s->len;
+    }
+    /* Single allocation for the result */
+    DuxStr* out = duxrt_str_new(NULL, total);
+    char* dst = out->ext ? out->ext : out->data;
+    /* Second pass: copy each part */
+    for (int64_t i = 0; i < count; i++) {
+        DuxStr* s = (DuxStr*)duxrt_list_get(parts, i);
+        if (!s) continue;
+        const char* src = s->ext ? s->ext : s->data;
+        memcpy(dst, src, (size_t)s->len);
+        dst += s->len;
+    }
+    *dst = '\0';
+    return out;
+}
