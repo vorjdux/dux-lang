@@ -599,8 +599,12 @@ TypeId Sema::check_expr(const ast::Expr& e) {
     // Each branch uses a distinct name to avoid -Wshadow in the else-if chain.
     if (dynamic_cast<const ast::IntLitExpr*>(&e)) {
         result = TR::TID_INT;
+    } else if (dynamic_cast<const ast::LongLitExpr*>(&e)) {
+        result = TR::TID_LONG;
     } else if (dynamic_cast<const ast::FloatLitExpr*>(&e)) {
         result = TR::TID_DOUBLE;
+    } else if (dynamic_cast<const ast::RealLitExpr*>(&e)) {
+        result = TR::TID_REAL;
     } else if (dynamic_cast<const ast::StringLitExpr*>(&e)) {
         result = TR::TID_STR;
     } else if (dynamic_cast<const ast::BoolLitExpr*>(&e)) {

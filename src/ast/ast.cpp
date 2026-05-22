@@ -3,7 +3,9 @@
 namespace dux::ast {
 
 void IntLitExpr::accept(Visitor& v)    const { v.visit(*this); }
+void LongLitExpr::accept(Visitor& v)   const { v.visit(*this); }
 void FloatLitExpr::accept(Visitor& v)  const { v.visit(*this); }
+void RealLitExpr::accept(Visitor& v)   const { v.visit(*this); }
 void StringLitExpr::accept(Visitor& v) const { v.visit(*this); }
 void BoolLitExpr::accept(Visitor& v)   const { v.visit(*this); }
 void NullLitExpr::accept(Visitor& v)   const { v.visit(*this); }

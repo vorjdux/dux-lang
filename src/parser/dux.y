@@ -64,7 +64,9 @@ static std::unique_ptr<T> mk(Args&&... a) {
 
 /* Literals */
 %token <long long>   INT_LIT    "integer literal"
+%token <long long>   LONG_LIT   "long literal"
 %token <double>      FLOAT_LIT  "float literal"
+%token <double>      REAL_LIT   "real literal"
 %token <std::string> STRING     "string literal"
 %token <std::string> IDENT      "identifier"
 %token <bool>        BOOL_LIT   "bool literal"
@@ -1019,8 +1021,12 @@ postfix_expr
 primary_expr
     : INT_LIT
         { auto e = mk<IntLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
+    | LONG_LIT
+        { auto e = mk<LongLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
     | FLOAT_LIT
         { auto e = mk<FloatLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
+    | REAL_LIT
+        { auto e = mk<RealLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
     | STRING
         { auto e = mk<StringLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
     | BOOL_LIT
