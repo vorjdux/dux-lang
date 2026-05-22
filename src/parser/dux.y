@@ -81,6 +81,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_GET KW_SET
 %token KW_ASSERT KW_DEFER KW_THROW
 %token KW_FN "fn"
+%token KW_AUTO "auto"
 %token KW_AND KW_OR KW_NOT
 %token KW_UNSAFE KW_EXTERN
 
@@ -898,6 +899,13 @@ var_decl_stmt
             v->type = $1; v->is_const = $1.is_const; v->decls = std::move($2);
             $$ = std::move(v);
         }
+    | KW_AUTO IDENT ASSIGN expr SEMI
+        {
+            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
+            v->type.name = "__auto";
+            v->decls.emplace_back($2, std::move($4));
+            $$ = std::move(v);
+        }
     ;
 
 var_decl_items
@@ -1045,6 +1053,25 @@ primary_expr
             auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
             e->params = std::move($3);
             e->body = std::unique_ptr<Stmt>(std::move($6));
+            $$ = std::move(e);
+        }
+    | KW_FN LPAREN param_list RPAREN ARROW type_expr block
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            e->explicit_ret = std::move($6);
+            e->body = std::unique_ptr<Stmt>(std::move($7));
+            $$ = std::move(e);
+        }
+    | KW_FN LPAREN param_list RPAREN ARROW type_expr FAT_ARROW expr
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            e->explicit_ret = std::move($6);
+            auto ret = mk<ReturnStmt>(); ret->loc = sl(@$, driver);
+            ret->value = std::move($8);
+            auto blk = mk<BlockStmt>(); blk->body.push_back(std::move(ret));
+            e->body = std::move(blk);
             $$ = std::move(e);
         }
     ;
