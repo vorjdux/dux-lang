@@ -1,0 +1,11 @@
+long fib(long n) {
+    if n <= 1l {
+        return n
+    }
+    return fib(n - 1l) + fib(n - 2l)
+}
+
+int main() {
+    println(fib(35l))
+    return 0
+}
