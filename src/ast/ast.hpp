@@ -276,8 +276,9 @@ struct Param {
 
 struct LambdaExpr final : Expr {
     std::vector<Param> params;
-    StmtPtr            body;       // always BlockStmt (expr body is wrapped in return)
-    std::vector<std::string> captures;  // filled by codegen
+    StmtPtr            body;          // always BlockStmt (expr body is wrapped in return)
+    std::vector<std::string> captures; // filled by codegen
+    std::string        inferred_ret;  // return type name, set by sema after type inference
     void accept(Visitor& v) const override;
 };
 

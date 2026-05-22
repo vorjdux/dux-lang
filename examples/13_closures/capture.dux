@@ -6,10 +6,15 @@ int apply(fn(int) -> int f, int x) {
 }
 
 int main() {
-    # Lambda stored in variable
+    # Explicit type annotation form
     fn(int) -> int sq = fn(int n) => n * n
     println(sq(5))
     println(sq(7))
+
+    # Inferred form — type deduced from lambda params/body
+    sq_inf = fn(int n) => n * n
+    println(sq_inf(5))
+    println(sq_inf(7))
 
     # Closure capturing local variable
     int base = 100
@@ -17,8 +22,14 @@ int main() {
     println(addBase(7))
     println(addBase(50))
 
+    # Inferred closure with capture
+    addBase_inf = fn(int n) => n + base
+    println(addBase_inf(7))
+    println(addBase_inf(50))
+
     # Passing lambda to higher-order function
     println(apply(sq, 4))
+    println(apply(sq_inf, 4))
     println(apply(addBase, 3))
 
     # Multi-statement lambda body

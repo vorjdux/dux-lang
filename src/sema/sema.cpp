@@ -1004,6 +1004,9 @@ TypeId Sema::check_lambda(const ast::LambdaExpr& e) {
             info.param_types.push_back(type_from_te(p.type));
     }
     e.type_id = fn_tid;
+    // Record the inferred return type name so codegen can build the TypeExpr
+    // without requiring an explicit `fn(...) -> R` declaration on the variable.
+    const_cast<ast::LambdaExpr&>(e).inferred_ret = types_.name_of(ret_tid);
     return fn_tid;
 }
 

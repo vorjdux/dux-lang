@@ -1267,7 +1267,20 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
             builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
         }
         env_define(name, alloca, var_tid);
-        if (s.type.name == "__fn") fn_var_types_[name] = s.type;
+        if (s.type.name == "__fn") {
+            fn_var_types_[name] = s.type;
+        } else if (init_ptr) {
+            // Infer fn type from a lambda RHS so the user doesn't have to write
+            // `fn(T) -> R name = fn(T p) => ...` — just `name = fn(T p) => ...`.
+            if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get())) {
+                ast::TypeExpr te;
+                te.name = "__fn";
+                for (const auto& p : lam->params)
+                    te.fn_params.push_back(p.type);
+                te.fn_ret = lam->inferred_ret; // set by sema::check_lambda
+                fn_var_types_[name] = te;
+            }
+        }
         // Track variable→class for member access resolution
         if (!s.type.name.empty() && layouts_.count(s.type.name))
             var_class_[name] = s.type.name;
@@ -1399,8 +1412,17 @@ Value* Codegen::gen_assign(const ast::AssignExpr& e) {
         // Implicit var: create alloca in current scope
         llvm::Type* implicit_t = rhs ? rhs->getType() : ptr_type();
         auto* alloca = make_alloca(implicit_t, "");
-        if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.target.get()))
+        if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.target.get())) {
             env_define(id->name, alloca);
+            if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(e.value.get())) {
+                ast::TypeExpr te;
+                te.name = "__fn";
+                for (const auto& p : lam->params)
+                    te.fn_params.push_back(p.type);
+                te.fn_ret = lam->inferred_ret;
+                fn_var_types_[id->name] = te;
+            }
+        }
         slot = alloca;
     }
 
