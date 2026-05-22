@@ -309,6 +309,9 @@ void Codegen::declare_class_methods(const ast::ClassDecl& c) {
         if (!m.decl) continue;
         if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
             std::string mangled = mangle_class_member(c.name, *f);
+            // Don't declare trivial (empty-body) destructors — callers will
+            // detect the absence of the symbol and use the free-only path.
+            if (f->is_dtor && f->body && f->body->body.empty()) continue;
             if (mod_->getFunction(mangled)) continue;
 
             // For methods: prepend 'this' pointer as first parameter
@@ -520,6 +523,9 @@ void Codegen::gen_class(const ast::ClassDecl& c) {
     for (const auto& m : c.members) {
         if (!m.decl) continue;
         if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
+            // Skip empty destructors — no symbol means env_define uses the
+            // trivial free-only path; saves one call per delete.
+            if (f->is_dtor && f->body && f->body->body.empty()) continue;
             std::string mangled = mangle_class_member(c.name, *f);
             gen_func(*f, mangled, cls_type);
         }
@@ -2373,10 +2379,12 @@ void Codegen::env_define(const std::string& name, Value* alloca, TypeId tid) {
         str_scopes_.back().push_back(alloca);
         return;
     }
-    // Register class instances that have a destructor for automatic cleanup.
+    // Register class instances for RAII cleanup (dtor call if present, then free).
+    // Uses layouts_ as the condition so trivial-dtor classes (no ___dtor symbol)
+    // are still freed at scope exit via the free-only path in emit_dtor.
     if (tid > TR::TID_NULL && !cleanup_scopes_.empty()) {
         const std::string& cls_name = types_.name_of(tid);
-        if (!cls_name.empty() && mod_->getFunction(cls_name + "___dtor"))
+        if (!cls_name.empty() && layouts_.count(cls_name))
             cleanup_scopes_.back().push_back({alloca, cls_name, nullptr});
     }
 }
@@ -2385,26 +2393,43 @@ void Codegen::emit_dtor(Value* alloca, const std::string& class_name) {
     auto* bb = builder_->GetInsertBlock();
     if (!bb || bb->getTerminator()) return;
 
-    Value* obj_ptr = builder_->CreateLoad(ptr_type(), alloca, "dtor.obj");
+    auto* free_fn = get_or_declare_rt("free", llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+    Value* null_v = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type()));
 
-    // Null guard: skip if the pointer is already null (e.g. after explicit delete).
-    Function* fn      = bb->getParent();
-    auto* call_bb     = BasicBlock::Create(*ctx_, "dtor.call", fn);
-    auto* end_bb      = BasicBlock::Create(*ctx_, "dtor.end",  fn);
-    Value* null_v     = llvm::ConstantPointerNull::get(
-                            llvm::cast<llvm::PointerType>(ptr_type()));
-    Value* is_null    = builder_->CreateICmpEQ(obj_ptr, null_v, "dtor.isnull");
+    std::string dtor_sym = class_name + "___dtor";
+    Function* dtor_fn = mod_->getFunction(dtor_sym);
+
+    if (!dtor_fn) {
+        // Trivial dtor (empty body or none declared): null-guard + free only.
+        // The null-guard is kept so that explicit delete + RAII scope exit
+        // doesn't double-free (gen_delete stores null after free).
+        Value* obj_ptr = builder_->CreateLoad(ptr_type(), alloca, "dtor.obj");
+        Function* fn   = bb->getParent();
+        auto* call_bb  = BasicBlock::Create(*ctx_, "dtor.call", fn);
+        auto* end_bb   = BasicBlock::Create(*ctx_, "dtor.end",  fn);
+        Value* is_null = builder_->CreateICmpEQ(obj_ptr, null_v, "dtor.isnull");
+        builder_->CreateCondBr(is_null, end_bb, call_bb);
+        builder_->SetInsertPoint(call_bb);
+        builder_->CreateCall(free_fn, {obj_ptr});
+        builder_->CreateStore(null_v, alloca);
+        builder_->CreateBr(end_bb);
+        builder_->SetInsertPoint(end_bb);
+        return;
+    }
+
+    // Non-trivial dtor: null-guard + user dtor call + free.
+    Value* obj_ptr = builder_->CreateLoad(ptr_type(), alloca, "dtor.obj");
+    Function* fn   = bb->getParent();
+    auto* call_bb  = BasicBlock::Create(*ctx_, "dtor.call", fn);
+    auto* end_bb   = BasicBlock::Create(*ctx_, "dtor.end",  fn);
+    Value* is_null = builder_->CreateICmpEQ(obj_ptr, null_v, "dtor.isnull");
     builder_->CreateCondBr(is_null, end_bb, call_bb);
 
     builder_->SetInsertPoint(call_bb);
-    // Call the user-defined destructor if one was declared.
-    std::string dtor_sym = class_name + "___dtor";
-    if (Function* dtor_fn = mod_->getFunction(dtor_sym))
-        builder_->CreateCall(dtor_fn, {obj_ptr});
-    // Free the heap-allocated object.
-    auto* free_fn = get_or_declare_rt("free", llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+    builder_->CreateCall(dtor_fn, {obj_ptr});
     builder_->CreateCall(free_fn, {obj_ptr});
-    // Null out the slot so a second emit_dtor call (e.g. landing pad + return path) is a no-op.
+    // Null out the slot so a second emit_dtor call is a no-op.
     builder_->CreateStore(null_v, alloca);
     builder_->CreateBr(end_bb);
 

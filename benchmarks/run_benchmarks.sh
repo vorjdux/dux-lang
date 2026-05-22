@@ -72,7 +72,7 @@ for bench in math_loop fib string_build alloc; do
     ct_c=$(compile_time gcc   -O2 -o "$BINDIR/${bench}_c"   "$SUITE/${bench}.c")
     ct_cpp=$(compile_time g++ -O2 -o "$BINDIR/${bench}_cpp" "$SUITE/${bench}.cpp")
     ct_go=$(compile_time go build -o "$BINDIR/${bench}_go"  "$SUITE/${bench}.go")
-    ct_dux=$(compile_time "$DUXC" --compile "$SUITE/${bench}.dux" -o "$BINDIR/${bench}_dux")
+    ct_dux=$(compile_time "$DUXC" --compile -O2 "$SUITE/${bench}.dux" -o "$BINDIR/${bench}_dux")
 
     echo "done  (C: ${ct_c}ms  C++: ${ct_cpp}ms  Go: ${ct_go}ms  Dux: ${ct_dux}ms)"
 

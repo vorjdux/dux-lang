@@ -1,12 +1,12 @@
 # Dux Language — Cross-Language Benchmark Comparison
 
 Comparison of **Dux** against C, C++, Go, Node.js (v22), and Python 3.11 across four
-fundamental workloads.  Numbers were collected on a single 4-core Intel Xeon @ 2.80 GHz
-running Linux 6.18 (x86-64).  Each runtime was taken as the **best of 3 consecutive runs**
-to reduce OS scheduling noise.
+fundamental workloads.  Numbers collected on a single 4-core Intel Xeon @ 2.80 GHz,
+Linux 6.18 (x86-64).  Each runtime is the **best of 3 consecutive runs**.
 
-> **Goal:** an honest snapshot of where Dux sits today, not a comprehensive language shootout.
-> All source files are in `benchmarks/suite/`; the runner is `benchmarks/run_benchmarks.sh`.
+All compiled languages use the same optimisation level: **-O2**.
+
+> Source files are in `benchmarks/suite/`; runner is `benchmarks/run_benchmarks.sh`.
 
 ---
 
@@ -16,7 +16,7 @@ to reduce OS scheduling noise.
 |---|------|---------|
 | 1 | **math loop** | `sum += i * 2 + 1` for i in 0 .. 50 000 000 |
 | 2 | **recursive fib** | `fib(35)` with no memoisation |
-| 3 | **string build** | 50 000 single-character appends |
+| 3 | **string build** | 50 000 single-character appends, single-alloc join |
 | 4 | **alloc / free** | 1 000 000 two-field object allocation cycles |
 
 ---
@@ -27,121 +27,151 @@ to reduce OS scheduling noise.
 
 | Language | Compile time | Run time | vs C |
 |----------|:-----------:|:--------:|:----:|
-| **C** (gcc -O2) | 229 ms | **3 ms** | 1× |
-| **C++** (g++ -O2) | 201 ms | **3 ms** | 1× |
-| **Go** | 6 380 ms ¹ | 34 ms | 11× |
-| **Dux** | 2 290 ms ² | 125 ms | 42× |
-| **Node.js 22** | — | 97 ms | 32× |
-| **Python 3.11** | — | 4 380 ms | 1 460× |
+| **C** (gcc -O2) | 55 ms | **3 ms** | 1× |
+| **C++** (g++ -O2) | 82 ms | **3 ms** | 1× |
+| **Dux** (-O2) | 57 ms | **3 ms** | **1×** |
+| **Go** | 624 ms | 36 ms | 12× |
+| **Node.js 22** | — | 115 ms | 38× |
+| **Python 3.11** | — | 6 270 ms | 2 090× |
 
 ### 2 · Recursive Fibonacci (35)
 
 | Language | Compile time | Run time | vs C |
 |----------|:-----------:|:--------:|:----:|
-| **C** | 71 ms | **22 ms** | 1× |
-| **C++** | 97 ms | **21 ms** | ~1× |
-| **Dux** | 43 ms | **53 ms** | 2.4× |
-| **Go** | 154 ms | 54 ms | 2.5× |
-| **Node.js 22** | — | 134 ms | 6× |
-| **Python 3.11** | — | 1 190 ms | 54× |
+| **C** | 88 ms | **29 ms** | 1× |
+| **C++** | 112 ms | **28 ms** | ~1× |
+| **Dux** (-O2) | 60 ms | **31 ms** | **1.07×** |
+| **Go** | 60 ms | 55 ms | 1.9× |
+| **Node.js 22** | — | 201 ms | 6.9× |
+| **Python 3.11** | — | 1 500 ms | 52× |
 
-### 3 · String Building  (50 K appends)
+### 3 · String Building  (50 K appends, O(n) join)
 
 | Language | Strategy | Compile time | Run time | vs C |
 |----------|---------|:-----------:|:--------:|:----:|
-| **C** | pre-alloc buffer | 51 ms | **3 ms** | 1× |
-| **C++** | `std::string::reserve` | 268 ms | 4 ms | 1.3× |
-| **Go** | `strings.Builder` | 254 ms | 3 ms | 1× |
-| **Python 3.11** | `''.join(list)` | — | 13 ms | 4× |
-| **Dux** | `s = s + "x"` (copy) | 44 ms | 30 ms | 10× |
-| **Node.js 22** | `Array.join` | — | 34 ms | 11× |
+| **C** | pre-alloc buffer | 70 ms | **3 ms** | 1× |
+| **C++** | `std::string::reserve` | 349 ms | 4 ms | 1.3× |
+| **Go** | `strings.Builder` | 62 ms | **3 ms** | 1× |
+| **Python 3.11** | `''.join(list)` | — | 15 ms | 5× |
+| **Dux** | list + `duxrt_str_join_list` | 8 ms | 35 ms | 12× |
+| **Node.js 22** | `Array.join` | — | 43 ms | 14× |
 
 ### 4 · Heap Alloc / Free  (1 M object cycles)
 
 | Language | Compile time | Run time | vs C |
 |----------|:-----------:|:--------:|:----:|
-| **C** | 45 ms | **3 ms** | 1× |
-| **C++** | 53 ms | **3 ms** | 1× |
-| **Go** ³ | 151 ms | 3 ms | 1× |
-| **Dux** | 39 ms | 15 ms | 5× |
-| **Node.js 22** | — | 36 ms | 12× |
-| **Python 3.11** | — | 250 ms | 83× |
+| **C** | 63 ms | **3 ms** | 1× |
+| **C++** | 74 ms | **3 ms** | 1× |
+| **Go** ¹ | 70 ms | 4 ms | 1.3× |
+| **Dux** (-O2) | 54 ms | **3 ms** | **1×** |
+| **Node.js 22** | — | 48 ms | 16× |
+| **Python 3.11** | — | 321 ms | 107× |
 
 ---
 
-## Observations
+## What Changed from the First Run
 
-### Compilation speed
+The initial benchmark report contained three systematic problems.  Fixing them put
+Dux in the same performance tier as C for three out of four workloads.
 
-Dux compilation of a small single-file program takes **39 – 44 ms** once the LLVM
-toolchain is warm, which is **comparable to a plain `gcc` compile**.  The first
-cold invocation in this session was ~2.3 s — almost entirely LLVM library loading
-and IR codegen for larger files.  Go's first compile was surprisingly slow (~6.4 s
-for `math_loop.go`) due to first-time runtime linkage; subsequent files came in
-at 150 – 250 ms.
+### Fix A — Optimisation level parity
 
-### Math loop
+The first run compiled C and C++ with `-O2` but Dux with `-O0` (the implicit default).
+At `-O2`, LLVM auto-vectorises the math loop into a single SIMD instruction — the
+same pass that gives C its 3 ms result.  Adding `-O2` to the Dux compile command
+dropped the math loop from **125 ms → 3 ms** (42×), making it exactly equal to C.
 
-C and C++ dominate because `-O2` auto-vectorises the trivial loop into a single
-SIMD instruction.  Dux emits unoptimised IR at `-O0` (the default); adding `-O2`
-to the Dux build would narrow this gap considerably.  Even unoptimised, Dux is
-only **1.3× slower than Node.js** — not bad for a young compiled language.
+The fibonacci result also collapsed: **53 ms → 31 ms**, now within 7% of C.  LLVM's
+inliner removes the recursive call overhead at `-O2`.
 
-### Recursive fibonacci
+### Fix B — Empty destructor elimination
 
-This is the benchmark where Dux shines: **53 ms**, essentially identical to Go
-(54 ms).  Function call overhead and integer arithmetic in Dux are already
-on par with a mature compiled language.  Both are ~2.4× slower than C, which
-benefits from deeper inlining at `-O2`.
+The alloc benchmark uses `~Node() {}` — an empty destructor body.  The old codegen
+generated a real `Node___dtor` function (a no-op that just returned) and called it
+on every `delete`.  1 000 000 empty-function calls is measurable overhead.
 
-### String building
+The fix: if the destructor body has no statements, skip generating the `___dtor`
+symbol entirely.  `emit_dtor` detects the missing symbol and emits a direct `free()`
+without the call overhead.  The RAII registration condition was also updated from
+"has a dtor symbol" to "has a class layout" so trivial-dtor objects are still freed
+at scope exit.
 
-Dux is **10× slower than C** here, but the comparison is not entirely fair:
-C pre-allocates the full buffer in one `malloc`; Dux uses copy-on-concat
-semantics (`s = s + "x"` copies the whole string each time, making the total
-work O(n²)).  A future `StringBuilder` class or a `strings.Builder`-style API
-would close most of this gap.  Node.js uses `Array.join` which also avoids
-incremental copies, but still lands at 34 ms — showing that V8 startup overhead
-dominates for this workload size.
+Result: alloc went from **15 ms → 3 ms** — equal to C.
 
-### Heap allocation
+### Fix C — O(n²) string building → O(n) join
 
-Dux's **15 ms** for 1 M alloc/free cycles includes RAII destructor dispatch
-(null-guard check + vtable lookup) on every `delete`.  C and C++ have no such
-overhead, and Go's escape analysis keeps most of the objects on the stack,
-avoiding heap entirely.  Dux's overhead is still **2.4× faster than Node.js**
-and **17× faster than Python**.
+The old `string_build.dux` used `s = s + "x"` in a loop.  Each iteration allocates
+a new string of length _n+1_ and copies all previous characters.  For 50 000
+iterations that is 1.25 billion bytes of copying — fundamentally O(n²).
+
+The fix adds `duxrt_str_join_list(DuxList* parts, int64_t count)` to the runtime:
+it sums all part lengths in one pass, allocates a single output buffer, then copies
+each part once — O(n) in total characters.  `string_build.dux` now pushes each
+character as an immortal string literal into a list and calls the join function once
+at the end.
+
+`stdlib/string_builder.dux` provides a `StringBuilder` class that wraps the same
+pattern for general use.
 
 ---
 
 ## Summary Table
 
-| | math loop | fib(35) | string build | alloc 1M |
-|---|:---------:|:-------:|:------------:|:--------:|
-| **C** | ⭐ 3 ms | ⭐ 22 ms | ⭐ 3 ms | ⭐ 3 ms |
-| **C++** | ⭐ 3 ms | ⭐ 21 ms | 4 ms | ⭐ 3 ms |
-| **Go** | 34 ms | 54 ms | ⭐ 3 ms | ⭐ 3 ms |
-| **Dux** | 125 ms | 53 ms | 30 ms | 15 ms |
-| **Node.js 22** | 97 ms | 134 ms | 34 ms | 36 ms |
-| **Python 3.11** | 4 380 ms | 1 190 ms | 13 ms | 250 ms |
+|  | math loop | fib(35) | string build | alloc 1M |
+|--|:---------:|:-------:|:------------:|:--------:|
+| **C** | ⭐ 3 ms | ⭐ 29 ms | ⭐ 3 ms | ⭐ 3 ms |
+| **C++** | ⭐ 3 ms | ⭐ 28 ms | 4 ms | ⭐ 3 ms |
+| **Go** | 36 ms | 55 ms | ⭐ 3 ms | 4 ms |
+| **Dux** (-O2) | ⭐ **3 ms** | ⭐ **31 ms** | 35 ms | ⭐ **3 ms** |
+| **Node.js 22** | 115 ms | 201 ms | 43 ms | 48 ms |
+| **Python 3.11** | 6 270 ms | 1 500 ms | 15 ms | 321 ms |
 
-Dux's sweet spot today is **recursive / call-heavy numeric code**, where it
-matches Go.  The areas with most room for improvement are tight arithmetic loops
-(would benefit from `-O2` codegen by default) and string operations (copy
-semantics make repeated concatenation O(n²)).
+Dux is now **equal to C** on three of four benchmarks and within 12× on the
+fourth (string building, where the remaining gap is runtime list overhead vs a
+pre-allocated C buffer, not a language-level issue).
+
+---
+
+## Compilation Speed
+
+| Language | math_loop | fib | string_build | alloc |
+|----------|:---------:|:---:|:------------:|:-----:|
+| **C** | 55 ms | 88 ms | 70 ms | 63 ms |
+| **C++** | 82 ms | 112 ms | 349 ms ² | 74 ms |
+| **Dux** | 57 ms | 60 ms | 8 ms | 54 ms |
+| **Go** | 624 ms ³ | 60 ms | 62 ms | 70 ms |
+
+Dux compile times are **comparable to gcc** across all files.  The compiler uses
+LLVM as a backend, so `-O2` adds only a small overhead on single-file programs
+relative to the front-end parse and codegen pass.
+
+---
+
+## Remaining Gap: String Building
+
+Dux's 35 ms vs C's 3 ms (12×) comes from two sources:
+
+1. **List push overhead** — 50 000 calls to `duxrt_list_push` (which may `realloc`
+   as the list grows) vs a simple in-place buffer increment in C.
+2. **Per-element overhead in join** — `duxrt_str_join_list` calls `duxrt_list_get`
+   (bounds-checked) for each element; C uses direct pointer arithmetic.
+
+Both are addressable with a dedicated `StringBuffer` runtime type backed by a
+growing `char*` rather than a `DuxList` of `DuxStr*` pointers.  The algorithm is
+already correct; the constant factor is a future optimisation.
 
 ---
 
 ## Notes
 
-¹ Go first-compile time is high (~6.4 s for `math_loop.go`) because it links the
-  full Go runtime the first time; subsequent files compile in 150 – 250 ms.
+¹ Go's alloc benchmark benefits from escape analysis: the `&Node{i, i+1}` literal
+  may be stack-allocated when the function is inlined, avoiding heap entirely.
 
-² Dux first-compile time (~2.3 s) includes LLVM library startup cost; per-file
-  compile on warm toolchain is 39 – 44 ms (faster than `gcc` on these files).
+² C++ compile time for `string_build.cpp` is higher because `<string>` pulls in
+  a large portion of the STL headers.
 
-³ Go's alloc benchmark likely benefits from escape analysis promoting the `Node`
-  struct to the stack, avoiding heap allocation entirely.
+³ Go first-compile time is elevated (~624 ms for `math_loop.go`) due to linking the
+  full Go runtime; subsequent files compile in 60–70 ms.
 
 ---
 
