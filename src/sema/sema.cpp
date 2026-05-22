@@ -65,7 +65,23 @@ void Sema::warn(const ast::SourceLoc& loc, const std::string& msg) {
     driver_.warning(loc, msg);
 }
 
-TypeId Sema::type_from_te(const ast::TypeExpr& te) const {
+TypeId Sema::type_from_te(const ast::TypeExpr& te) {
+    if (te.name == "__fn") {
+        std::string sig = "__fn(";
+        for (size_t i = 0; i < te.fn_params.size(); ++i) {
+            if (i > 0) sig += ",";
+            sig += te.fn_params[i].name;
+        }
+        sig += ")->" + te.fn_ret;
+        TypeId id = types_.intern(sig, TypeKind::Function);
+        auto& info = types_.info(id);
+        if (info.return_type < 0) {
+            info.return_type = types_.from_name(te.fn_ret);
+            for (const auto& p : te.fn_params)
+                info.param_types.push_back(types_.from_name(p.name));
+        }
+        return id;
+    }
     TypeId id = types_.from_type_expr(te);
     return id == TR::TID_UNKNOWN ? TR::TID_UNKNOWN : id;
 }
@@ -593,6 +609,8 @@ TypeId Sema::check_expr(const ast::Expr& e) {
         result = check_list(*lst_e);
     } else if (auto* dct_e  = dynamic_cast<const ast::DictExpr*>(&e)) {
         result = check_dict(*dct_e);
+    } else if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(&e)) {
+        result = check_lambda(*lam);
     }
     // else: unknown Expr subtype — leave as TID_UNKNOWN
 
