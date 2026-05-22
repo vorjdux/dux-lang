@@ -265,6 +265,14 @@ private:
         out_ << '\n';
     }
 
+    void visit(const UnsafeStmt& n) override {
+        out_ << pad() << "unsafe {\n";
+        indent();
+        for (const auto& s : n.body) s->accept(*this);
+        dedent();
+        out_ << pad() << "}\n";
+    }
+
     // ── Declarations ─────────────────────────────────────────────────────────
     static const char* access_str(AccessMod m) {
         switch (m) {
@@ -370,6 +378,15 @@ private:
         for (auto& s : n.stmts)  s->accept(*this);
         dedent();
         out_ << pad() << "}\n";
+    }
+
+    void visit(const ExternDecl& n) override {
+        out_ << pad() << "extern \"" << n.abi << "\" " << n.ret.name << ' ' << n.name << '(';
+        for (std::size_t i = 0; i < n.params.size(); ++i) {
+            if (i) out_ << ", ";
+            out_ << n.params[i].type.name << ' ' << n.params[i].name;
+        }
+        out_ << ")\n";
     }
 
     void visit(const Program& n) override {

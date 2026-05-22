@@ -276,6 +276,10 @@ void Codegen::declare_functions(const ast::DeclList& decls,
             declare_class_methods(*c);
         } else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(dp.get())) {
             declare_functions(ns->decls, ns->name);
+        } else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(dp.get())) {
+            std::vector<llvm::Type*> ptypes;
+            for (const auto& p : ext->params) ptypes.push_back(lower_type_expr(p.type));
+            get_or_declare_rt(ext->name, lower_type_expr(ext->ret), ptypes);
         }
     }
 }
@@ -331,8 +335,14 @@ void Codegen::gen_decl(const ast::Decl& d, const std::string& prefix) {
         if (!f->is_ctor && !f->is_dtor)
             gen_func(*f, mangle(prefix, f->name));
     }
-    else if (auto* c  = dynamic_cast<const ast::ClassDecl*>(&d))   gen_class(*c);
+    else if (auto* c  = dynamic_cast<const ast::ClassDecl*>(&d))     gen_class(*c);
     else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(&d)) gen_namespace(*ns);
+    else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(&d)) {
+        // Declare external C function with its exact name (no namespace prefix)
+        std::vector<llvm::Type*> ptypes;
+        for (const auto& p : ext->params) ptypes.push_back(lower_type_expr(p.type));
+        get_or_declare_rt(ext->name, lower_type_expr(ext->ret), ptypes);
+    }
     // ImportDecl: nothing to generate
 }
 
@@ -760,6 +770,7 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     if (auto* d = dynamic_cast<const ast::DeleteStmt*>(&s))    { gen_delete(*d);   return; }
     if (auto* df = dynamic_cast<const ast::DeferStmt*>(&s))    { gen_defer(*df);   return; }
     if (auto* th = dynamic_cast<const ast::ThrowStmt*>(&s))    { gen_throw(*th);   return; }
+    if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s))   { gen_stmts(us->body); return; }
     if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))  {
         // Propagate label into the inner loop/while statement
         pending_label_ = ls->label;

@@ -1,23 +1,55 @@
-// math — standard mathematics module
-// Usage: import math
+extern "C" double duxrt_math_sqrt(double x)
+extern "C" double duxrt_math_sin(double x)
+extern "C" double duxrt_math_cos(double x)
+extern "C" double duxrt_math_pow(double base, double exp)
+extern "C" double duxrt_math_floor(double x)
+extern "C" double duxrt_math_ceil(double x)
+extern "C" double duxrt_math_log(double x)
+extern "C" double duxrt_math_log2(double x)
+extern "C" double duxrt_math_abs_d(double x)
+extern "C" double duxrt_math_min_d(double a, double b)
+extern "C" double duxrt_math_max_d(double a, double b)
 
-// Trigonometry
-double sin(double x)
-double cos(double x)
+double sqrt(double x) {
+    return duxrt_math_sqrt(x)
+}
 
-// Roots and powers
-double sqrt(double x)
-double pow(double base, double exp)
+double sin(double x) {
+    return duxrt_math_sin(x)
+}
 
-// Rounding
-double floor(double x)
-double ceil(double x)
+double cos(double x) {
+    return duxrt_math_cos(x)
+}
 
-// Logarithms
-double log(double x)
-double log2(double x)
+double pow(double base, double exp) {
+    return duxrt_math_pow(base, exp)
+}
 
-// Absolute value and extrema
-double abs(double x)
-double min(double a, double b)
-double max(double a, double b)
+double floor(double x) {
+    return duxrt_math_floor(x)
+}
+
+double ceil(double x) {
+    return duxrt_math_ceil(x)
+}
+
+double log(double x) {
+    return duxrt_math_log(x)
+}
+
+double log2(double x) {
+    return duxrt_math_log2(x)
+}
+
+double abs(double x) {
+    return duxrt_math_abs_d(x)
+}
+
+double min(double a, double b) {
+    return duxrt_math_min_d(a, b)
+}
+
+double max(double a, double b) {
+    return duxrt_math_max_d(a, b)
+}

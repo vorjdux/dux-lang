@@ -67,25 +67,46 @@ int Driver::parse(const std::string& filename) {
 
 /* ─── Import resolution ─────────────────────────────────────────────────── */
 
-// Known stdlib module names — these are handled by codegen, not file loading.
-static const std::unordered_set<std::string> kStdlibModules = {"math", "str", "io"};
+// Known stdlib module names — these prefer file loading over the codegen table.
+// An empty set means all imports attempt file resolution first.
+static const std::unordered_set<std::string> kStdlibModules = {};
+
+// Baked-in stdlib directory (set by CMake)
+#ifndef DUX_STDLIB_DIR
+#define DUX_STDLIB_DIR ""
+#endif
 
 // Convert a dotted import path to a filesystem path.
 // "utils"           → "<base>/utils.dux"
 // "geometry.shapes" → "<base>/geometry/shapes.dux"
+// Falls back to DUX_STDLIB_DIR if not found in base_dir.
 static std::string find_import_file(const std::string& import_path,
                                     const std::string& base_dir) {
-    // Replace dots (except trailing component) with path separators
+    // Replace dots with path separators
     std::string rel = import_path;
     for (char& c : rel)
         if (c == '.') c = '/';
     rel += ".dux";
 
-    fs::path candidate = fs::path(base_dir) / rel;
-    std::error_code ec;
-    candidate = fs::canonical(candidate, ec);
-    if (!ec && fs::exists(candidate))
-        return candidate.string();
+    // Try source-relative directory first
+    {
+        fs::path candidate = fs::path(base_dir) / rel;
+        std::error_code ec;
+        candidate = fs::canonical(candidate, ec);
+        if (!ec && fs::exists(candidate))
+            return candidate.string();
+    }
+
+    // Fall back to baked-in stdlib directory
+    const std::string stdlib_dir = DUX_STDLIB_DIR;
+    if (!stdlib_dir.empty()) {
+        fs::path candidate = fs::path(stdlib_dir) / rel;
+        std::error_code ec;
+        candidate = fs::canonical(candidate, ec);
+        if (!ec && fs::exists(candidate))
+            return candidate.string();
+    }
+
     return {};
 }
 
