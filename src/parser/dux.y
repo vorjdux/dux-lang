@@ -82,10 +82,11 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_ASSERT KW_DEFER KW_THROW
 %token KW_FN "fn"
 %token KW_AND KW_OR KW_NOT
+%token KW_UNSAFE KW_EXTERN
 
 /* Type keywords */
 %token KW_VOID KW_INT KW_LONG KW_REAL KW_DOUBLE KW_STR
-%token KW_BOOL KW_LIST KW_DICT KW_TUPLE KW_OBJECT
+%token KW_BOOL KW_LIST KW_DICT KW_TUPLE KW_OBJECT KW_PTR
 
 /* Operators & punctuation */
 %token SEMI ";"
@@ -111,7 +112,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <DeclPtr>                          top_decl decl
 /* Declarations */
 %type <DeclPtr>  namespace_decl import_decl class_decl interface_decl
-%type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl
+%type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl extern_decl
 /* Namespace body accumulates into a temporary Program */
 %type <std::unique_ptr<Program>>         namespace_body
 /* Class / interface */
@@ -146,7 +147,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <StmtPtr>  stmt simple_stmt
 %type <StmtPtr>  if_stmt while_stmt do_while_stmt for_stmt
 %type <StmtPtr>  switch_stmt try_stmt return_stmt break_stmt
-%type <StmtPtr>  continue_stmt assert_stmt delete_stmt defer_stmt throw_stmt
+%type <StmtPtr>  continue_stmt assert_stmt delete_stmt defer_stmt throw_stmt unsafe_stmt
 %type <std::unique_ptr<BlockStmt>>       block
 %type <std::vector<SwitchCase>>          switch_cases
 %type <SwitchCase>                       switch_case
@@ -210,6 +211,7 @@ decl
     | class_decl      { $$ = std::move($1); }
     | interface_decl  { $$ = std::move($1); }
     | func_decl       { $$ = std::move($1); }
+    | extern_decl     { $$ = std::move($1); }
     ;
 
 /* =====================================================================
@@ -316,6 +318,22 @@ import_decl
 ident_list
     : IDENT                        { $$.push_back($1); }
     | ident_list COMMA IDENT       { $1.push_back($3); $$ = std::move($1); }
+    ;
+
+/* =====================================================================
+   Extern declaration
+   ===================================================================== */
+
+extern_decl
+    : KW_EXTERN STRING type_expr IDENT LPAREN param_list RPAREN SEMI
+        {
+            auto e    = mk<ExternDecl>(); e->loc = sl(@$, driver);
+            e->abi    = $2;
+            e->ret    = $3;
+            e->name   = $4;
+            e->params = std::move($6);
+            $$ = std::move(e);
+        }
     ;
 
 /* =====================================================================
@@ -637,6 +655,7 @@ type_expr
     | KW_DICT    { $$.name = "dict";   $$.is_const = false; }
     | KW_TUPLE   { $$.name = "tuple";  $$.is_const = false; }
     | KW_OBJECT  { $$.name = "object"; $$.is_const = false; }
+    | KW_PTR     { $$.name = "ptr";    $$.is_const = false; }
     | KW_CONST type_expr  { $$ = $2; $$.is_const = true; }
     | IDENT      { $$.name = $1;      $$.is_const = false; }
     | IDENT LT type_arg_list_ne GT
@@ -677,6 +696,7 @@ stmt
     | delete_stmt         { $$ = std::move($1); }
     | defer_stmt          { $$ = std::move($1); }
     | throw_stmt          { $$ = std::move($1); }
+    | unsafe_stmt         { $$ = std::move($1); }
     | var_decl_stmt       { $$ = std::move($1); }
     | simple_stmt SEMI    { $$ = std::move($1); }
     ;
@@ -856,6 +876,16 @@ throw_stmt
         {
             auto s = mk<ThrowStmt>(); s->loc = sl(@$, driver);
             s->expr = std::move($2);
+            $$ = std::move(s);
+        }
+    ;
+
+/* -- Unsafe ------------------------------------------------------------ */
+unsafe_stmt
+    : KW_UNSAFE block
+        {
+            auto s = mk<UnsafeStmt>(); s->loc = sl(@$, driver);
+            s->body = std::move($2->body);
             $$ = std::move(s);
         }
     ;

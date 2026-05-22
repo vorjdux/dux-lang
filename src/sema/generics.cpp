@@ -265,6 +265,11 @@ static StmtPtr clone_stmt(const Stmt* st, const SubstMap& s) {
         r->expr = clone_expr(n->expr.get(), s);
         return r;
     }
+    if (auto* n = dynamic_cast<const UnsafeStmt*>(st)) {
+        auto r = std::make_unique<UnsafeStmt>(); r->loc = n->loc;
+        r->body = clone_stmts(n->body, s);
+        return r;
+    }
     return nullptr;
 }
 
@@ -498,6 +503,9 @@ static void fix_stmt(Stmt* st,
     }
     if (auto* n = dynamic_cast<ThrowStmt*>(st)) {
         fix_expr(n->expr.get(), done, pending); return;
+    }
+    if (auto* n = dynamic_cast<UnsafeStmt*>(st)) {
+        fix_stmts(n->body, done, pending); return;
     }
 }
 
