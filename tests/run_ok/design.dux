@@ -139,11 +139,11 @@ int main() {
     Dog d = new Dog(3)
     println(d.born_year())
 
-    fn(int) -> int sq = fn(int n) => n * n
+    auto sq = fn(int n) -> int => n * n
     println(sq(5))
 
     int base = 100
-    fn(int) -> int addBase = fn(int n) => n + base
+    auto addBase = fn(int n) -> int => n + base
     println(addBase(7))
 
     println(apply(sq, 6))

@@ -548,6 +548,11 @@ void Sema::check_return(const ast::ReturnStmt& s) {
 }
 
 void Sema::check_var_decl(const ast::VarDeclStmt& s) {
+    if (s.type.name == "__fn") {
+        err(s.loc, "fn type cannot be used as a variable type; "
+                   "use: auto name = fn(params) -> type => ...");
+        return;
+    }
     TypeId decl_type = type_from_te(s.type);
     bool   is_const  = s.is_const;
 

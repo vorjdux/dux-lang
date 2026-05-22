@@ -3,20 +3,20 @@ int apply(fn(int) -> int f, int x) {
 }
 
 int main() {
-    fn(int, int) -> int add = fn(int a, int b) => a + b
+    auto add = fn(int a, int b) -> int => a + b
     println(add(3, 4))
 
-    fn(str) -> void printer = fn(str prefix) => {
+    auto printer = fn(str prefix) -> void {
         str msg = prefix + ": hello"
         println(msg)
     }
     printer("greet")
 
     int base = 10
-    fn(int) -> int addBase = fn(int x) => x + base
+    auto addBase = fn(int x) -> int => x + base
     println(addBase(5))
 
-    fn(int) -> int double_ = fn(int n) => n * 2
+    auto double_ = fn(int n) -> int => n * 2
     println(apply(double_, 7))
 
     return 0
