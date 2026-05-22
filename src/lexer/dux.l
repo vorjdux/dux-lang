@@ -123,6 +123,7 @@ ALNUM   [a-zA-Z0-9_]
 "get"        { need_semi = true;  return yy::parser::make_KW_GET(loc);       }
 "set"        { need_semi = true;  return yy::parser::make_KW_SET(loc);       }
 "assert"     { need_semi = false; return yy::parser::make_KW_ASSERT(loc);    }
+"fn"         { need_semi = false; return yy::parser::make_KW_FN(loc);        }
 "defer"      { need_semi = false; return yy::parser::make_KW_DEFER(loc);     }
 "throw"      { need_semi = false; return yy::parser::make_KW_THROW(loc);     }
 "and"        { need_semi = false; return yy::parser::make_KW_AND(loc);       }

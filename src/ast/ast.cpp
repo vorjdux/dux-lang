@@ -19,6 +19,7 @@ void IndexExpr::accept(Visitor& v)     const { v.visit(*this); }
 void NewExpr::accept(Visitor& v)       const { v.visit(*this); }
 void ListExpr::accept(Visitor& v)      const { v.visit(*this); }
 void DictExpr::accept(Visitor& v)      const { v.visit(*this); }
+void LambdaExpr::accept(Visitor& v)    const { v.visit(*this); }
 
 void BlockStmt::accept(Visitor& v)     const { v.visit(*this); }
 void ExprStmt::accept(Visitor& v)      const { v.visit(*this); }
