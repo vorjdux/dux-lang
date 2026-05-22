@@ -383,14 +383,17 @@ void Sema::check_import(const ast::ImportDecl& imp) {
     std::string last  = imp.path.substr(
         imp.path.rfind('.') == std::string::npos ? 0 : imp.path.rfind('.') + 1);
 
-    if (kStdlib.count(last) && imp.path.find('.') == std::string::npos) {
-        // Stdlib: register the module name so member-call resolution works.
-        if (!first.empty() && !scopes_.lookup(first)) {
+    // Match stdlib by the last path component so both "math" and "dux.math" work.
+    if (kStdlib.count(last)) {
+        // Register the accessor name (alias if given, else last component) as a
+        // namespace symbol so that member-call sema resolution doesn't error out.
+        const std::string ns_name = imp.alias.empty() ? last : imp.alias;
+        if (!scopes_.lookup(ns_name)) {
             Symbol s;
-            s.name = first;
+            s.name = ns_name;
             s.kind = SymKind::Namespace;
             s.type = TR::TID_OBJECT;
-            scopes_.define(first, s);
+            scopes_.define(ns_name, s);
         }
     }
     // User file imports: the import resolver already injected a NamespaceDecl
@@ -466,7 +469,8 @@ void Sema::check_do_while(const ast::DoWhileStmt& s) {
 
 void Sema::check_for_in(const ast::ForInStmt& s) {
     TypeId iter_t = check_expr(*s.iterable);
-    (void)iter_t; // accept any iterable for now
+    if (iter_t == TR::TID_DICT || iter_t == TR::TID_TUPLE || iter_t == TR::TID_STR)
+        err(s.iterable->loc, "for-in requires a list or range; got '" + types_.name_of(iter_t) + "'");
 
     scopes_.push();
     Symbol var;
@@ -544,6 +548,11 @@ void Sema::check_return(const ast::ReturnStmt& s) {
 }
 
 void Sema::check_var_decl(const ast::VarDeclStmt& s) {
+    if (s.type.name == "__fn") {
+        err(s.loc, "fn type cannot be used as a variable type; "
+                   "use: auto name = fn(params) -> type => ...");
+        return;
+    }
     TypeId decl_type = type_from_te(s.type);
     bool   is_const  = s.is_const;
 
@@ -552,8 +561,9 @@ void Sema::check_var_decl(const ast::VarDeclStmt& s) {
 
         if (init_ptr) {
             TypeId init_t = check_expr(*init_ptr);
-            if (var_type == TR::TID_UNKNOWN)
-                var_type = init_t;  // type inference
+            bool is_lambda = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get()) != nullptr;
+            if (var_type == TR::TID_UNKNOWN || is_lambda)
+                var_type = init_t;  // lambda: actual type is fn(...)->R, not the declared scalar
             else
                 require_assignable(init_t, var_type, init_ptr->loc,
                                    "variable '" + name + "' initialiser");
@@ -589,8 +599,12 @@ TypeId Sema::check_expr(const ast::Expr& e) {
     // Each branch uses a distinct name to avoid -Wshadow in the else-if chain.
     if (dynamic_cast<const ast::IntLitExpr*>(&e)) {
         result = TR::TID_INT;
+    } else if (dynamic_cast<const ast::LongLitExpr*>(&e)) {
+        result = TR::TID_LONG;
     } else if (dynamic_cast<const ast::FloatLitExpr*>(&e)) {
         result = TR::TID_DOUBLE;
+    } else if (dynamic_cast<const ast::RealLitExpr*>(&e)) {
+        result = TR::TID_REAL;
     } else if (dynamic_cast<const ast::StringLitExpr*>(&e)) {
         result = TR::TID_STR;
     } else if (dynamic_cast<const ast::BoolLitExpr*>(&e)) {
@@ -723,6 +737,14 @@ TypeId Sema::check_binary(const ast::BinaryExpr& e) {
                 warn(e.right->loc, "'+' with str: right operand is '" + types_.name_of(R) + "'");
             return TR::TID_STR;
         }
+        if (op == "+" && (L == TR::TID_LIST || R == TR::TID_LIST)) {
+            // List concatenation — both sides must be list
+            if (L != TR::TID_LIST)
+                warn(e.left->loc,  "'+' with list: left operand is '" + types_.name_of(L) + "'");
+            if (R != TR::TID_LIST)
+                warn(e.right->loc, "'+' with list: right operand is '" + types_.name_of(R) + "'");
+            return TR::TID_LIST;
+        }
         require_numeric(L, e.left->loc,  "'" + op + "' left operand");
         require_numeric(R, e.right->loc, "'" + op + "' right operand");
         return types_.unify(L, R);
@@ -794,7 +816,37 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
         }
         id->type_id = sym->type;
     } else {
-        // Member call or complex expression — check callee, skip signature check
+        // Member call: look up stdlib return types so expressions like
+        // math.sqrt(x) get annotated with TID_DOUBLE instead of TID_UNKNOWN.
+        static const std::unordered_map<std::string,
+               std::unordered_map<std::string, TypeId>> kStdlibRet = {
+            {"math", {
+                {"sqrt",  TR::TID_DOUBLE}, {"pow",  TR::TID_DOUBLE},
+                {"abs",   TR::TID_DOUBLE}, {"floor",TR::TID_DOUBLE},
+                {"ceil",  TR::TID_DOUBLE}, {"log",  TR::TID_DOUBLE},
+                {"log2",  TR::TID_DOUBLE}, {"sin",  TR::TID_DOUBLE},
+                {"cos",   TR::TID_DOUBLE}, {"tan",  TR::TID_DOUBLE},
+                {"min",   TR::TID_DOUBLE}, {"max",  TR::TID_DOUBLE},
+            }},
+            {"str",  {
+                {"concat",      TR::TID_STR},  {"from_int",    TR::TID_STR},
+                {"from_double", TR::TID_STR},  {"length",      TR::TID_LONG},
+                {"slice",       TR::TID_STR},
+            }},
+            {"io",   {{"readline", TR::TID_STR}}},
+        };
+        if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e.callee.get())) {
+            if (auto* ns = dynamic_cast<const ast::IdentExpr*>(mem->object.get())) {
+                auto mod_it = kStdlibRet.find(ns->name);
+                if (mod_it != kStdlibRet.end()) {
+                    auto fn_it = mod_it->second.find(mem->member);
+                    if (fn_it != mod_it->second.end()) {
+                        for (const auto& a : e.args) check_expr(*a);
+                        return fn_it->second;
+                    }
+                }
+            }
+        }
         TypeId callee_t = check_expr(*e.callee);
         (void)callee_t;
         for (const auto& a : e.args) check_expr(*a);
@@ -948,6 +1000,9 @@ TypeId Sema::check_lambda(const ast::LambdaExpr& e) {
     }
     current_return_type_ = saved_ret;
     scopes_.pop();
+    // Prefer the explicitly annotated return type over the inferred one
+    if (e.explicit_ret.has_value())
+        ret_tid = type_from_te(*e.explicit_ret);
     std::string sig = "__fn(";
     for (size_t i = 0; i < e.params.size(); ++i) {
         if (i > 0) sig += ",";
@@ -962,6 +1017,7 @@ TypeId Sema::check_lambda(const ast::LambdaExpr& e) {
             info.param_types.push_back(type_from_te(p.type));
     }
     e.type_id = fn_tid;
+    const_cast<ast::LambdaExpr&>(e).inferred_ret = types_.name_of(ret_tid);
     return fn_tid;
 }
 

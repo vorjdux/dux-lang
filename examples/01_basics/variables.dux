@@ -1,43 +1,61 @@
 void main() {
-    # Integer types
-    int count = 0
-    int age = 25
-    count = count + 1
-    println(count)
+    # ── Explicit types ────────────────────────────────────────────────────────
 
-    # 64-bit integer
-    long big = 9000000000
+    int    age   = 25
+    long   big   = 9000000000
+    double pi    = 3.14159
+    real   temp  = 98.6
+    str    name  = "Dux"
+    bool   ok    = true
+
+    println(age)
     println(big)
-
-    # Floating-point
-    double pi = 3.14159
-    double e  = 2.71828
     println(pi)
-    println(e)
+    println(name)
 
-    # Strings
-    str name  = "Dux"
-    str greet = "Hello, " + name + "!"
-    println(greet)
+    # ── Type inference with auto ───────────────────────────────────────────────
 
-    # Booleans — non-zero is truthy
-    int flag = 1
-    int off  = 0
+    auto age2  = 42            # int
+    auto big2  = 9000000000l   # long  (l suffix → 64-bit)
+    auto pi2   = 3.14159       # double
+    auto temp2 = 98.6f         # real  (f suffix → 32-bit float)
+    auto name2 = "Dux"         # str
+    auto ok2   = true          # bool
 
-    if (flag) {
-        println("flag is true")
-    }
-    if (!off) {
-        println("off is false")
-    }
+    println(age2)
+    println(big2)
+    println(pi2)
+    println(name2)
 
-    # Constants — value cannot be reassigned
-    const int MAX = 100
-    const str VERSION = "1.0.0"
+    # ── Literal suffixes ──────────────────────────────────────────────────────
+    # Use suffixes to pin numeric width when auto would pick the wrong type.
+
+    auto a = 42         # int    (default for bare integer literal)
+    auto b = 42i        # int    (explicit — same as plain 42)
+    auto c = 42l        # long   (64-bit signed integer)
+    auto d = 3.14       # double (default for bare float literal)
+    auto e = 3.14d      # double (explicit — same as plain 3.14)
+    auto f = 3.14f      # real   (32-bit float)
+    auto g = 42d        # double (42 as double: 42.0)
+    auto h = 42f        # real   (42 as 32-bit float)
+
+    println(a)
+    println(b)
+    println(c)
+    println(d)
+    println(f)
+    println(g)
+
+    # ── Constants — cannot be reassigned ─────────────────────────────────────
+
+    const int MAX      = 100
+    const str VERSION  = "1.0.0"
+
     println(MAX)
     println(VERSION)
 
-    # Multiple assignments
+    # ── Arithmetic ────────────────────────────────────────────────────────────
+
     int x = 10
     int y = 20
     int z = x + y

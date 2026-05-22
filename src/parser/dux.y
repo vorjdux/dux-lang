@@ -64,7 +64,9 @@ static std::unique_ptr<T> mk(Args&&... a) {
 
 /* Literals */
 %token <long long>   INT_LIT    "integer literal"
+%token <long long>   LONG_LIT   "long literal"
 %token <double>      FLOAT_LIT  "float literal"
+%token <double>      REAL_LIT   "real literal"
 %token <std::string> STRING     "string literal"
 %token <std::string> IDENT      "identifier"
 %token <bool>        BOOL_LIT   "bool literal"
@@ -81,6 +83,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_GET KW_SET
 %token KW_ASSERT KW_DEFER KW_THROW
 %token KW_FN "fn"
+%token KW_AUTO "auto"
 %token KW_AND KW_OR KW_NOT
 %token KW_UNSAFE KW_EXTERN
 
@@ -898,6 +901,13 @@ var_decl_stmt
             v->type = $1; v->is_const = $1.is_const; v->decls = std::move($2);
             $$ = std::move(v);
         }
+    | KW_AUTO IDENT ASSIGN expr SEMI
+        {
+            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
+            v->type.name = "__auto";
+            v->decls.emplace_back($2, std::move($4));
+            $$ = std::move(v);
+        }
     ;
 
 var_decl_items
@@ -1011,8 +1021,12 @@ postfix_expr
 primary_expr
     : INT_LIT
         { auto e = mk<IntLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
+    | LONG_LIT
+        { auto e = mk<LongLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
     | FLOAT_LIT
         { auto e = mk<FloatLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
+    | REAL_LIT
+        { auto e = mk<RealLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
     | STRING
         { auto e = mk<StringLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
     | BOOL_LIT
@@ -1040,11 +1054,30 @@ primary_expr
             e->body = std::move(blk);
             $$ = std::move(e);
         }
-    | KW_FN LPAREN param_list RPAREN FAT_ARROW block
+    | KW_FN LPAREN param_list RPAREN block
         {
             auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
             e->params = std::move($3);
-            e->body = std::unique_ptr<Stmt>(std::move($6));
+            e->body = std::unique_ptr<Stmt>(std::move($5));
+            $$ = std::move(e);
+        }
+    | KW_FN LPAREN param_list RPAREN ARROW type_expr block
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            e->explicit_ret = std::move($6);
+            e->body = std::unique_ptr<Stmt>(std::move($7));
+            $$ = std::move(e);
+        }
+    | KW_FN LPAREN param_list RPAREN ARROW type_expr FAT_ARROW expr
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            e->explicit_ret = std::move($6);
+            auto ret = mk<ReturnStmt>(); ret->loc = sl(@$, driver);
+            ret->value = std::move($8);
+            auto blk = mk<BlockStmt>(); blk->body.push_back(std::move(ret));
+            e->body = std::move(blk);
             $$ = std::move(e);
         }
     ;

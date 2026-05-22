@@ -1,15 +1,62 @@
-# Lambda closures using function values
-# Dux lambdas: assigned as function expressions but resolved as ident
-void applyTwice(int x) {
-    y = x * 2
-    println(y)
+# Parse test: lambda expression forms
+
+int apply(fn(int) -> int f, int x) {
+    return f(x)
+}
+
+int apply2(fn(int, int) -> int f, int a, int b) {
+    return f(a, b)
 }
 
 void main() {
-    applyTwice(5)
-    applyTwice(add(3, 4))
-}
+    # ── Style A: auto + return type inside the lambda ─────────────────────────
 
-int add(int a, int b) {
-    return a + b
+    auto sq    = fn(int n) -> int => n * n
+    auto neg   = fn(int n) -> int => 0 - n
+    auto add   = fn(int x, int y) -> int => x + y
+
+    # Block body — Style A
+    auto cube = fn(int n) -> int {
+        return n * n * n
+    }
+
+    auto greet = fn(str name) -> void {
+        str msg = "hello, " + name
+        println(msg)
+    }
+
+    # ── Style B: return type as variable prefix, lambda is untyped ────────────
+
+    int sq2   = fn(int n) => n * n
+    int neg2  = fn(int n) => 0 - n
+    int add2  = fn(int x, int y) => x + y
+
+    # Block body — Style B
+    int cube2 = fn(int n) {
+        return n * n * n
+    }
+
+    # ── Closures capturing outer variables ────────────────────────────────────
+
+    int base = 10
+    auto addBase  = fn(int n) -> int => n + base
+    int  addBase2 = fn(int n) => n + base
+
+    # ── Passing lambdas to higher-order functions ─────────────────────────────
+
+    println(apply(sq, 4))
+    println(apply(sq2, 4))
+    println(apply2(add, 3, 4))
+    println(apply2(add2, 3, 4))
+    println(apply(fn(int n) -> int => n * 2, 5))
+
+    # ── Calling lambdas directly ──────────────────────────────────────────────
+
+    println(sq(3))
+    println(sq2(3))
+    println(cube(3))
+    println(cube2(3))
+    println(addBase(5))
+    println(addBase2(5))
+    greet("world")
 }
