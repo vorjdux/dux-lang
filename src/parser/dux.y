@@ -80,6 +80,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_CONST KW_STATIC
 %token KW_GET KW_SET
 %token KW_ASSERT KW_DEFER KW_THROW
+%token KW_FN "fn"
 %token KW_AND KW_OR KW_NOT
 
 /* Type keywords */
@@ -134,6 +135,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <Param>                            param
 /* Types */
 %type <TypeExpr>                         type_expr
+%type <std::vector<TypeExpr>>            fn_type_params fn_type_params_ne
 /* Access */
 %type <AccessMod>                        access_mod
 %type <std::string>                      dotted_name
@@ -584,6 +586,18 @@ param_list_ne
 
 param : type_expr IDENT { $$ = Param{$1, $2}; } ;
 
+fn_type_params
+    : %empty                              { $$ = std::vector<TypeExpr>{}; }
+    | fn_type_params_ne                   { $$ = std::move($1); }
+    ;
+
+fn_type_params_ne
+    : type_expr
+        { $$ = std::vector<TypeExpr>{}; $$.push_back(std::move($1)); }
+    | fn_type_params_ne COMMA type_expr
+        { $1.push_back(std::move($3)); $$ = std::move($1); }
+    ;
+
 /* =====================================================================
    Access modifier
    ===================================================================== */
@@ -612,6 +626,8 @@ type_expr
     | KW_OBJECT  { $$.name = "object"; $$.is_const = false; }
     | KW_CONST type_expr  { $$ = $2; $$.is_const = true; }
     | IDENT      { $$.name = $1;      $$.is_const = false; }
+    | KW_FN LPAREN fn_type_params RPAREN ARROW type_expr
+        { $$.name = "__fn"; $$.is_const = false; $$.fn_params = std::move($3); $$.fn_ret = $6.name; }
     ;
 
 /* =====================================================================
@@ -962,6 +978,23 @@ primary_expr
         { auto e = mk<NewExpr>(); e->loc = sl(@$, driver); e->type = $2; e->args = std::move($4); $$ = std::move(e); }
     | list_lit  { $$ = std::move($1); }
     | dict_lit  { $$ = std::move($1); }
+    | KW_FN LPAREN param_list RPAREN FAT_ARROW expr
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            auto ret = mk<ReturnStmt>(); ret->loc = sl(@$, driver);
+            ret->value = std::move($6);
+            auto blk = mk<BlockStmt>(); blk->body.push_back(std::move(ret));
+            e->body = std::move(blk);
+            $$ = std::move(e);
+        }
+    | KW_FN LPAREN param_list RPAREN FAT_ARROW block
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            e->body = std::unique_ptr<Stmt>(std::move($6));
+            $$ = std::move(e);
+        }
     ;
 
 /* -- List / dict literals ---------------------------------------------- */

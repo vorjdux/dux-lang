@@ -364,6 +364,7 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
     debug_func(f, fn, mangled);
 
     var_class_.clear(); // var→class map is local to each function body
+    fn_var_types_.clear(); // fn-type map is local to each function body
     env_push();
 
     // If method: bind 'this'
@@ -383,6 +384,10 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
         builder_->CreateStore(&*arg_it, alloca);
         env_define(std::string(arg_it->getName()), alloca);
     }
+
+    // Register fn-typed params for closure dispatch
+    for (const auto& p : f.params)
+        if (p.type.name == "__fn") fn_var_types_[p.name] = p.type;
 
     // Save context
     auto saved_fn   = current_fn_;
@@ -1225,6 +1230,7 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
             builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
         }
         env_define(name, alloca, var_tid);
+        if (s.type.name == "__fn") fn_var_types_[name] = s.type;
         // Track variable→class for member access resolution
         if (!s.type.name.empty() && layouts_.count(s.type.name))
             var_class_[name] = s.type.name;
@@ -1340,6 +1346,7 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
     if (auto* p = dynamic_cast<const ast::NewExpr*>(&e))     return gen_new(*p);
     if (auto* p = dynamic_cast<const ast::ListExpr*>(&e))    return gen_list(*p);
     if (auto* p = dynamic_cast<const ast::DictExpr*>(&e))    return gen_dict(*p);
+    if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(&e)) return gen_lambda(*lam);
 
     return llvm::ConstantPointerNull::get(
         llvm::cast<llvm::PointerType>(ptr_type()));
@@ -1606,6 +1613,36 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
             return builder_->CreateCall(fn, {arg});
         }
 
+        // Closure variable call — use fn_var_types_ (TypeId is from sema's registry)
+        if (fn_var_types_.count(name)) {
+            if (Value* closure_alloca = env_lookup(name)) {
+                const ast::TypeExpr& fn_te = fn_var_types_.at(name);
+                TypeId ret_id = types_.from_name(fn_te.fn_ret);
+                llvm::Type* ret_ty = (ret_id == TR::TID_VOID || ret_id < 0)
+                    ? llvm::Type::getVoidTy(*ctx_) : lower_type(ret_id);
+                std::vector<llvm::Type*> param_tys;
+                param_tys.push_back(ptr_type());
+                for (const auto& pt : fn_te.fn_params)
+                    param_tys.push_back(lower_type_expr(pt));
+                auto* fty = llvm::FunctionType::get(ret_ty, param_tys, false);
+                Value* closure_ptr = builder_->CreateLoad(ptr_type(), closure_alloca, name + ".clos");
+                std::vector<llvm::Type*> hdr_fields{ptr_type()};
+                auto* hdr_ty = llvm::StructType::get(*ctx_, hdr_fields);
+                Value* fp_gep = builder_->CreateStructGEP(hdr_ty, closure_ptr, 0, "closure.fp.gep");
+                Value* fp = builder_->CreateLoad(ptr_type(), fp_gep, "closure.fp");
+                std::vector<Value*> args;
+                args.push_back(closure_ptr);
+                for (size_t i = 0; i < e.args.size(); ++i) {
+                    Value* v = gen_expr(*e.args[i]);
+                    if (i < fn_te.fn_params.size())
+                        v = coerce_to_llvm_type(v, lower_type_expr(fn_te.fn_params[i]));
+                    args.push_back(v);
+                }
+                return builder_->CreateCall(fty, fp, args,
+                    ret_ty->isVoidTy() ? "" : "closure.ret");
+            }
+        }
+
         // Look up a declared function — also try current namespace prefix
         // so that intra-namespace calls (e.g. factorial calling itself when
         // compiled as mathutils__factorial) resolve correctly.
@@ -1814,6 +1851,229 @@ Value* Codegen::gen_dict(const ast::DictExpr& e) {
         builder_->CreateCall(set_fn, {dict, kv, vv});
     }
     return dict;
+}
+
+// ─── Free-variable collection helpers for closures ───────────────────────────
+
+static void collect_fv_expr(const ast::Expr* e,
+                             std::unordered_set<std::string>& locals,
+                             std::vector<std::string>& result,
+                             std::unordered_set<std::string>& seen);
+
+static void collect_fv_stmt(const ast::Stmt* s,
+                             std::unordered_set<std::string>& locals,
+                             std::vector<std::string>& result,
+                             std::unordered_set<std::string>& seen) {
+    if (!s) return;
+    if (auto* b = dynamic_cast<const ast::BlockStmt*>(s)) {
+        std::unordered_set<std::string> inner = locals;
+        for (const auto& st : b->body) collect_fv_stmt(st.get(), inner, result, seen);
+    } else if (auto* es = dynamic_cast<const ast::ExprStmt*>(s)) {
+        collect_fv_expr(es->expr.get(), locals, result, seen);
+    } else if (auto* r = dynamic_cast<const ast::ReturnStmt*>(s)) {
+        if (r->value) collect_fv_expr(r->value->get(), locals, result, seen);
+    } else if (auto* v = dynamic_cast<const ast::VarDeclStmt*>(s)) {
+        for (const auto& [name, init] : v->decls) {
+            if (init) collect_fv_expr(init.get(), locals, result, seen);
+            locals.insert(name);
+        }
+    } else if (auto* i = dynamic_cast<const ast::IfStmt*>(s)) {
+        collect_fv_expr(i->cond.get(), locals, result, seen);
+        collect_fv_stmt(i->then_br.get(), locals, result, seen);
+        if (i->else_br) collect_fv_stmt(i->else_br.get(), locals, result, seen);
+    } else if (auto* w = dynamic_cast<const ast::WhileStmt*>(s)) {
+        collect_fv_expr(w->cond.get(), locals, result, seen);
+        collect_fv_stmt(w->body.get(), locals, result, seen);
+    }
+}
+
+static void collect_fv_expr(const ast::Expr* e,
+                             std::unordered_set<std::string>& locals,
+                             std::vector<std::string>& result,
+                             std::unordered_set<std::string>& seen) {
+    if (!e) return;
+    if (auto* id = dynamic_cast<const ast::IdentExpr*>(e)) {
+        if (!locals.count(id->name) && !seen.count(id->name)) {
+            result.push_back(id->name);
+            seen.insert(id->name);
+        }
+    } else if (auto* bin = dynamic_cast<const ast::BinaryExpr*>(e)) {
+        collect_fv_expr(bin->left.get(), locals, result, seen);
+        collect_fv_expr(bin->right.get(), locals, result, seen);
+    } else if (auto* un = dynamic_cast<const ast::UnaryExpr*>(e)) {
+        collect_fv_expr(un->operand.get(), locals, result, seen);
+    } else if (auto* call = dynamic_cast<const ast::CallExpr*>(e)) {
+        collect_fv_expr(call->callee.get(), locals, result, seen);
+        for (const auto& a : call->args) collect_fv_expr(a.get(), locals, result, seen);
+    } else if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e)) {
+        collect_fv_expr(mem->object.get(), locals, result, seen);
+    } else if (auto* idx = dynamic_cast<const ast::IndexExpr*>(e)) {
+        collect_fv_expr(idx->object.get(), locals, result, seen);
+        collect_fv_expr(idx->index.get(), locals, result, seen);
+    } else if (auto* a = dynamic_cast<const ast::AssignExpr*>(e)) {
+        collect_fv_expr(a->target.get(), locals, result, seen);
+        collect_fv_expr(a->value.get(), locals, result, seen);
+    } else if (auto* n = dynamic_cast<const ast::NewExpr*>(e)) {
+        for (const auto& arg : n->args) collect_fv_expr(arg.get(), locals, result, seen);
+    }
+}
+
+Value* Codegen::gen_lambda(const ast::LambdaExpr& e) {
+    // Collect captures: free vars in the body not in param list
+    std::unordered_set<std::string> param_set;
+    for (const auto& p : e.params) param_set.insert(p.name);
+    std::vector<std::string> free_vars;
+    std::unordered_set<std::string> seen_fv;
+    collect_fv_stmt(e.body.get(), param_set, free_vars, seen_fv);
+
+    // Filter to only actual outer-scope variables
+    std::vector<std::string> captures;
+    for (const std::string& v : free_vars)
+        if (env_lookup(v)) captures.push_back(v);
+    const_cast<ast::LambdaExpr&>(e).captures = captures;
+
+    // Closure struct type: {ptr fn_ptr, ptr cap0_ref, ...}
+    std::vector<llvm::Type*> env_fields;
+    env_fields.push_back(ptr_type());
+    for (size_t i = 0; i < captures.size(); ++i) env_fields.push_back(ptr_type());
+    llvm::StructType* closure_ty = llvm::StructType::get(*ctx_, env_fields);
+
+    // Determine return type by scanning body for return statements.
+    // We cannot use e.type_id here because it references sema's TypeRegistry,
+    // which is separate from the codegen TypeRegistry.
+    TypeId ret_tid = TR::TID_VOID;
+    if (auto* blk = dynamic_cast<const ast::BlockStmt*>(e.body.get())) {
+        for (const auto& s : blk->body) {
+            if (auto* rs = dynamic_cast<const ast::ReturnStmt*>(s.get())) {
+                if (rs->value) {
+                    TypeId rt = type_id_of(**rs->value);
+                    if (rt >= 0 && rt != TR::TID_VOID) { ret_tid = rt; break; }
+                }
+            }
+        }
+    }
+    if (ret_tid < 0) ret_tid = TR::TID_VOID;
+
+    // Build lambda function type: (ptr env, param_types...) -> ret
+    std::vector<llvm::Type*> lam_params;
+    lam_params.push_back(ptr_type());
+    for (const auto& p : e.params) lam_params.push_back(lower_type_expr(p.type));
+    llvm::Type* ret_llvm = lower_type(ret_tid);
+    auto* lam_fty = llvm::FunctionType::get(ret_llvm, lam_params, false);
+    std::string lam_name = "__lambda_" + std::to_string(lambda_counter_++);
+    auto* lam_fn = Function::Create(lam_fty, Function::InternalLinkage, lam_name, *mod_);
+
+    // Set personality function
+    Function* personality_fn = mod_->getFunction("__gxx_personality_v0");
+    if (!personality_fn) {
+        auto* pft = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_), true);
+        personality_fn = Function::Create(pft, Function::ExternalLinkage,
+                                          "__gxx_personality_v0", *mod_);
+    }
+    lam_fn->setPersonalityFn(personality_fn);
+
+    // Save outer codegen state
+    auto* outer_bb      = builder_->GetInsertBlock();
+    auto  outer_env     = env_;
+    auto  outer_str     = str_scopes_;
+    auto  outer_cleanup = cleanup_scopes_;
+    auto  outer_vcls    = var_class_;
+    std::string outer_class  = current_class_;
+    TypeId      outer_ret    = current_ret_type_;
+    auto        outer_lp     = lp_stack_;
+    llvm::Function* outer_fn = current_fn_;
+
+    // Set up lambda state
+    current_fn_       = lam_fn;
+    current_ret_type_ = ret_tid;
+    current_class_    = "";
+    lp_stack_.clear();
+    env_.clear(); str_scopes_.clear(); cleanup_scopes_.clear(); var_class_.clear();
+
+    auto* lam_entry = BasicBlock::Create(*ctx_, "entry", lam_fn);
+    builder_->SetInsertPoint(lam_entry);
+    env_push();
+
+    // Bind env arg and load captures
+    auto arg_it = lam_fn->arg_begin();
+    Value* env_arg = &*arg_it++;
+    env_arg->setName("env");
+
+    for (size_t i = 0; i < captures.size(); ++i) {
+        Value* fgep = builder_->CreateStructGEP(
+            closure_ty, env_arg, (unsigned)(i + 1), captures[i] + ".cap.gep");
+        Value* cap_alloca = builder_->CreateLoad(ptr_type(), fgep, captures[i] + ".cap");
+        env_.back()[captures[i]] = cap_alloca;
+        // Copy alloca_type if we can find the outer alloca
+        for (auto it = outer_env.rbegin(); it != outer_env.rend(); ++it) {
+            auto jt = it->find(captures[i]);
+            if (jt != it->end() && alloca_type_.count(jt->second)) {
+                alloca_type_[cap_alloca] = alloca_type_[jt->second];
+                break;
+            }
+        }
+    }
+
+    // Bind params
+    for (const auto& p : e.params) {
+        llvm::Type* pt = lower_type_expr(p.type);
+        Value* alloca = make_alloca(pt, p.name);
+        builder_->CreateStore(&*arg_it, alloca);
+        env_.back()[p.name] = alloca;
+        alloca_type_[alloca] = pt;
+        ++arg_it;
+    }
+
+    // Register fn-typed lambda params for closure dispatch
+    for (const auto& p : e.params)
+        if (p.type.name == "__fn") fn_var_types_[p.name] = p.type;
+
+    // Generate body
+    if (auto* blk = dynamic_cast<const ast::BlockStmt*>(e.body.get()))
+        gen_stmts(blk->body);
+
+    // Add terminator if needed
+    if (!builder_->GetInsertBlock()->getTerminator()) {
+        emit_all_scope_cleanups();
+        emit_all_str_releases();
+        if (ret_llvm->isVoidTy()) builder_->CreateRetVoid();
+        else builder_->CreateRet(llvm::Constant::getNullValue(ret_llvm));
+    }
+    // Pop lambda scope stacks (without emitting cleanup again)
+    if (!cleanup_scopes_.empty()) cleanup_scopes_.pop_back();
+    if (!str_scopes_.empty())     str_scopes_.pop_back();
+    if (!env_.empty())            env_.pop_back();
+
+    // Restore outer state
+    builder_->SetInsertPoint(outer_bb);
+    env_       = std::move(outer_env);
+    str_scopes_= std::move(outer_str);
+    cleanup_scopes_ = std::move(outer_cleanup);
+    var_class_ = std::move(outer_vcls);
+    current_class_    = outer_class;
+    current_ret_type_ = outer_ret;
+    lp_stack_  = std::move(outer_lp);
+    current_fn_       = outer_fn;
+
+    // Allocate closure struct on heap
+    llvm::DataLayout dl(mod_.get());
+    uint64_t sz = dl.getTypeAllocSize(closure_ty);
+    Value* sz_val = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), sz);
+    Value* raw = rt_malloc(sz_val);
+
+    // Store fn pointer at field 0
+    Value* fp_field = builder_->CreateStructGEP(closure_ty, raw, 0, "closure.fp.slot");
+    builder_->CreateStore(lam_fn, fp_field);
+
+    // Store capture pointers (ptr to each captured alloca)
+    for (size_t i = 0; i < captures.size(); ++i) {
+        Value* cap_field = builder_->CreateStructGEP(
+            closure_ty, raw, (unsigned)(i + 1), captures[i] + ".cap.slot");
+        Value* cap_alloca = env_lookup(captures[i]);
+        if (cap_alloca) builder_->CreateStore(cap_alloca, cap_field);
+    }
+
+    return raw;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

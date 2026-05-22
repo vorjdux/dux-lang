@@ -28,6 +28,8 @@ struct TypeExpr {
     std::string name;          // "int", "str", "MyClass", etc.
     bool        is_const{false};
     SourceLoc   loc;
+    std::vector<TypeExpr> fn_params;  // for function types: fn(T...) -> R
+    std::string           fn_ret;     // for function types: return type name
 };
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
@@ -130,6 +132,8 @@ struct DictExpr final : Expr {
     std::vector<std::pair<ExprPtr, ExprPtr>> pairs;
     void accept(Visitor& v) const override;
 };
+
+// LambdaExpr is defined after Param and StmtPtr (see below).
 
 // ─── Statements ──────────────────────────────────────────────────────────────
 
@@ -264,6 +268,13 @@ struct Param {
     std::string name;
 };
 
+struct LambdaExpr final : Expr {
+    std::vector<Param> params;
+    StmtPtr            body;       // always BlockStmt (expr body is wrapped in return)
+    std::vector<std::string> captures;  // filled by codegen
+    void accept(Visitor& v) const override;
+};
+
 struct Decorator {
     std::string name;   // "doc" or "doc::markdown"
     ExprList    args;
@@ -367,6 +378,7 @@ struct Visitor {
     virtual void visit(const NewExpr&)       = 0;
     virtual void visit(const ListExpr&)      = 0;
     virtual void visit(const DictExpr&)      = 0;
+    virtual void visit(const LambdaExpr&)    = 0;
 
     virtual void visit(const BlockStmt&)     = 0;
     virtual void visit(const ExprStmt&)      = 0;

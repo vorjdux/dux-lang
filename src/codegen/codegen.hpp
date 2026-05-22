@@ -172,6 +172,8 @@ private:
     std::string     current_class_;
     std::string     current_namespace_;  // set while generating a namespace body
     std::string     pending_label_;   // label from &label before a loop stmt
+    int             lambda_counter_{0};  // counter for unique lambda names
+    std::unordered_map<std::string, ast::TypeExpr> fn_var_types_; // fn-typed vars/params
 
     // ── Type lowering (#14) ──────────────────────────────────────────────
     llvm::Type* lower_type(TypeId tid);
@@ -241,6 +243,7 @@ private:
     llvm::Value* gen_new(const ast::NewExpr& e);
     llvm::Value* gen_list(const ast::ListExpr& e);
     llvm::Value* gen_dict(const ast::DictExpr& e);
+    llvm::Value* gen_lambda(const ast::LambdaExpr& e);
 
     // ── Helpers ──────────────────────────────────────────────────────────
     llvm::Value* load_var(const std::string& name, const ast::SourceLoc& loc);
