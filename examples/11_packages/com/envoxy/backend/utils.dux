@@ -1,0 +1,25 @@
+namespace com.envoxy.backend.utils
+
+str greet(str name) {
+    str msg = "Hello, " + name + "!"
+    return msg
+}
+
+int add(int a, int b) {
+    return a + b
+}
+
+int max_of(int a, int b) {
+    if (a > b) {
+        return a
+    }
+    return b
+}
+
+str repeat_str(str s, int n) {
+    str result = ""
+    for int i in range(n) {
+        result = result + s
+    }
+    return result
+}

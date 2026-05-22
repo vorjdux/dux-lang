@@ -109,8 +109,10 @@ void Driver::resolve_imports(dux::ast::Program& prog,
         if (!imp) continue;
 
         // Leave stdlib imports for codegen to handle.
+        // Stdlib names are single-component (no dots); dotted paths are always files.
         const std::string mod = last_component(imp->path);
-        if (kStdlibModules.count(mod)) continue;
+        if (kStdlibModules.count(mod) && imp->path.find('.') == std::string::npos)
+            continue;
 
         // Find the file on disk.
         std::string filepath = find_import_file(imp->path, base_dir);
@@ -151,19 +153,20 @@ void Driver::resolve_imports(dux::ast::Program& prog,
         for (auto& d : sub_imports)
             injected.push_back(std::move(d));
 
-        if (imp->symbols.empty()) {
-            // ── Full import ───────────────────────────────────────────────────
-            // Wrap all declarations in a NamespaceDecl so the caller accesses
-            // them as  mod.fn(args).  Top-level statements are not re-executed.
+        if (!imp->global_scope) {
+            // ── Namespace import (full, selective, or glob) ───────────────────
+            // All declarations are wrapped in a NamespaceDecl so internal helpers
+            // compile correctly. The alias (if set) overrides the default name
+            // derived from the last path component.
+            const std::string ns_name = imp->alias.empty() ? mod : imp->alias;
             auto ns   = std::make_unique<NamespaceDecl>();
-            ns->name  = mod;
+            ns->name  = ns_name;
             ns->decls = std::move(sub_decls);
             injected.push_back(std::move(ns));
         } else {
-            // ── Selective import ──────────────────────────────────────────────
+            // ── Selective global import (import { } from) ─────────────────────
             // All declarations are injected into global scope so that private
             // helpers used by requested symbols compile correctly.
-            // The symbols list documents which names the caller relies on.
             for (auto& d : sub_decls)
                 injected.push_back(std::move(d));
         }
