@@ -3,13 +3,21 @@ extern "C" void duxrt_print_str(ptr s)
 extern "C" ptr duxrt_readline()
 
 void println(str s) {
-    duxrt_println_str(s)
+    unsafe {
+        duxrt_println_str(s)
+    }
 }
 
 void print(str s) {
-    duxrt_print_str(s)
+    unsafe {
+        duxrt_print_str(s)
+    }
 }
 
 str readline() {
-    return duxrt_readline()
+    str result = ""
+    unsafe {
+        result = duxrt_readline()
+    }
+    return result
 }
