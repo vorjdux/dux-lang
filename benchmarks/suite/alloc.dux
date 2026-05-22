@@ -1,0 +1,25 @@
+class Node(object) {
+    public:
+    int x
+    int y
+    Node(int a, int b) {
+        this.x = a
+        this.y = b
+    }
+    ~Node() {
+    }
+}
+
+int main() {
+    int N = 1000000
+    int i = 0
+    int sink = 0
+    while i < N {
+        Node n = new Node(i, i + 1)
+        sink = sink + n.x
+        delete n
+        i = i + 1
+    }
+    println(sink)
+    return 0
+}
