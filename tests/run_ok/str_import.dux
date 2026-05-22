@@ -1,0 +1,18 @@
+import str
+
+int main() {
+    str a = "hello"
+    str b = "hello"
+    str c = "world"
+
+    println(str.length(a))
+    println(str.eq(a, b))
+    println(str.eq(a, c))
+    println(str.index(a, 1l))
+    println(str.slice(a, 1l, 4l))
+    println(str.from_int(42l))
+    println(str.from_double(3.14))
+    println(str.concat(a, c))
+
+    return 0
+}
