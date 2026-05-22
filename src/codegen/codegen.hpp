@@ -56,10 +56,11 @@ struct MethodInfo {
 
 struct ClassLayout {
     std::string              class_name;
+    std::string              parent_name;  // first non-interface base, empty if none
     llvm::StructType*        struct_type{nullptr};
     llvm::Value*             vtable_global{nullptr};
-    std::vector<FieldInfo>   fields;   // excludes vtable ptr
-    std::vector<MethodInfo>  methods;  // virtual methods
+    std::vector<FieldInfo>   fields;   // excludes vtable ptr (includes inherited fields first)
+    std::vector<MethodInfo>  methods;  // virtual methods (own only)
 };
 
 // ─── Loop context (for break/continue) ──────────────────────────────────────

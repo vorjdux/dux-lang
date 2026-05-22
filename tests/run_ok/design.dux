@@ -72,17 +72,13 @@ class Animal() {
         this.age = a
     }
 
-    int burn_year() {
+    int born_year() {
         return 2025 - this.age
     }
 }
 
 class Dog(public Animal) {
     Dog(int a) : Animal(a) {
-    }
-
-    int burn_year() {
-        return 2025 - this.age
     }
 }
 
@@ -141,7 +137,7 @@ int main() {
     println(a[0])
 
     Dog d = new Dog(3)
-    println(d.burn_year())
+    println(d.born_year())
 
     fn(int) -> int sq = fn(int n) => n * n
     println(sq(5))
