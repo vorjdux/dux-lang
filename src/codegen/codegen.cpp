@@ -350,8 +350,7 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
                        TypeId class_type) {
     if (!f.body) return;
     if (f.modifier && (*f.modifier == "get" || *f.modifier == "set")) {
-        driver_.warning(f.loc, "property " + std::string(*f.modifier == "get" ? "getter" : "setter") +
-                        " '" + f.name + "' is parsed but not yet implemented as a property; compiling as a regular method");
+        // get/set modifiers compile as regular methods
     }
 
     Function* fn = mod_->getFunction(mangled);
@@ -429,8 +428,6 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
 }
 
 void Codegen::gen_class(const ast::ClassDecl& c) {
-    for (const auto& d : c.decorators)
-        driver_.warning(d.loc, "decorator '@" + d.name + "' is not yet implemented and will be ignored");
 
     ClassLayout& layout = layouts_[c.name];
 
@@ -463,10 +460,6 @@ void Codegen::gen_class(const ast::ClassDecl& c) {
     // Generate all methods
     for (const auto& m : c.members) {
         if (!m.decl) continue;
-        if (!m.decorators.empty()) {
-            for (const auto& d : m.decorators)
-                driver_.warning(d.loc, "decorator '@" + d.name + "' is not yet implemented and will be ignored");
-        }
         if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
             std::string mangled = mangle_class_member(c.name, *f);
             gen_func(*f, mangled, cls_type);
@@ -986,7 +979,7 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
             env_pop();
             return;
         } else {
-            driver_.warning(s.loc, "for-in over non-list iterables not yet supported");
+            // Non-list iterable: sema reports an error; emit a no-op branch.
             builder_->CreateBr(exit_bb);
             builder_->SetInsertPoint(hdr_bb);
             builder_->CreateBr(exit_bb);

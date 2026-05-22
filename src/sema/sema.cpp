@@ -466,7 +466,8 @@ void Sema::check_do_while(const ast::DoWhileStmt& s) {
 
 void Sema::check_for_in(const ast::ForInStmt& s) {
     TypeId iter_t = check_expr(*s.iterable);
-    (void)iter_t; // accept any iterable for now
+    if (iter_t == TR::TID_DICT || iter_t == TR::TID_TUPLE || iter_t == TR::TID_STR)
+        err(s.iterable->loc, "for-in requires a list or range; got '" + types_.name_of(iter_t) + "'");
 
     scopes_.push();
     Symbol var;
