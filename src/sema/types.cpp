@@ -56,6 +56,7 @@ TypeInfo& TypeRegistry::info(TypeId id) {
 }
 
 TypeId TypeRegistry::from_name(const std::string& name) const {
+    if (name == "ptr") return TID_OBJECT;
     auto it = by_name_.find(name);
     return it != by_name_.end() ? it->second : TID_UNKNOWN;
 }

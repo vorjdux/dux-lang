@@ -32,6 +32,7 @@ private:
     void hoist_class(const ast::ClassDecl& c);
     void hoist_interface(const ast::InterfaceDecl& i);
     void hoist_namespace(const ast::NamespaceDecl& ns);
+    void hoist_extern(const ast::ExternDecl& e);
 
     // ── Declarations (pass 2) ──────────────────────────────────────────────
     void check_decl(const ast::Decl& d);

@@ -1,0 +1,20 @@
+extern "C" double duxrt_math_sqrt(double x)
+extern "C" void duxrt_println_str(ptr s)
+
+double my_sqrt(double x) {
+    double result
+    unsafe {
+        result = duxrt_math_sqrt(x)
+    }
+    return result
+}
+
+int main() {
+    double r = my_sqrt(9.0)
+    println(r)
+    ptr raw = null
+    unsafe {
+        raw = null
+    }
+    return 0
+}
