@@ -1,5 +1,5 @@
-// StringBuilder — pre-allocated growing string buffer.
-// Backed by DuxStrBuf: amortised O(1) append, single malloc on build().
+# StringBuilder: pre-allocated growing string buffer.
+# Backed by DuxStrBuf: amortised O(1) append, single malloc on build().
 extern "C" ptr duxrt_strbuf_new()
 extern "C" void duxrt_strbuf_append_str(ptr buf, ptr s)
 extern "C" ptr duxrt_strbuf_build(ptr buf)
