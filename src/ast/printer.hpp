@@ -104,6 +104,16 @@ private:
         out_ << '}';
     }
 
+    void visit(const LambdaExpr& n) override {
+        out_ << "fn(";
+        for (size_t i = 0; i < n.params.size(); ++i) {
+            if (i > 0) out_ << ", ";
+            out_ << n.params[i].type.name << ' ' << n.params[i].name;
+        }
+        out_ << ") => ";
+        if (n.body) n.body->accept(*this);
+    }
+
     // ── Statements ───────────────────────────────────────────────────────────
     void visit(const BlockStmt& n) override {
         out_ << pad() << "{\n";
