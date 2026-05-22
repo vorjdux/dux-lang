@@ -141,7 +141,7 @@ ALNUM   [a-zA-Z0-9_]
 "long"       { need_semi = false; return yy::parser::make_KW_LONG(loc);   }
 "real"       { need_semi = false; return yy::parser::make_KW_REAL(loc);   }
 "double"     { need_semi = false; return yy::parser::make_KW_DOUBLE(loc); }
-"str"        { need_semi = false; return yy::parser::make_KW_STR(loc);    }
+"str"        { need_semi = true;  return yy::parser::make_KW_STR(loc);    }
 "bool"       { need_semi = false; return yy::parser::make_KW_BOOL(loc);   }
 "list"       { need_semi = false; return yy::parser::make_KW_LIST(loc);   }
 "dict"       { need_semi = false; return yy::parser::make_KW_DICT(loc);   }
