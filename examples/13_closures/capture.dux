@@ -16,11 +16,21 @@ int main() {
     println(sq_inf(5))
     println(sq_inf(7))
 
+    # auto form — explicit return type, no redundancy on the left
+    auto sq_auto = fn(int n) -> int => n * n
+    println(sq_auto(5))
+    println(sq_auto(7))
+
     # Closure capturing local variable
     int base = 100
     fn(int) -> int addBase = fn(int n) => n + base
     println(addBase(7))
     println(addBase(50))
+
+    # auto closure with capture and explicit return type
+    auto addBase_auto = fn(int n) -> int => n + base
+    println(addBase_auto(7))
+    println(addBase_auto(50))
 
     # Inferred closure with capture
     addBase_inf = fn(int n) => n + base

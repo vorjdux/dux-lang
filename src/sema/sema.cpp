@@ -990,6 +990,9 @@ TypeId Sema::check_lambda(const ast::LambdaExpr& e) {
     }
     current_return_type_ = saved_ret;
     scopes_.pop();
+    // Prefer the explicitly annotated return type over the inferred one
+    if (e.explicit_ret.has_value())
+        ret_tid = type_from_te(*e.explicit_ret);
     std::string sig = "__fn(";
     for (size_t i = 0; i < e.params.size(); ++i) {
         if (i > 0) sig += ",";
@@ -1004,8 +1007,6 @@ TypeId Sema::check_lambda(const ast::LambdaExpr& e) {
             info.param_types.push_back(type_from_te(p.type));
     }
     e.type_id = fn_tid;
-    // Record the inferred return type name so codegen can build the TypeExpr
-    // without requiring an explicit `fn(...) -> R` declaration on the variable.
     const_cast<ast::LambdaExpr&>(e).inferred_ret = types_.name_of(ret_tid);
     return fn_tid;
 }
