@@ -1132,7 +1132,7 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
     env_push();
     lp_stack_.push_back(lp_bb);
 
-    auto* try_body_block = llvm::cast<ast::BlockStmt>(s.try_body.get());
+    auto* try_body_block = dynamic_cast<ast::BlockStmt*>(s.try_body.get());
     gen_stmts(try_body_block->body);
 
     lp_stack_.pop_back();
