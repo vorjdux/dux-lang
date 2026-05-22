@@ -135,7 +135,8 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <Param>                            param
 /* Types */
 %type <TypeExpr>                         type_expr
-%type <std::vector<TypeExpr>>            fn_type_params fn_type_params_ne
+%type <std::vector<TypeExpr>>            fn_type_params fn_type_params_ne type_arg_list_ne
+%type <std::vector<std::string>>         opt_type_params type_params_ne
 /* Access */
 %type <AccessMod>                        access_mod
 %type <std::string>                      dotted_name
@@ -322,14 +323,15 @@ ident_list
    ===================================================================== */
 
 class_decl
-    : decorators KW_CLASS IDENT opt_base_list class_body_or_semi
+    : decorators KW_CLASS IDENT opt_type_params opt_base_list class_body_or_semi
         {
-            auto n        = mk<ClassDecl>();
-            n->loc        = sl(@$, driver);
-            n->decorators = std::move($1);
-            n->name       = $3;
-            n->bases      = std::move($4);
-            n->members    = std::move($5);
+            auto n           = mk<ClassDecl>();
+            n->loc           = sl(@$, driver);
+            n->decorators    = std::move($1);
+            n->name          = $3;
+            n->type_params   = std::move($4);
+            n->bases         = std::move($5);
+            n->members       = std::move($6);
             $$ = std::move(n);
         }
     ;
@@ -454,17 +456,28 @@ interface_member
    ===================================================================== */
 
 func_decl
-    : type_expr IDENT LPAREN param_list RPAREN opt_func_modifier block
+    : type_expr IDENT opt_type_params LPAREN param_list RPAREN opt_func_modifier block
         {
             auto f          = mk<FunctionDecl>();
             f->loc          = sl(@$, driver);
             f->return_type  = $1;
             f->name         = $2;
-            f->params       = std::move($4);
-            f->modifier     = $6;
-            f->body         = std::move(*$7);
+            f->type_params  = std::move($3);
+            f->params       = std::move($5);
+            f->modifier     = $7;
+            f->body         = std::move(*$8);
             $$ = std::move(f);
         }
+    ;
+
+opt_type_params
+    : %empty                        { $$ = std::vector<std::string>{}; }
+    | LT type_params_ne GT          { $$ = std::move($2); }
+    ;
+
+type_params_ne
+    : IDENT                         { $$.push_back($1); }
+    | type_params_ne COMMA IDENT    { $1.push_back($3); $$ = std::move($1); }
     ;
 
 opt_func_modifier
@@ -626,8 +639,17 @@ type_expr
     | KW_OBJECT  { $$.name = "object"; $$.is_const = false; }
     | KW_CONST type_expr  { $$ = $2; $$.is_const = true; }
     | IDENT      { $$.name = $1;      $$.is_const = false; }
+    | IDENT LT type_arg_list_ne GT
+        { $$.name = $1; $$.is_const = false; $$.type_args = std::move($3); }
     | KW_FN LPAREN fn_type_params RPAREN ARROW type_expr
         { $$.name = "__fn"; $$.is_const = false; $$.fn_params = std::move($3); $$.fn_ret = $6.name; }
+    ;
+
+type_arg_list_ne
+    : type_expr
+        { $$ = std::vector<TypeExpr>{}; $$.push_back(std::move($1)); }
+    | type_arg_list_ne COMMA type_expr
+        { $1.push_back(std::move($3)); $$ = std::move($1); }
     ;
 
 /* =====================================================================
