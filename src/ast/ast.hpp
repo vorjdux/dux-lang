@@ -133,12 +133,7 @@ struct DictExpr final : Expr {
     void accept(Visitor& v) const override;
 };
 
-struct LambdaExpr final : Expr {
-    std::vector<Param> params;
-    StmtPtr            body;       // always BlockStmt (expr body is wrapped in return)
-    std::vector<std::string> captures;  // filled by codegen
-    void accept(Visitor& v) const override;
-};
+// LambdaExpr is defined after Param and StmtPtr (see below).
 
 // ─── Statements ──────────────────────────────────────────────────────────────
 
@@ -271,6 +266,13 @@ using DeclList = std::vector<DeclPtr>;
 struct Param {
     TypeExpr    type;
     std::string name;
+};
+
+struct LambdaExpr final : Expr {
+    std::vector<Param> params;
+    StmtPtr            body;       // always BlockStmt (expr body is wrapped in return)
+    std::vector<std::string> captures;  // filled by codegen
+    void accept(Visitor& v) const override;
 };
 
 struct Decorator {

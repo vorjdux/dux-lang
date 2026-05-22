@@ -811,6 +811,19 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
     }
 
     for (const auto& a : e.args) check_expr(*a);
+
+    // Closure call: callee has a function TypeId
+    if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.callee.get())) {
+        Symbol* cs = scopes_.lookup(id->name);
+        if (cs && (cs->kind == SymKind::Var || cs->kind == SymKind::Param)) {
+            TypeId callee_t = cs->type;
+            if (callee_t >= 0 && types_.info(callee_t).kind == TypeKind::Function) {
+                for (const auto& a : e.args) check_expr(*a);
+                return types_.info(callee_t).return_type;
+            }
+        }
+    }
+
     return TR::TID_UNKNOWN;
 }
 
@@ -889,6 +902,49 @@ TypeId Sema::check_dict(const ast::DictExpr& e) {
         check_expr(*v);
     }
     return TR::TID_DICT;
+}
+
+TypeId Sema::check_lambda(const ast::LambdaExpr& e) {
+    scopes_.push();
+    for (const auto& p : e.params) {
+        TypeId pt = type_from_te(p.type);
+        Symbol sym;
+        sym.name = p.name; sym.kind = SymKind::Var; sym.type = pt; sym.loc = p.type.loc;
+        scopes_.define(p.name, sym);
+    }
+    TypeId saved_ret = current_return_type_;
+    current_return_type_ = TR::TID_UNKNOWN;
+    if (auto* b = dynamic_cast<const ast::BlockStmt*>(e.body.get()))
+        check_stmts(b->body);
+    // Infer return type from return statements
+    TypeId ret_tid = TR::TID_VOID;
+    if (auto* b = dynamic_cast<const ast::BlockStmt*>(e.body.get())) {
+        for (const auto& s : b->body) {
+            if (auto* r = dynamic_cast<const ast::ReturnStmt*>(s.get())) {
+                if (r->value && (*r->value)->type_id >= 0) {
+                    ret_tid = (*r->value)->type_id;
+                    break;
+                }
+            }
+        }
+    }
+    current_return_type_ = saved_ret;
+    scopes_.pop();
+    std::string sig = "__fn(";
+    for (size_t i = 0; i < e.params.size(); ++i) {
+        if (i > 0) sig += ",";
+        sig += e.params[i].type.name;
+    }
+    sig += ")->" + types_.name_of(ret_tid);
+    TypeId fn_tid = types_.intern(sig, TypeKind::Function);
+    auto& info = types_.info(fn_tid);
+    info.return_type = ret_tid;
+    if (info.param_types.empty()) {
+        for (const auto& p : e.params)
+            info.param_types.push_back(type_from_te(p.type));
+    }
+    e.type_id = fn_tid;
+    return fn_tid;
 }
 
 } // namespace dux::sema
