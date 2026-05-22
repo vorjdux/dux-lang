@@ -390,7 +390,7 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
     // RAII cleanup (class dtors + str releases) must happen before the
     // return instruction, just as gen_return() does for explicit returns.
     if (!builder_->GetInsertBlock()->getTerminator()) {
-        emit_all_obj_dtors();
+        emit_all_scope_cleanups();
         emit_all_str_releases();
         if (current_ret_type_ == TR::TID_VOID)
             builder_->CreateRetVoid();
@@ -745,6 +745,7 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     }
     if (auto* a = dynamic_cast<const ast::AssertStmt*>(&s))    { gen_assert(*a);   return; }
     if (auto* d = dynamic_cast<const ast::DeleteStmt*>(&s))    { gen_delete(*d);   return; }
+    if (auto* df = dynamic_cast<const ast::DeferStmt*>(&s))    { gen_defer(*df);   return; }
     if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))  {
         // Propagate label into the inner loop/while statement
         pending_label_ = ls->label;
@@ -1153,9 +1154,8 @@ void Codegen::gen_return(const ast::ReturnStmt& s) {
         if (current_ret_type_ == TR::TID_STR)
             val = maybe_retain_str(val);
     }
-    // Destroy class instances and release str variables across all active scopes.
-    // Objects first (they may own str fields), then bare str locals.
-    emit_all_obj_dtors();
+    // Destroy class instances, run defers, and release str variables across all active scopes.
+    emit_all_scope_cleanups();
     emit_all_str_releases();
     if (val)
         builder_->CreateRet(val);
@@ -1902,22 +1902,21 @@ TypeId Codegen::type_id_of(const ast::Expr& e) const {
 void Codegen::env_push() {
     env_.emplace_back();
     str_scopes_.emplace_back();
-    obj_scopes_.emplace_back();
+    cleanup_scopes_.emplace_back();
 }
 
 void Codegen::env_pop() {
     auto* bb = builder_->GetInsertBlock();
     bool live = bb && !bb->getTerminator();
 
-    // Call dtors for class instances in LIFO order.
-    if (!obj_scopes_.empty()) {
+    // Run RAII dtors and defer blocks in LIFO order.
+    if (!cleanup_scopes_.empty()) {
         if (live) {
-            auto& scope = obj_scopes_.back();
+            auto& scope = cleanup_scopes_.back();
             for (int i = static_cast<int>(scope.size()) - 1; i >= 0; --i)
-                emit_dtor(scope[static_cast<std::size_t>(i)].alloca,
-                          scope[static_cast<std::size_t>(i)].class_name);
+                emit_scope_cleanup(scope[static_cast<std::size_t>(i)]);
         }
-        obj_scopes_.pop_back();
+        cleanup_scopes_.pop_back();
     }
 
     // Emit releases for str variables going out of scope.
@@ -1940,10 +1939,10 @@ void Codegen::env_define(const std::string& name, Value* alloca, TypeId tid) {
         return;
     }
     // Register class instances that have a destructor for automatic cleanup.
-    if (tid > TR::TID_NULL && !obj_scopes_.empty()) {
+    if (tid > TR::TID_NULL && !cleanup_scopes_.empty()) {
         const std::string& cls_name = types_.name_of(tid);
         if (!cls_name.empty() && mod_->getFunction(cls_name + "___dtor"))
-            obj_scopes_.back().push_back({alloca, cls_name});
+            cleanup_scopes_.back().push_back({alloca, cls_name, nullptr});
     }
 }
 
@@ -1975,15 +1974,29 @@ void Codegen::emit_dtor(Value* alloca, const std::string& class_name) {
     builder_->SetInsertPoint(end_bb);
 }
 
-void Codegen::emit_all_obj_dtors() {
+void Codegen::emit_scope_cleanup(const ScopeCleanup& c) {
     auto* bb = builder_->GetInsertBlock();
     if (!bb || bb->getTerminator()) return;
-    for (int i = static_cast<int>(obj_scopes_.size()) - 1; i >= 0; --i) {
-        auto& scope = obj_scopes_[static_cast<std::size_t>(i)];
+    if (c.defer_body)
+        gen_stmts(*c.defer_body);
+    else
+        emit_dtor(c.alloca, c.class_name);
+}
+
+void Codegen::emit_all_scope_cleanups() {
+    auto* bb = builder_->GetInsertBlock();
+    if (!bb || bb->getTerminator()) return;
+    for (int i = static_cast<int>(cleanup_scopes_.size()) - 1; i >= 0; --i) {
+        auto& scope = cleanup_scopes_[static_cast<std::size_t>(i)];
         for (int j = static_cast<int>(scope.size()) - 1; j >= 0; --j)
-            emit_dtor(scope[static_cast<std::size_t>(j)].alloca,
-                      scope[static_cast<std::size_t>(j)].class_name);
+            emit_scope_cleanup(scope[static_cast<std::size_t>(j)]);
     }
+}
+
+void Codegen::gen_defer(const ast::DeferStmt& s) {
+    if (cleanup_scopes_.empty()) return;
+    // Register the defer block; it will be emitted in LIFO order at scope exit.
+    cleanup_scopes_.back().push_back({nullptr, {}, &s.body});
 }
 
 Value* Codegen::make_alloca(llvm::Type* t, const std::string& name) {
