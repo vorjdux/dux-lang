@@ -1438,6 +1438,26 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
     TypeId lt = type_id_of(*e.left);
     TypeId rt = type_id_of(*e.right);
 
+    // Operator overloading: dispatch to class method if LHS is a user type
+    {
+        static const std::unordered_map<std::string, std::string> op_methods = {
+            {"+",  "operator__add"}, {"-",  "operator__sub"},
+            {"*",  "operator__mul"}, {"/",  "operator__div"},
+            {"==", "operator__eq"},  {"!=", "operator__ne"},
+            {"<",  "operator__lt"},  {"<=", "operator__le"},
+            {">",  "operator__gt"},  {">=", "operator__ge"},
+        };
+        auto it = op_methods.find(op);
+        if (it != op_methods.end()) {
+            std::string cls = resolve_class_name(*e.left, lt);
+            if (!cls.empty()) {
+                std::string sym = mangle(cls, it->second);
+                if (Function* fn = mod_->getFunction(sym))
+                    return emit_call(fn, {L, R});
+            }
+        }
+    }
+
     // Promote types — also fall back to checking the actual LLVM types for
     // cases where type_id is TID_UNKNOWN (e.g. stdlib member calls like math.sqrt).
     bool is_fp = (lt == TR::TID_DOUBLE || lt == TR::TID_REAL ||
@@ -1667,6 +1687,16 @@ Value* Codegen::gen_index(const ast::IndexExpr& e) {
     Value* obj = gen_expr(*e.object);
     Value* idx = gen_expr(*e.index);
     TypeId obj_tid = type_id_of(*e.object);
+
+    // Operator overloading: dispatch to operator__index for user types
+    {
+        std::string cls = resolve_class_name(*e.object, obj_tid);
+        if (!cls.empty()) {
+            std::string sym = mangle(cls, "operator__index");
+            if (Function* fn = mod_->getFunction(sym))
+                return emit_call(fn, {obj, idx});
+        }
+    }
 
     if (obj_tid == TR::TID_LIST) {
         auto* get_fn = get_or_declare_rt("duxrt_list_get",
