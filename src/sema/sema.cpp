@@ -1,6 +1,7 @@
 #include "sema/sema.hpp"
 #include "driver/driver.hpp"
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace dux::sema {
@@ -641,6 +642,41 @@ TypeId Sema::check_binary(const ast::BinaryExpr& e) {
     TypeId R = check_expr(*e.right);
     const std::string& op = e.op;
 
+    // Operator overloading: if LHS is a class with a matching operator method,
+    // return its declared return type and skip primitive type checking.
+    {
+        static const std::unordered_map<std::string, std::string> op_methods = {
+            {"+",  "operator__add"}, {"-",  "operator__sub"},
+            {"*",  "operator__mul"}, {"/",  "operator__div"},
+            {"==", "operator__eq"},  {"!=", "operator__ne"},
+            {"<",  "operator__lt"},  {"<=", "operator__le"},
+            {">",  "operator__gt"},  {">=", "operator__ge"},
+        };
+        auto it = op_methods.find(op);
+        if (it != op_methods.end()) {
+            std::string cls = types_.name_of(L);
+            if (cls.empty()) {
+                // Also check var_class via symbol lookup for named variables
+                if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.left.get())) {
+                    Symbol* sym = scopes_.lookup(id->name);
+                    if (sym) cls = types_.name_of(sym->type);
+                }
+            }
+            Symbol* cs = cls.empty() ? nullptr : scopes_.lookup(cls);
+            if (cs && cs->kind == SymKind::Class) {
+                auto* cd = dynamic_cast<const ast::ClassDecl*>(cs->decl);
+                if (cd) {
+                    for (const auto& m : cd->members) {
+                        if (!m.decl) continue;
+                        auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get());
+                        if (f && f->name == it->second)
+                            return type_from_te(f->return_type);
+                    }
+                }
+            }
+        }
+    }
+
     // Arithmetic operators
     if (op == "+" || op == "-" || op == "*" || op == "/" || op == "%") {
         if (op == "+" && (L == TR::TID_STR || R == TR::TID_STR)) {
@@ -775,6 +811,30 @@ TypeId Sema::check_member(const ast::MemberExpr& e) {
 TypeId Sema::check_index(const ast::IndexExpr& e) {
     TypeId obj_t = check_expr(*e.object);
     TypeId idx_t = check_expr(*e.index);
+    (void)idx_t;
+
+    // Operator overloading: dispatch operator__index for user class types
+    {
+        std::string cls = types_.name_of(obj_t);
+        if (cls.empty()) {
+            if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.object.get())) {
+                Symbol* sym = scopes_.lookup(id->name);
+                if (sym) cls = types_.name_of(sym->type);
+            }
+        }
+        Symbol* cs = cls.empty() ? nullptr : scopes_.lookup(cls);
+        if (cs && cs->kind == SymKind::Class) {
+            auto* cd = dynamic_cast<const ast::ClassDecl*>(cs->decl);
+            if (cd) {
+                for (const auto& m : cd->members) {
+                    if (!m.decl) continue;
+                    auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get());
+                    if (f && f->name == "operator__index")
+                        return type_from_te(f->return_type);
+                }
+            }
+        }
+    }
 
     if (obj_t == TR::TID_LIST) {
         if (!types_.is_integral(idx_t) && idx_t != TR::TID_UNKNOWN)
