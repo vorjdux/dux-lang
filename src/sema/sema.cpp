@@ -909,11 +909,13 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
 TypeId Sema::check_member(const ast::MemberExpr& e) {
     TypeId obj_t = check_expr(*e.object);
 
-    // Try to find the member in the class type info scope
-    if (obj_t != TR::TID_UNKNOWN && obj_t >= 0) {
-        // For now: if the object is a known class, allow any member access.
-        // Full field resolution would require per-class symbol tables (M3 work).
+    // If the object is 'this', look up the field in the current class scope.
+    // This allows IndexExpr on list/dict fields to pick the correct codegen path.
+    if (dynamic_cast<const ast::ThisExpr*>(e.object.get())) {
+        Symbol* sym = scopes_.lookup(e.member);
+        if (sym) return sym->type;
     }
+
     // Return unknown — type will be refined during codegen
     return TR::TID_UNKNOWN;
 }

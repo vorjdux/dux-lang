@@ -1,0 +1,41 @@
+extern "C" ptr duxrt_dict_new()
+extern "C" void duxrt_dict_set(ptr d, ptr key, ptr val)
+extern "C" ptr duxrt_dict_get(ptr d, ptr key)
+extern "C" int duxrt_dict_has(ptr d, ptr key)
+extern "C" void duxrt_dict_free(ptr d)
+extern "C" ptr duxrt_str_cstr(ptr s)
+
+class Dict<V>(object) {
+    public:
+    dict _data
+
+    Dict() {
+        this._data = {}
+    }
+
+    void set(str key, V val) {
+        unsafe {
+            ptr k = duxrt_str_cstr(key)
+            duxrt_dict_set(this._data, k, val)
+        }
+    }
+
+    V get(str key) {
+        return this._data[key]
+    }
+
+    bool has(str key) {
+        int result = 0
+        unsafe {
+            ptr k = duxrt_str_cstr(key)
+            result = duxrt_dict_has(this._data, k)
+        }
+        return result != 0
+    }
+
+    ~Dict() {
+        unsafe {
+            duxrt_dict_free(this._data)
+        }
+    }
+}
