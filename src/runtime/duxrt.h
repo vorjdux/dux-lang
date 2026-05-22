@@ -102,6 +102,7 @@ void*    duxrt_list_get(DuxList* l, int64_t idx);
 void     duxrt_list_set(DuxList* l, int64_t idx, void* val);
 int64_t  duxrt_list_len(DuxList* l);
 void     duxrt_list_free(DuxList* l);
+DuxList* duxrt_list_concat(DuxList* a, DuxList* b);
 
 /* ── Dict (open-addressing hash map, char* keys) ─────────────────────────── */
 typedef struct DuxDictEntry {

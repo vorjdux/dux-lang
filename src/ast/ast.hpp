@@ -46,8 +46,18 @@ struct IntLitExpr final : Expr {
     void accept(Visitor& v) const override;
 };
 
+struct LongLitExpr final : Expr {
+    long long value{};
+    void accept(Visitor& v) const override;
+};
+
 struct FloatLitExpr final : Expr {
     double value{};
+    void accept(Visitor& v) const override;
+};
+
+struct RealLitExpr final : Expr {
+    double value{};   // stored as double, lowered to f32 in codegen
     void accept(Visitor& v) const override;
 };
 
@@ -276,8 +286,10 @@ struct Param {
 
 struct LambdaExpr final : Expr {
     std::vector<Param> params;
-    StmtPtr            body;       // always BlockStmt (expr body is wrapped in return)
-    std::vector<std::string> captures;  // filled by codegen
+    StmtPtr            body;          // always BlockStmt (expr body is wrapped in return)
+    std::vector<std::string> captures; // filled by codegen
+    std::optional<TypeExpr> explicit_ret;  // from fn(params) -> type { body } form
+    std::string        inferred_ret;  // return type name, set by sema after type inference
     void accept(Visitor& v) const override;
 };
 
@@ -378,7 +390,9 @@ struct Visitor {
     virtual ~Visitor() = default;
 
     virtual void visit(const IntLitExpr&)    = 0;
+    virtual void visit(const LongLitExpr&)   = 0;
     virtual void visit(const FloatLitExpr&)  = 0;
+    virtual void visit(const RealLitExpr&)   = 0;
     virtual void visit(const StringLitExpr&) = 0;
     virtual void visit(const BoolLitExpr&)   = 0;
     virtual void visit(const NullLitExpr&)   = 0;

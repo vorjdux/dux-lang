@@ -1,0 +1,76 @@
+# Defer and RAII — deterministic resource cleanup
+
+class File {
+    str path
+
+    File(str p) {
+        this.path = p
+        println("open:" + this.path)
+    }
+
+    ~File() {
+        println("close:" + this.path)
+    }
+
+    void write(str data) {
+        println("write:" + data)
+    }
+}
+
+class Lock {
+    Lock() {
+        println("lock:acquired")
+    }
+
+    ~Lock() {
+        println("lock:released")
+    }
+}
+
+void demo_defer() {
+    println("start")
+
+    defer {
+        println("defer:3")
+    }
+    defer {
+        println("defer:2")
+    }
+    defer {
+        println("defer:1")
+    }
+
+    println("body")
+    # defer runs LIFO: 1, 2, 3 when function returns
+}
+
+void demo_raii() {
+    Lock lk = new Lock()
+    File f = new File("data.txt")
+
+    f.write("hello")
+    f.write("world")
+
+    # f and lk destructors run in reverse order on scope exit
+}
+
+void demo_defer_with_raii() {
+    File f = new File("log.txt")
+
+    defer {
+        println("defer:flush")
+    }
+
+    f.write("entry")
+    # order on exit: defer:flush, then ~File
+}
+
+int main() {
+    demo_defer()
+    println("---")
+    demo_raii()
+    println("---")
+    demo_defer_with_raii()
+    println("done")
+    return 0
+}

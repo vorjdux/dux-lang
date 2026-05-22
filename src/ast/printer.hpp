@@ -23,7 +23,9 @@ private:
 
     // ── Expressions ──────────────────────────────────────────────────────────
     void visit(const IntLitExpr& n) override    { out_ << n.value; }
+    void visit(const LongLitExpr& n) override   { out_ << n.value << 'l'; }
     void visit(const FloatLitExpr& n) override  { out_ << n.value; }
+    void visit(const RealLitExpr& n) override   { out_ << n.value << 'f'; }
     void visit(const BoolLitExpr& n) override   { out_ << (n.value ? "true" : "false"); }
     void visit(const NullLitExpr&) override     { out_ << "null"; }
     void visit(const ThisExpr&) override        { out_ << "this"; }
