@@ -243,6 +243,11 @@ struct LabeledStmt final : Stmt {
     void accept(Visitor& v) const override;
 };
 
+struct DeferStmt final : Stmt {
+    StmtList body;
+    void accept(Visitor& v) const override;
+};
+
 // ─── Declarations ────────────────────────────────────────────────────────────
 
 struct Decl : Node {};
@@ -374,6 +379,7 @@ struct Visitor {
     virtual void visit(const AssertStmt&)    = 0;
     virtual void visit(const DeleteStmt&)    = 0;
     virtual void visit(const LabeledStmt&)   = 0;
+    virtual void visit(const DeferStmt&)     = 0;
 
     virtual void visit(const FunctionDecl&)  = 0;
     virtual void visit(const FieldDecl&)     = 0;

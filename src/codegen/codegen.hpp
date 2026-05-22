@@ -123,15 +123,21 @@ private:
     // so env_pop can emit duxrt_str_release calls for them.
     std::vector<std::vector<llvm::Value*>> str_scopes_;
 
-    // Scope-tracked class instances for automatic destructor calls (RAII).
-    // Populated by env_define() when the variable's type is a class that has
-    // a registered destructor.  env_pop() calls emit_dtor() on each in LIFO
-    // order; gen_return() calls emit_all_obj_dtors() across all open scopes.
-    struct ScopedObject {
-        llvm::Value* alloca;      // alloca holding the ptr to the heap object
-        std::string  class_name;  // used to resolve the destructor symbol
+    // Unified LIFO cleanup stack for both RAII and defer.
+    //
+    // Each entry is one of:
+    //   - Class RAII dtor:  alloca != nullptr, defer_body == nullptr
+    //   - Defer block:      alloca == nullptr, defer_body != nullptr
+    //
+    // Entries within a scope are processed in reverse-declaration order
+    // (LIFO) so that later declarations are destroyed first, matching
+    // C++ destructor ordering and Go's defer semantics.
+    struct ScopeCleanup {
+        llvm::Value*          alloca{nullptr};      // RAII: alloca holding heap ptr
+        std::string           class_name;            // RAII: destructor symbol prefix
+        const ast::StmtList*  defer_body{nullptr};  // defer: statements to run
     };
-    std::vector<std::vector<ScopedObject>> obj_scopes_;
+    std::vector<std::vector<ScopeCleanup>> cleanup_scopes_;
 
     // Cache of immortal DuxStr* globals for string literals (keyed by value).
     std::unordered_map<std::string, llvm::GlobalVariable*> str_lit_cache_;
@@ -216,6 +222,7 @@ private:
     void gen_var_decl(const ast::VarDeclStmt& s);
     void gen_assert(const ast::AssertStmt& s);
     void gen_delete(const ast::DeleteStmt& s);
+    void gen_defer(const ast::DeferStmt& s);
 
     // ── Expression codegen ───────────────────────────────────────────────
     llvm::Value* gen_expr(const ast::Expr& e);
@@ -246,11 +253,13 @@ private:
                       TypeId tid = TypeRegistry::TID_UNKNOWN);
     llvm::Value* env_lookup(const std::string& name) const;
 
-    // RAII destructor emission helpers
-    // Emits a null-guarded dtor call + free() for a single scoped class instance.
+    // Scope cleanup helpers (RAII + defer)
+    // Emit all cleanups across all active scopes in LIFO order (gen_return).
+    void emit_all_scope_cleanups();
+    // Emit one cleanup entry (RAII dtor or inline defer block).
+    void emit_scope_cleanup(const ScopeCleanup& c);
+    // Convenience: emit a null-guarded dtor + free for a class instance.
     void emit_dtor(llvm::Value* alloca, const std::string& class_name);
-    // Emits dtors for all obj_scopes_ in LIFO order (used by gen_return).
-    void emit_all_obj_dtors();
 
     // Create an alloca, register its element type, and define it in the current scope
     llvm::Value* make_alloca(llvm::Type* t, const std::string& name);
