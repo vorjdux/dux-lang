@@ -241,6 +241,14 @@ private:
         n.stmt->accept(*this);
     }
 
+    void visit(const DeferStmt& n) override {
+        out_ << pad() << "defer {\n";
+        indent();
+        for (const auto& s : n.body) s->accept(*this);
+        dedent();
+        out_ << pad() << "}\n";
+    }
+
     // ── Declarations ─────────────────────────────────────────────────────────
     static const char* access_str(AccessMod m) {
         switch (m) {

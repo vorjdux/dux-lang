@@ -36,6 +36,7 @@ void ContinueStmt::accept(Visitor& v)  const { v.visit(*this); }
 void AssertStmt::accept(Visitor& v)    const { v.visit(*this); }
 void DeleteStmt::accept(Visitor& v)    const { v.visit(*this); }
 void LabeledStmt::accept(Visitor& v)   const { v.visit(*this); }
+void DeferStmt::accept(Visitor& v)     const { v.visit(*this); }
 
 void FunctionDecl::accept(Visitor& v)  const { v.visit(*this); }
 void FieldDecl::accept(Visitor& v)     const { v.visit(*this); }
