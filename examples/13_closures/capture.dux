@@ -1,0 +1,46 @@
+# Closures — first-class fn types with lexical capture
+
+# Higher-order function accepting fn(int) -> int
+int apply(fn(int) -> int f, int x) {
+    return f(x)
+}
+
+int main() {
+    # Lambda stored in variable
+    fn(int) -> int sq = fn(int n) => n * n
+    println(sq(5))
+    println(sq(7))
+
+    # Closure capturing local variable
+    int base = 100
+    fn(int) -> int addBase = fn(int n) => n + base
+    println(addBase(7))
+    println(addBase(50))
+
+    # Passing lambda to higher-order function
+    println(apply(sq, 4))
+    println(apply(addBase, 3))
+
+    # Multi-statement lambda body
+    fn(str) -> void greet = fn(str name) => {
+        str msg = "hello, " + name
+        println(msg)
+    }
+    greet("world")
+    greet("dux")
+
+    # Closures capturing different locals
+    int offset10 = 10
+    int offset20 = 20
+    fn(int) -> int add10 = fn(int n) => n + offset10
+    fn(int) -> int add20 = fn(int n) => n + offset20
+    println(add10(5))
+    println(add20(5))
+
+    # Two-argument lambda
+    fn(int, int) -> int add = fn(int x, int y) => x + y
+    println(add(3, 4))
+    println(add(10, 20))
+
+    return 0
+}

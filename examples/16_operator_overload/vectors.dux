@@ -1,0 +1,76 @@
+# Operator overloading — custom operators via reserved method names
+
+class Vec2 {
+    int x
+    int y
+
+    Vec2(int x, int y) {
+        this.x = x
+        this.y = y
+    }
+
+    # Binary operators
+    Vec2 operator__add(Vec2 other) {
+        return new Vec2(this.x + other.x, this.y + other.y)
+    }
+
+    Vec2 operator__sub(Vec2 other) {
+        return new Vec2(this.x - other.x, this.y - other.y)
+    }
+
+    Vec2 operator__mul(int scalar) {
+        return new Vec2(this.x * scalar, this.y * scalar)
+    }
+
+    # Comparison operators
+    bool operator__eq(Vec2 other) {
+        return this.x == other.x && this.y == other.y
+    }
+
+    bool operator__lt(Vec2 other) {
+        return this.x * this.x + this.y * this.y <
+               other.x * other.x + other.y * other.y
+    }
+
+    # Index operator
+    int operator__index(int i) {
+        if i == 0 {
+            return this.x
+        }
+        return this.y
+    }
+
+    void print() {
+        println(this.x)
+        println(this.y)
+    }
+}
+
+int main() {
+    Vec2 a = new Vec2(1, 2)
+    Vec2 b = new Vec2(3, 4)
+
+    Vec2 sum = a + b
+    sum.print()
+
+    Vec2 diff = b - a
+    diff.print()
+
+    Vec2 scaled = a * 3
+    scaled.print()
+
+    if a == new Vec2(1, 2) {
+        println("equal")
+    }
+
+    if a < b {
+        println("a shorter than b")
+    }
+
+    println(a[0])
+    println(a[1])
+    println(b[0])
+    println(b[1])
+
+    return 0
+}

@@ -13,20 +13,6 @@
 An experimental compiled programming language that targets native code via LLVM IR.
 Statically typed, clean syntax, no runtime surprises.
 
-## Status
-
-**M6 — Complete** · 80/80 tests passing · `examples/design.dux` and `examples/euler12.dux`
-compile and run end-to-end.
-
-| Milestone | Feature |
-|-----------|---------|
-| M1 | Flex/Bison lexer + parser |
-| M2 | Semantic analysis, type system, symbol table |
-| M3 | LLVM IR code generation |
-| M4 | Runtime library (duxrt) + native compilation |
-| M5 | Stdlib imports (`math`), optimisation pipeline, DWARF debug info |
-| M6 | Integration tests, language spec, stdlib docs |
-
 ## Requirements
 
 | Tool | Version |
@@ -74,7 +60,7 @@ Options:
 
 ```bash
 # Compile and run a program
-./build/dux --compile examples/euler12.dux -O2 -o /tmp/euler12
+./build/dux examples/euler12.dux -O2 -o /tmp/euler12
 /tmp/euler12        # prints 842161320
 
 # Dump AST
@@ -98,30 +84,38 @@ cmake --build build && ctest --test-dir build --output-on-failure
 ```dux
 import math
 
-int factorCount(long n) {
-    double square = math.sqrt(n)
-    int isquare = square
-    int count = 0
-    for long candidate in 1..=isquare {
-        if 0 == n % candidate {
-            if candidate * candidate == n {
-                count++
-            } else {
-                count += 2
-            }
-        }
+class Stack<T> {
+    list data
+
+    Stack() {
+        this.data = []
     }
-    return count
+
+    void push(T v) {
+        this.data += [v]
+    }
+
+    T pop() {
+        int last = len(this.data) - 1
+        T v = this.data[last]
+        return v
+    }
 }
 
-void main() {
-    long triangle = 1
-    int index = 1
-    while factorCount(triangle) < 1001 {
-        index++
-        triangle += index
-    }
-    println(triangle)   # 842161320
+int main() {
+    Stack<int> s = new Stack<int>()
+    s.push(1)
+    s.push(2)
+    s.push(3)
+    println(s.pop())    # 3
+
+    fn(int) -> int sq = fn(int n) => n * n
+    println(sq(7))      # 49
+
+    double r = math.sqrt(2.0)
+    println(r)          # 1.4142...
+
+    return 0
 }
 ```
 
@@ -130,19 +124,26 @@ More examples in [`examples/`](examples/), including the full language showcase 
 
 ## Language features
 
-- **Types**: `int`, `long`, `real`, `double`, `bool`, `str`, `list`, `dict`, `tuple`
-- **Classes** with constructors, destructors, field defaults, inheritance, interfaces
-- **Namespaces** (dotted names; entry point auto-detected)
+- **Types**: `int`, `long`, `real`, `double`, `bool`, `str`, `list`, `dict`, `tuple`, `ptr`
+- **Classes** with constructors, destructors, field defaults, single/multiple inheritance, interfaces
+- **Generics**: parametric classes and functions via monomorphisation (`Box<T>`, `Pair<A, B>`)
+- **Closures / lambdas**: first-class `fn(T) -> R` function types with lexical capture
+- **Operator overloading**: `operator__add`, `operator__eq`, `operator__lt`, `operator__index`, …
+- **Namespaces**: dotted names (`com.example.pkg`), file-based imports, selective imports
 - **Control flow**: `if/else`, `while`, `do/while`, `for … in` (range, `range(n)`, C-style), `switch`
 - **Labeled breaks/continues**: `&label while …` / `break &label`
-- **Exception handling**: `try { … } catch … { … }`
-- **Stdlib**: `import math` exposes `math.sqrt`, `math.sin`, etc. (LLVM intrinsics)
-- **Built-ins**: `println`, `range`, `assert`
+- **Exception handling**: `try { … } catch (ExcType e) { … }` / `catch …`; `throw expr`
+- **Defer**: LIFO scope-exit cleanup blocks (`defer { … }`)
+- **RAII**: destructors called automatically on scope exit
+- **Unsafe blocks**: `unsafe { … }` for low-level operations
+- **C FFI**: `extern "C" ret name(params)` to call any C function directly
+- **Stdlib**: `import math`, `import str`, `import io`
+- **Built-ins**: `println`, `print`, `readline`, `range`, `len`, `assert`, `str()`, `int()`, `double()`
 - **Optimisation**: `-O0` through `-O3` via LLVM `PassBuilder`
 - **Debug info**: `-g` emits DWARF via `DIBuilder`
 
 See [`docs/spec.md`](docs/spec.md) for the full language specification and
-[`docs/stdlib/math.md`](docs/stdlib/math.md) for the standard library API.
+[`docs/stdlib/`](docs/stdlib/) for the standard library API reference.
 
 ## License
 
