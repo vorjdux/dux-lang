@@ -1,0 +1,41 @@
+class Vec2 {
+    int x
+    int y
+    Vec2(int x, int y) {
+        this.x = x
+        this.y = y
+    }
+    Vec2 operator__add(Vec2 other) {
+        return new Vec2(this.x + other.x, this.y + other.y)
+    }
+    bool operator__eq(Vec2 other) {
+        return this.x == other.x && this.y == other.y
+    }
+    bool operator__lt(Vec2 other) {
+        return this.x < other.x
+    }
+    int operator__index(int i) {
+        if i == 0 {
+            return this.x
+        }
+        return this.y
+    }
+}
+
+int main() {
+    Vec2 a = new Vec2(1, 2)
+    Vec2 b = new Vec2(3, 4)
+    Vec2 c = a + b
+    println(c.x)
+    println(c.y)
+    Vec2 d = new Vec2(4, 6)
+    if c == d {
+        println("eq")
+    }
+    if a < b {
+        println("lt")
+    }
+    println(a[0])
+    println(b[1])
+    return 0
+}
