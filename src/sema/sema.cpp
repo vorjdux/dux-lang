@@ -833,11 +833,14 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
                 {"log2",  TR::TID_DOUBLE}, {"sin",  TR::TID_DOUBLE},
                 {"cos",   TR::TID_DOUBLE}, {"tan",  TR::TID_DOUBLE},
                 {"min",   TR::TID_DOUBLE}, {"max",  TR::TID_DOUBLE},
+                {"abs_i", TR::TID_LONG},   {"min_i",TR::TID_LONG},
+                {"max_i", TR::TID_LONG},
             }},
             {"str",  {
                 {"concat",      TR::TID_STR},  {"from_int",    TR::TID_STR},
                 {"from_double", TR::TID_STR},  {"length",      TR::TID_LONG},
-                {"slice",       TR::TID_STR},
+                {"slice",       TR::TID_STR},  {"index",       TR::TID_STR},
+                {"eq",          TR::TID_BOOL},
             }},
             {"io",   {{"readline", TR::TID_STR}}},
         };
