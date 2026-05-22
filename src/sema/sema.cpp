@@ -395,6 +395,7 @@ void Sema::check_stmt(const ast::Stmt& s) {
     if (auto* d  = dynamic_cast<const ast::DeleteStmt*>(&s))    { check_delete(*d);   return; }
     if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))   { check_stmt(*ls->stmt); return; }
     if (auto* ds = dynamic_cast<const ast::DeferStmt*>(&s))     { check_stmts(ds->body); return; }
+    if (auto* ts = dynamic_cast<const ast::ThrowStmt*>(&s))     { check_expr(*ts->expr); return; }
 }
 
 void Sema::check_block(const ast::BlockStmt& b) {

@@ -154,6 +154,11 @@ private:
     // Loop stack for break/continue
     std::vector<LoopCtx> loop_stack_;
 
+    // Unwind target stack for invoke-based EH.
+    // Non-empty while inside a try body; each entry is the landing-pad block
+    // that should receive exceptions from calls in that try scope.
+    std::vector<llvm::BasicBlock*> lp_stack_;
+
     // Stdlib modules imported in this compilation unit (e.g. "math")
     std::unordered_set<std::string> stdlib_imports_;
 
@@ -218,6 +223,7 @@ private:
     void gen_for_c(const ast::ForCStmt& s);
     void gen_switch(const ast::SwitchStmt& s);
     void gen_try_catch(const ast::TryCatchStmt& s);
+    void gen_throw(const ast::ThrowStmt& s);
     void gen_return(const ast::ReturnStmt& s);
     void gen_var_decl(const ast::VarDeclStmt& s);
     void gen_assert(const ast::AssertStmt& s);
@@ -266,6 +272,12 @@ private:
 
     // Mangling
     static std::string mangle(const std::string& cls, const std::string& method);
+
+    // Emit a call or invoke depending on whether we're inside a try block.
+    // Use this for all user-visible calls that may throw.
+    llvm::Value* emit_call(llvm::FunctionCallee callee,
+                           llvm::ArrayRef<llvm::Value*> args,
+                           const std::string& name = "");
 
     // Runtime call helpers (intrinsics / duxrt stubs)
     llvm::Value* rt_malloc(llvm::Value* size);

@@ -79,7 +79,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_TRY KW_CATCH KW_IN
 %token KW_CONST KW_STATIC
 %token KW_GET KW_SET
-%token KW_ASSERT KW_DEFER
+%token KW_ASSERT KW_DEFER KW_THROW
 %token KW_AND KW_OR KW_NOT
 
 /* Type keywords */
@@ -143,7 +143,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <StmtPtr>  stmt simple_stmt
 %type <StmtPtr>  if_stmt while_stmt do_while_stmt for_stmt
 %type <StmtPtr>  switch_stmt try_stmt return_stmt break_stmt
-%type <StmtPtr>  continue_stmt assert_stmt delete_stmt defer_stmt
+%type <StmtPtr>  continue_stmt assert_stmt delete_stmt defer_stmt throw_stmt
 %type <std::unique_ptr<BlockStmt>>       block
 %type <std::vector<SwitchCase>>          switch_cases
 %type <SwitchCase>                       switch_case
@@ -638,6 +638,7 @@ stmt
     | assert_stmt         { $$ = std::move($1); }
     | delete_stmt         { $$ = std::move($1); }
     | defer_stmt          { $$ = std::move($1); }
+    | throw_stmt          { $$ = std::move($1); }
     | var_decl_stmt       { $$ = std::move($1); }
     | simple_stmt SEMI    { $$ = std::move($1); }
     ;
@@ -807,6 +808,16 @@ defer_stmt
         {
             auto s = mk<DeferStmt>(); s->loc = sl(@$, driver);
             s->body = std::move($3);
+            $$ = std::move(s);
+        }
+    ;
+
+/* -- Throw ------------------------------------------------------------- */
+throw_stmt
+    : KW_THROW expr SEMI
+        {
+            auto s = mk<ThrowStmt>(); s->loc = sl(@$, driver);
+            s->expr = std::move($2);
             $$ = std::move(s);
         }
     ;

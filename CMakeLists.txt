@@ -53,7 +53,7 @@ add_library(duxrt STATIC
     src/runtime/dict.c
     src/runtime/range.c
     src/runtime/math_rt.c
-    src/runtime/exceptions.c
+    src/runtime/exceptions.cpp
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)
@@ -66,7 +66,7 @@ target_compile_options(duxrt PRIVATE
 # duxrt must NOT be instrumented with sanitizers: user programs link against
 # it and are not compiled with sanitizer runtimes.
 
-target_link_libraries(duxrt PUBLIC m)  # math functions
+target_link_libraries(duxrt PUBLIC m stdc++)  # math functions + C++ EH ABI
 
 # Record absolute path so the compiler driver can find it at runtime
 set(DUXRT_LIB_PATH "$<TARGET_FILE:duxrt>")
