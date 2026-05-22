@@ -9,6 +9,9 @@ extern "C" double duxrt_math_log2(double x)
 extern "C" double duxrt_math_abs_d(double x)
 extern "C" double duxrt_math_min_d(double a, double b)
 extern "C" double duxrt_math_max_d(double a, double b)
+extern "C" long duxrt_math_abs_i(long x)
+extern "C" long duxrt_math_min_i(long a, long b)
+extern "C" long duxrt_math_max_i(long a, long b)
 
 double sqrt(double x) {
     return duxrt_math_sqrt(x)
@@ -52,4 +55,16 @@ double min(double a, double b) {
 
 double max(double a, double b) {
     return duxrt_math_max_d(a, b)
+}
+
+long abs_i(long x) {
+    return duxrt_math_abs_i(x)
+}
+
+long min_i(long a, long b) {
+    return duxrt_math_min_i(a, b)
+}
+
+long max_i(long a, long b) {
+    return duxrt_math_max_i(a, b)
 }
