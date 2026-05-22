@@ -110,6 +110,7 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
             obj_path.c_str(),
             DUXRT_LIB_PATH,
             "-lm",
+            "-lstdc++",  // C++ EH ABI (__gxx_personality_v0, __cxa_*)
             "-o", out_path.c_str(),
             nullptr
         };

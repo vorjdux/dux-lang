@@ -161,23 +161,8 @@ typedef struct DuxException {
 DuxException* duxrt_exception_new(const char* type, const char* msg);
 void          duxrt_exception_free(DuxException* e);
 
-/*
- * try/catch plumbing via setjmp.
- * Usage in generated IR:
- *   %slot = alloca ptr
- *   %in_catch = call i32 @duxrt_try_enter(ptr %slot)
- *   br i1 (icmp ne i32 %in_catch, 0), catch_bb, try_bb
- * try_bb:
- *   ... try body ...
- *   call void @duxrt_try_exit()
- *   br end_bb
- * catch_bb:
- *   ... catch body ...
- *   br end_bb
- */
-int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
-void duxrt_try_exit(void);
-void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
+/* Throw a DuxException via the C++ Itanium ABI (__cxa_throw). */
+void duxrt_throw(DuxException* e);
 
 #ifdef __cplusplus
 } /* extern "C" */
