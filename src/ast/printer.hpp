@@ -84,12 +84,6 @@ private:
         out_ << ')';
     }
 
-    void visit(const FormatExpr& n) override {
-        n.tmpl->accept(*this);
-        out_ << " % ";
-        n.args->accept(*this);
-    }
-
     void visit(const ListExpr& n) override {
         out_ << '[';
         for (std::size_t i = 0; i < n.elements.size(); ++i) {

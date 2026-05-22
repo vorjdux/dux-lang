@@ -591,8 +591,6 @@ TypeId Sema::check_expr(const ast::Expr& e) {
         result = check_list(*lst_e);
     } else if (auto* dct_e  = dynamic_cast<const ast::DictExpr*>(&e)) {
         result = check_dict(*dct_e);
-    } else if (dynamic_cast<const ast::FormatExpr*>(&e)) {
-        result = TR::TID_STR;
     }
     // else: unknown Expr subtype — leave as TID_UNKNOWN
 
