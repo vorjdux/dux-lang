@@ -29,7 +29,15 @@
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Analysis/LoopAnalysisManager.h>
 #include <llvm/Analysis/CGSCCPassManager.h>
+// LTO: link runtime bitcode before optimisation
+#include <llvm/Linker/Linker.h>
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/Support/MemoryBuffer.h>
 #pragma GCC diagnostic pop
+
+#ifndef DUXRT_BC_PATH
+#define DUXRT_BC_PATH ""
+#endif
 
 #include <filesystem>
 #include <sstream>
@@ -93,8 +101,12 @@ bool Codegen::run(const ast::Program& prog, const std::string& module_name) {
     // Wrap void @main() → i32 @main()
     emit_main_wrapper();
 
-    // Run optimisation passes
-    if (opt_level_ > 0) optimize();
+    // LTO: merge runtime bitcode so the optimiser can inline across the
+    // translation-unit boundary.  Must happen before optimize().
+    if (opt_level_ > 0) {
+        if (!lto_merge_runtime()) return false;
+        optimize();
+    }
 
     // Verify the module
     std::string err_str;
@@ -571,6 +583,75 @@ void Codegen::gen_namespace(const ast::NamespaceDecl& ns) {
     for (const auto& d : ns.decls) gen_decl(*d, ns.name);
     gen_stmts(ns.stmts);
     current_namespace_ = saved_ns;
+}
+
+// ─── LTO: merge runtime bitcode ──────────────────────────────────────────────
+
+bool Codegen::lto_merge_runtime() {
+    // Empty path means the bitcode was not built (tools absent at configure time).
+    std::string_view bc_path = DUXRT_BC_PATH;
+    if (bc_path.empty()) return true;   // LTO disabled — not an error
+
+    // Load the runtime bitcode file into a memory buffer.
+    auto buf_or_err = llvm::MemoryBuffer::getFile(bc_path);
+    if (!buf_or_err) {
+        llvm::errs() << "dux: LTO: cannot read " << bc_path
+                     << ": " << buf_or_err.getError().message() << '\n';
+        return false;
+    }
+
+    // Parse bitcode into a module that shares our LLVMContext.
+    auto mod_or_err = llvm::parseBitcodeFile(
+        buf_or_err.get()->getMemBufferRef(), *ctx_);
+    if (!mod_or_err) {
+        llvm::handleAllErrors(mod_or_err.takeError(),
+            [](const llvm::ErrorInfoBase& ei) {
+                llvm::errs() << "dux: LTO: bitcode parse error: "
+                             << ei.message() << '\n';
+            });
+        return false;
+    }
+    std::unique_ptr<llvm::Module> rt_mod = std::move(*mod_or_err);
+
+    // Record which symbols are defined in the runtime module.  After linking
+    // we mark them available_externally so they can be freely inlined but are
+    // NOT emitted in the output object file — preventing duplicate-symbol
+    // conflicts with the duxrt.a that is still linked by the system linker.
+    std::vector<std::string> rt_defs;
+    for (auto& fn : *rt_mod) {
+        if (!fn.isDeclaration()) {
+            rt_defs.push_back(fn.getName().str());
+            // The bitcode was compiled with -O0 which stamps optnone+noinline
+            // on every function.  Strip those attributes so the LTO optimiser
+            // (which runs at the user-requested opt level) can inline freely.
+            fn.removeFnAttr(llvm::Attribute::OptimizeNone);
+            fn.removeFnAttr(llvm::Attribute::NoInline);
+        }
+    }
+
+    // Merge: extern declares in mod_ are filled in by runtime definitions.
+    if (llvm::Linker::linkModules(*mod_, std::move(rt_mod))) {
+        llvm::errs() << "dux: LTO: module link failed\n";
+        return false;
+    }
+
+    // Mark every linked-in runtime function internal.  Internal linkage:
+    //   • lets the inliner inline them freely (no ODR or visibility constraints)
+    //   • lets GlobalDCE remove them after inlining (dead internal functions)
+    //   • keeps non-inlined copies private to this .o, so the linker does not
+    //     see a duplicate-symbol conflict with the same name in duxrt.a
+    //
+    // Also mark any internal helpers (e.g. static strbuf_grow) that were
+    // pulled in by the link; they already have internal linkage but make sure
+    // they are reachable via this loop to keep them from being DCE-removed
+    // before the inliner runs.
+    for (const auto& name : rt_defs) {
+        if (auto* fn = mod_->getFunction(name))
+            if (!fn->isDeclaration())
+                fn->setLinkage(llvm::GlobalValue::InternalLinkage);
+    }
+
+    return true;
 }
 
 // ─── Optimization pipeline (#37) ─────────────────────────────────────────────
