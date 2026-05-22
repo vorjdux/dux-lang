@@ -318,10 +318,34 @@ private:
     }
 
     void visit(const ImportDecl& n) override {
-        out_ << pad() << "import " << n.path << '\n';
+        if (n.global_scope) {
+            out_ << pad() << "import { ";
+            for (std::size_t i = 0; i < n.symbols.size(); ++i) {
+                if (i) out_ << ", ";
+                out_ << n.symbols[i];
+            }
+            out_ << " } from " << n.path << '\n';
+        } else if (!n.symbols.empty()) {
+            out_ << pad() << "import " << n.path << "::{";
+            for (std::size_t i = 0; i < n.symbols.size(); ++i) {
+                if (i) out_ << ", ";
+                out_ << n.symbols[i];
+            }
+            out_ << '}';
+            if (!n.alias.empty()) out_ << " as " << n.alias;
+            out_ << '\n';
+        } else {
+            out_ << pad() << "import " << n.path;
+            if (!n.alias.empty()) out_ << " as " << n.alias;
+            out_ << '\n';
+        }
     }
 
     void visit(const NamespaceDecl& n) override {
+        if (n.is_package_decl) {
+            out_ << pad() << "namespace " << n.name << '\n';
+            return;
+        }
         out_ << pad() << "namespace " << n.name << " {\n";
         indent();
         for (auto& d : n.decls)  d->accept(*this);

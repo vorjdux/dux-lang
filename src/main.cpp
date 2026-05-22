@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <iostream>
 #include <span>
+#include <unordered_set>
 #include <string>
 #include <string_view>
 #include <sys/wait.h>
@@ -148,6 +149,20 @@ int main(int argc, char** argv) {
     if (rc != 0) return EXIT_FAILURE;
 
     if (!driver.result) return EXIT_FAILURE;
+
+    // Resolve file-based imports before sema so injected declarations are visible.
+    {
+        std::filesystem::path p(opts.input.empty() ? "." : opts.input);
+        std::string base_dir = p.has_parent_path()
+                             ? p.parent_path().string() : ".";
+        std::unordered_set<std::string> visited;
+        if (!opts.input.empty() && opts.input != "-") {
+            std::error_code ec;
+            auto canon = std::filesystem::canonical(opts.input, ec);
+            if (!ec) visited.insert(canon.string());
+        }
+        driver.resolve_imports(*driver.result, base_dir, visited);
+    }
 
     // Always run sema when codegen / compile is requested
     bool need_sema = opts.check || opts.emit_ir || opts.emit_obj || opts.compile;
