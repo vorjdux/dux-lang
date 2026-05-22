@@ -1,52 +1,39 @@
-extern "C" void duxrt_list_push(ptr l, ptr val)
-extern "C" ptr duxrt_list_get(ptr l, long idx)
-extern "C" long duxrt_list_len(ptr l)
-extern "C" void duxrt_list_free(ptr l)
-extern "C" ptr duxrt_str_join_list(ptr parts, long count)
-extern "C" ptr duxrt_str_retain(ptr s)
-extern "C" void duxrt_str_release(ptr s)
+// StringBuilder — pre-allocated growing string buffer.
+// Backed by DuxStrBuf: amortised O(1) append, single malloc on build().
+extern "C" ptr duxrt_strbuf_new()
+extern "C" void duxrt_strbuf_append_str(ptr buf, ptr s)
+extern "C" ptr duxrt_strbuf_build(ptr buf)
+extern "C" void duxrt_strbuf_free(ptr buf)
 
 class StringBuilder(object) {
     public:
-    list _parts
-    long _count
+    ptr _buf
 
     StringBuilder() {
-        this._parts = []
-        this._count = 0l
+        ptr b = null
+        unsafe {
+            b = duxrt_strbuf_new()
+        }
+        this._buf = b
     }
 
     void append(str s) {
         unsafe {
-            ptr retained = duxrt_str_retain(s)
-            duxrt_list_push(this._parts, retained)
+            duxrt_strbuf_append_str(this._buf, s)
         }
-        this._count = this._count + 1l
     }
 
     str build() {
         str result = ""
         unsafe {
-            result = duxrt_str_join_list(this._parts, this._count)
+            result = duxrt_strbuf_build(this._buf)
         }
         return result
     }
 
-    long len() {
-        return this._count
-    }
-
     ~StringBuilder() {
-        long i = 0l
-        while i < this._count {
-            unsafe {
-                ptr s = duxrt_list_get(this._parts, i)
-                duxrt_str_release(s)
-            }
-            i = i + 1l
-        }
         unsafe {
-            duxrt_list_free(this._parts)
+            duxrt_strbuf_free(this._buf)
         }
     }
 }

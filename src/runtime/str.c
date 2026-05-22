@@ -128,3 +128,47 @@ DuxStr* duxrt_str_join_list(DuxList* parts, int64_t count) {
     *dst = '\0';
     return out;
 }
+
+/* ── StringBuffer — pre-allocated growing char buffer ─────────────────── */
+
+#define STRBUF_INIT_CAP 64
+
+static void strbuf_grow(DuxStrBuf* b, int64_t extra) {
+    if (b->len + extra + 1 <= b->cap) return;
+    int64_t nc = b->cap ? b->cap : STRBUF_INIT_CAP;
+    while (nc < b->len + extra + 1) nc *= 2;
+    b->data = (char*)realloc(b->data, (size_t)nc);
+    if (!b->data) { fputs("duxrt: out of memory\n", stderr); abort(); }
+    b->cap = nc;
+}
+
+DuxStrBuf* duxrt_strbuf_new(void) {
+    DuxStrBuf* b = (DuxStrBuf*)malloc(sizeof(DuxStrBuf));
+    if (!b) { fputs("duxrt: out of memory\n", stderr); abort(); }
+    b->data = (char*)malloc(STRBUF_INIT_CAP);
+    if (!b->data) { fputs("duxrt: out of memory\n", stderr); abort(); }
+    b->data[0] = '\0';
+    b->len = 0;
+    b->cap = STRBUF_INIT_CAP;
+    return b;
+}
+
+void duxrt_strbuf_append_str(DuxStrBuf* b, DuxStr* s) {
+    if (!b || !s || s->len == 0) return;
+    strbuf_grow(b, (int64_t)s->len);
+    const char* src = s->ext ? s->ext : s->data;
+    memcpy(b->data + b->len, src, (size_t)s->len);
+    b->len += s->len;
+    b->data[b->len] = '\0';
+}
+
+DuxStr* duxrt_strbuf_build(DuxStrBuf* b) {
+    if (!b) return duxrt_str_new("", 0);
+    return duxrt_str_new(b->data, b->len);
+}
+
+void duxrt_strbuf_free(DuxStrBuf* b) {
+    if (!b) return;
+    free(b->data);
+    free(b);
+}

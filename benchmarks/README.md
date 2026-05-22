@@ -27,45 +27,45 @@ All compiled languages use the same optimisation level: **-O2**.
 
 | Language | Compile time | Run time | vs C |
 |----------|:-----------:|:--------:|:----:|
-| **C** (gcc -O2) | 55 ms | **3 ms** | 1× |
-| **C++** (g++ -O2) | 82 ms | **3 ms** | 1× |
-| **Dux** (-O2) | 57 ms | **3 ms** | **1×** |
-| **Go** | 624 ms | 36 ms | 12× |
-| **Node.js 22** | — | 115 ms | 38× |
-| **Python 3.11** | — | 6 270 ms | 2 090× |
+| **C** (gcc -O2) | 38 ms | **2 ms** | 1× |
+| **C++** (g++ -O2) | 50 ms | **2 ms** | 1× |
+| **Dux** (-O2) | 41 ms | **2 ms** | **1×** |
+| **Go** | 42 ms | 38 ms | 19× |
+| **Node.js 22** | — | 88 ms | 44× |
+| **Python 3.11** | — | 3 980 ms | 1 990× |
 
 ### 2 · Recursive Fibonacci (35)
 
 | Language | Compile time | Run time | vs C |
 |----------|:-----------:|:--------:|:----:|
-| **C** | 88 ms | **29 ms** | 1× |
-| **C++** | 112 ms | **28 ms** | ~1× |
-| **Dux** (-O2) | 60 ms | **31 ms** | **1.07×** |
-| **Go** | 60 ms | 55 ms | 1.9× |
-| **Node.js 22** | — | 201 ms | 6.9× |
-| **Python 3.11** | — | 1 500 ms | 52× |
+| **C** | 66 ms | **20 ms** | 1× |
+| **C++** | 77 ms | **20 ms** | 1× |
+| **Dux** (-O2) | 40 ms | **31 ms** | **1.55×** |
+| **Go** | 38 ms | 54 ms | 2.7× |
+| **Node.js 22** | — | 127 ms | 6.4× |
+| **Python 3.11** | — | 1 150 ms | 58× |
 
-### 3 · String Building  (50 K appends, O(n) join)
+### 3 · String Building  (50 K appends, single-alloc build)
 
 | Language | Strategy | Compile time | Run time | vs C |
 |----------|---------|:-----------:|:--------:|:----:|
-| **C** | pre-alloc buffer | 70 ms | **3 ms** | 1× |
-| **C++** | `std::string::reserve` | 349 ms | 4 ms | 1.3× |
-| **Go** | `strings.Builder` | 62 ms | **3 ms** | 1× |
-| **Python 3.11** | `''.join(list)` | — | 15 ms | 5× |
-| **Dux** | list + `duxrt_str_join_list` | 8 ms | 35 ms | 12× |
-| **Node.js 22** | `Array.join` | — | 43 ms | 14× |
+| **C** | pre-alloc buffer (gcc rewrites as vectorised memset) | 43 ms | **2 ms** | 1× |
+| **C++** | `std::string::reserve` | 224 ms | **3 ms** | 1.5× |
+| **Go** | `strings.Builder` | 40 ms | **3 ms** | 1.5× |
+| **Python 3.11** | `''.join(list)` | — | 13 ms | 6.5× |
+| **Node.js 22** | `Array.fill + join` | — | 30 ms | 15× |
+| **Dux** | `DuxStrBuf` (pre-alloc contiguous buffer) | 7 ms | 31 ms | 15× |
 
 ### 4 · Heap Alloc / Free  (1 M object cycles)
 
 | Language | Compile time | Run time | vs C |
 |----------|:-----------:|:--------:|:----:|
-| **C** | 63 ms | **3 ms** | 1× |
-| **C++** | 74 ms | **3 ms** | 1× |
-| **Go** ¹ | 70 ms | 4 ms | 1.3× |
-| **Dux** (-O2) | 54 ms | **3 ms** | **1×** |
-| **Node.js 22** | — | 48 ms | 16× |
-| **Python 3.11** | — | 321 ms | 107× |
+| **C** | 41 ms | **2 ms** | 1× |
+| **C++** | 50 ms | **3 ms** | 1.5× |
+| **Dux** (-O2) | 40 ms | **2 ms** | **1×** |
+| **Go** ¹ | 38 ms | 4 ms | 2× |
+| **Node.js 22** | — | 37 ms | 18× |
+| **Python 3.11** | — | 212 ms | 106× |
 
 ---
 
@@ -78,10 +78,10 @@ Dux in the same performance tier as C for three out of four workloads.
 
 The first run compiled C and C++ with `-O2` but Dux with `-O0` (the implicit default).
 At `-O2`, LLVM auto-vectorises the math loop into a single SIMD instruction — the
-same pass that gives C its 3 ms result.  Adding `-O2` to the Dux compile command
-dropped the math loop from **125 ms → 3 ms** (42×), making it exactly equal to C.
+same pass that gives C its 2 ms result.  Adding `-O2` to the Dux compile command
+dropped the math loop from **125 ms → 2 ms** (62×), making it exactly equal to C.
 
-The fibonacci result also collapsed: **53 ms → 31 ms**, now within 7% of C.  LLVM's
+The fibonacci result also collapsed: **53 ms → 31 ms**, now within 1.55× of C.  LLVM's
 inliner removes the recursive call overhead at `-O2`.
 
 ### Fix B — Empty destructor elimination
@@ -96,22 +96,27 @@ without the call overhead.  The RAII registration condition was also updated fro
 "has a dtor symbol" to "has a class layout" so trivial-dtor objects are still freed
 at scope exit.
 
-Result: alloc went from **15 ms → 3 ms** — equal to C.
+Result: alloc went from **15 ms → 2 ms** — equal to C.
 
-### Fix C — O(n²) string building → O(n) join
+### Fix C — O(n²) string building → DuxStrBuf
 
-The old `string_build.dux` used `s = s + "x"` in a loop.  Each iteration allocates
-a new string of length _n+1_ and copies all previous characters.  For 50 000
-iterations that is 1.25 billion bytes of copying — fundamentally O(n²).
+The original `string_build.dux` used `s = s + "x"` in a loop.  Each iteration
+allocates a new string of length _n+1_ and copies all previous characters.  For
+50 000 iterations that is 1.25 billion bytes of copying — fundamentally O(n²).
 
-The fix adds `duxrt_str_join_list(DuxList* parts, int64_t count)` to the runtime:
-it sums all part lengths in one pass, allocates a single output buffer, then copies
-each part once — O(n) in total characters.  `string_build.dux` now pushes each
-character as an immortal string literal into a list and calls the join function once
-at the end.
+**First fix:** `duxrt_str_join_list` — accumulate `DuxStr*` pointers in a `DuxList`,
+then join in one two-pass O(n) allocation.  This dropped the time from the O(n²)
+baseline to **35 ms**, but still incurred per-element `duxrt_list_push` heap overhead.
 
-`stdlib/string_builder.dux` provides a `StringBuilder` class that wraps the same
-pattern for general use.
+**Second fix:** `DuxStrBuf` — a pre-allocated growing `char*` buffer backed by
+`realloc`-doubling (like `std::string::reserve`).  Each append is a bounds check +
+`memcpy` into a contiguous buffer; no per-element heap allocation.  A single
+`duxrt_str_new()` materialises the result at the end.
+
+Result: string build dropped from **35 ms → 31 ms** with the contiguous buffer.
+
+`stdlib/string_builder.dux` exposes `DuxStrBuf` as a `StringBuilder` class for
+general use.
 
 ---
 
@@ -119,16 +124,15 @@ pattern for general use.
 
 |  | math loop | fib(35) | string build | alloc 1M |
 |--|:---------:|:-------:|:------------:|:--------:|
-| **C** | ⭐ 3 ms | ⭐ 29 ms | ⭐ 3 ms | ⭐ 3 ms |
-| **C++** | ⭐ 3 ms | ⭐ 28 ms | 4 ms | ⭐ 3 ms |
-| **Go** | 36 ms | 55 ms | ⭐ 3 ms | 4 ms |
-| **Dux** (-O2) | ⭐ **3 ms** | ⭐ **31 ms** | 35 ms | ⭐ **3 ms** |
-| **Node.js 22** | 115 ms | 201 ms | 43 ms | 48 ms |
-| **Python 3.11** | 6 270 ms | 1 500 ms | 15 ms | 321 ms |
+| **C** | ⭐ 2 ms | ⭐ 20 ms | ⭐ 2 ms | ⭐ 2 ms |
+| **C++** | ⭐ 2 ms | ⭐ 20 ms | 3 ms | 3 ms |
+| **Go** | 38 ms | 54 ms | ⭐ 3 ms | 4 ms |
+| **Dux** (-O2) | ⭐ **2 ms** | **31 ms** | 31 ms | ⭐ **2 ms** |
+| **Node.js 22** | 88 ms | 127 ms | 30 ms | 37 ms |
+| **Python 3.11** | 3 980 ms | 1 150 ms | 13 ms | 212 ms |
 
-Dux is now **equal to C** on three of four benchmarks and within 12× on the
-fourth (string building, where the remaining gap is runtime list overhead vs a
-pre-allocated C buffer, not a language-level issue).
+Dux is now **equal to C** on two of four benchmarks and competitive on a third
+(fibonacci, 1.55×).  The string-build gap is structural and explained below.
 
 ---
 
@@ -136,29 +140,61 @@ pre-allocated C buffer, not a language-level issue).
 
 | Language | math_loop | fib | string_build | alloc |
 |----------|:---------:|:---:|:------------:|:-----:|
-| **C** | 55 ms | 88 ms | 70 ms | 63 ms |
-| **C++** | 82 ms | 112 ms | 349 ms ² | 74 ms |
-| **Dux** | 57 ms | 60 ms | 8 ms | 54 ms |
-| **Go** | 624 ms ³ | 60 ms | 62 ms | 70 ms |
+| **C** | 38 ms | 66 ms | 43 ms | 41 ms |
+| **C++** | 50 ms | 77 ms | 224 ms ² | 50 ms |
+| **Dux** | 41 ms | 40 ms | 7 ms | 40 ms |
+| **Go** | 42 ms | 38 ms | 40 ms | 38 ms |
 
 Dux compile times are **comparable to gcc** across all files.  The compiler uses
 LLVM as a backend, so `-O2` adds only a small overhead on single-file programs
 relative to the front-end parse and codegen pass.
 
+The notable outlier is Dux's **7 ms** for `string_build` — the benchmark uses only
+`extern "C"` declarations and a `while` loop with no class instantiation, so the
+front-end work is minimal.
+
 ---
 
 ## Remaining Gap: String Building
 
-Dux's 35 ms vs C's 3 ms (12×) comes from two sources:
+Dux's 31 ms vs C's 2 ms comes from a structural difference in how the compiler
+sees the hot loop, not from an algorithmic deficiency.
 
-1. **List push overhead** — 50 000 calls to `duxrt_list_push` (which may `realloc`
-   as the list grows) vs a simple in-place buffer increment in C.
-2. **Per-element overhead in join** — `duxrt_str_join_list` calls `duxrt_list_get`
-   (bounds-checked) for each element; C uses direct pointer arithmetic.
+### What gcc does to the C benchmark
 
-Both are addressable with a dedicated `StringBuffer` runtime type backed by a
-growing `char*` rather than a `DuxList` of `DuxStr*` pointers.  The algorithm is
-already correct; the constant factor is a future optimisation.
+`string_build.c` contains a simple `buf[i] = 'x'` loop over a pre-allocated
+buffer.  At `-O2`, gcc recognises the uniform byte-write pattern and replaces the
+entire loop with **two `memset` calls** (one to zero the range, one to fill with
+`'x'`), both of which are SIMD-vectorised by the C standard library.  The result is
+a handful of AVX2 stores across 50 KB — completing in ~2 ms regardless of iteration
+count.
+
+### Why Dux cannot match that
+
+The Dux benchmark calls `duxrt_strbuf_append_str(buf, "x")` 50 000 times.  This
+function lives in a separately compiled C translation unit (`src/runtime/str.c`).
+LLVM sees it as an **opaque `extern` symbol** — it cannot inline the body, inspect
+the memory-access pattern, or fuse the 50 000 calls into a memset.  Each call
+incurs full function-call overhead: argument setup, call instruction, return.
+
+The C++ result (3 ms) shows how much inlining helps: `std::string::operator+=` for
+`char` is fully inlined by g++ and the loop is auto-vectorised in-place.  Go's
+`strings.Builder.WriteByte` is similarly inlined by the Go compiler.
+
+### The fix
+
+The gap is addressable by one of:
+
+1. **LTO** — link-time optimisation allows LLVM to inline `duxrt_strbuf_append_str`
+   at link time, exposing the `memcpy` body to the auto-vectoriser.
+2. **Intrinsic lowering** — treat `StringBuilder.append` as a compiler-known
+   operation and emit inline LLVM IR (a `getelementptr` + `store` + counter
+   increment) instead of a function call.
+3. **String interpolation** — for the common case of building a string from a
+   fixed set of parts known at compile time, the compiler can emit a single
+   `duxrt_str_new` with a pre-computed length.
+
+All three are future optimisations; the algorithm is already O(n)-correct.
 
 ---
 
@@ -169,9 +205,6 @@ already correct; the constant factor is a future optimisation.
 
 ² C++ compile time for `string_build.cpp` is higher because `<string>` pulls in
   a large portion of the STL headers.
-
-³ Go first-compile time is elevated (~624 ms for `math_loop.go`) due to linking the
-  full Go runtime; subsequent files compile in 60–70 ms.
 
 ---
 
