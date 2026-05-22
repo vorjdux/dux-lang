@@ -1038,6 +1038,23 @@ primary_expr
         { auto e = mk<NewExpr>(); e->loc = sl(@$, driver); e->type = $2; e->args = std::move($4); $$ = std::move(e); }
     | list_lit  { $$ = std::move($1); }
     | dict_lit  { $$ = std::move($1); }
+    | KW_FN LPAREN param_list RPAREN FAT_ARROW expr
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            auto ret = mk<ReturnStmt>(); ret->loc = sl(@$, driver);
+            ret->value = std::move($6);
+            auto blk = mk<BlockStmt>(); blk->body.push_back(std::move(ret));
+            e->body = std::move(blk);
+            $$ = std::move(e);
+        }
+    | KW_FN LPAREN param_list RPAREN block
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            e->body = std::unique_ptr<Stmt>(std::move($5));
+            $$ = std::move(e);
+        }
     | KW_FN LPAREN param_list RPAREN ARROW type_expr block
         {
             auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);

@@ -561,8 +561,9 @@ void Sema::check_var_decl(const ast::VarDeclStmt& s) {
 
         if (init_ptr) {
             TypeId init_t = check_expr(*init_ptr);
-            if (var_type == TR::TID_UNKNOWN)
-                var_type = init_t;  // type inference
+            bool is_lambda = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get()) != nullptr;
+            if (var_type == TR::TID_UNKNOWN || is_lambda)
+                var_type = init_t;  // lambda: actual type is fn(...)->R, not the declared scalar
             else
                 require_assignable(init_t, var_type, init_ptr->loc,
                                    "variable '" + name + "' initialiser");
