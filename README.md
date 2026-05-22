@@ -84,36 +84,42 @@ cmake --build build && ctest --test-dir build --output-on-failure
 ```dux
 import math
 
-class Stack<T> {
-    list data
-
-    Stack() {
-        this.data = []
-    }
-
-    void push(T v) {
-        this.data += [v]
-    }
-
-    T pop() {
-        int last = len(this.data) - 1
-        T v = this.data[last]
-        return v
-    }
-}
+# ── Type-inferred variables (auto) ───────────────────────────────────────────
 
 int main() {
-    Stack<int> s = new Stack<int>()
-    s.push(1)
-    s.push(2)
-    s.push(3)
-    println(s.pop())    # 3
+    auto name  = "Dux"        # str
+    auto count = 0            # int
+    auto ratio = 1.5          # double
+    auto big   = 9000000000l  # long  (l suffix)
+    auto temp  = 98.6f        # real  (f suffix, 32-bit float)
 
-    fn(int) -> int sq = fn(int n) => n * n
-    println(sq(7))      # 49
+    println(name)
+    println(count)
 
-    double r = math.sqrt(2.0)
-    println(r)          # 1.4142...
+    # ── Lambdas ───────────────────────────────────────────────────────────────
+
+    # Style A: return type lives inside the lambda, auto on the left
+    auto sq = fn(int n) -> int => n * n
+    println(sq(7))   # 49
+
+    # Style B: return type is the variable prefix, lambda body is untyped
+    int cube = fn(int n) => n * n * n
+    println(cube(3)) # 27
+
+    # Closure — captures outer variable by value
+    int base = 10
+    auto addBase = fn(int n) -> int => n + base
+    println(addBase(5))  # 15
+
+    # Block body (multi-line)
+    auto greet = fn(str name) -> void {
+        str msg = "hello, " + name
+        println(msg)
+    }
+    greet("world")
+
+    # ── Stdlib ───────────────────────────────────────────────────────────────
+    println(math.sqrt(2.0))  # 1.41421...
 
     return 0
 }
@@ -122,12 +128,94 @@ int main() {
 More examples in [`examples/`](examples/), including the full language showcase in
 [`examples/design.dux`](examples/design.dux).
 
+## Variables and type inference
+
+Dux is statically typed. Every variable has a fixed type determined at compile time.
+You can either annotate the type explicitly or let the compiler infer it with `auto`:
+
+```dux
+# Explicit type
+int    age  = 42
+long   big  = 9000000000
+double pi   = 3.14159
+real   temp = 98.6       # 32-bit float
+str    name = "Dux"
+bool   ok   = true
+
+# Inferred with auto
+auto age  = 42
+auto big  = 9000000000   # inferred as int — use suffix for long:
+auto bigl = 9000000000l  # long
+auto pi   = 3.14159
+auto name = "Dux"
+auto ok   = true
+```
+
+## Literal suffixes
+
+Suffix a literal to pin its type when `auto` would otherwise pick the wrong width:
+
+| Suffix | Type     | Example  | Notes                        |
+|--------|----------|----------|------------------------------|
+| *(none)*| `int`   | `42`     | 32-bit signed integer        |
+| `i`    | `int`    | `42i`    | explicit, same as plain `42` |
+| `l`    | `long`   | `42l`    | 64-bit signed integer        |
+| *(none)*| `double`| `3.14`   | 64-bit float                 |
+| `d`    | `double` | `3.14d`  | explicit, or `42d` = 42.0    |
+| `f`    | `real`   | `3.14f`  | 32-bit float                 |
+
+```dux
+auto a = 42        # int
+auto b = 42l       # long
+auto c = 3.14      # double
+auto d = 3.14f     # real (32-bit)
+auto e = 42d       # double from integer literal
+auto f = 42f       # real  from integer literal
+```
+
+## Lambdas
+
+Lambda expressions are first-class values. Two equivalent declaration styles:
+
+```dux
+# Style A — return type inside the lambda, auto on the left
+auto sq = fn(int n) -> int => n * n
+auto sq = fn(int n) -> int { return n * n }
+
+# Style B — return type as the variable prefix, lambda body is untyped
+int sq = fn(int n) => n * n
+int sq = fn(int n) { return n * n }
+```
+
+Lambdas close over variables in the enclosing scope:
+
+```dux
+int offset = 10
+auto add = fn(int n) -> int => n + offset
+println(add(5))  # 15
+```
+
+Higher-order functions declare their parameter type with the full `fn(T) -> R` form:
+
+```dux
+int apply(fn(int) -> int f, int x) {
+    return f(x)
+}
+
+int main() {
+    auto double_ = fn(int n) -> int => n * 2
+    println(apply(double_, 7))  # 14
+    return 0
+}
+```
+
 ## Language features
 
-- **Types**: `int`, `long`, `real`, `double`, `bool`, `str`, `list`, `dict`, `tuple`, `ptr`
-- **Classes** with constructors, destructors, field defaults, single/multiple inheritance, interfaces
-- **Generics**: parametric classes and functions via monomorphisation (`Box<T>`, `Pair<A, B>`)
-- **Closures / lambdas**: first-class `fn(T) -> R` function types with lexical capture
+- **Types**: `int`, `long`, `real`, `double`, `bool`, `str`, `list`, `dict`, `ptr`
+- **Type inference**: `auto` for variables; literal suffixes `i` `l` `d` `f` to pin numeric width
+- **Classes** with constructors, destructors, field defaults, single inheritance, interfaces
+- **Generics**: parametric classes via monomorphisation (`Box<T>`, `Pair<A, B>`)
+- **Closures / lambdas**: `auto f = fn(params) -> R => expr` or `R f = fn(params) => expr`; lexical capture
 - **Operator overloading**: `operator__add`, `operator__eq`, `operator__lt`, `operator__index`, …
 - **Namespaces**: dotted names (`com.example.pkg`), file-based imports, selective imports
 - **Control flow**: `if/else`, `while`, `do/while`, `for … in` (range, `range(n)`, C-style), `switch`
