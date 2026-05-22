@@ -249,6 +249,12 @@ private:
         out_ << pad() << "}\n";
     }
 
+    void visit(const ThrowStmt& n) override {
+        out_ << pad() << "throw ";
+        n.expr->accept(*this);
+        out_ << '\n';
+    }
+
     // ── Declarations ─────────────────────────────────────────────────────────
     static const char* access_str(AccessMod m) {
         switch (m) {

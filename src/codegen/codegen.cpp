@@ -350,6 +350,14 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
     }
     if (!fn->empty()) return; // already generated
 
+    // Attach personality function so this function can serve as an EH frame.
+    if (!fn->hasPersonalityFn()) {
+        auto* pft = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_), true);
+        auto* personality_fn = llvm::cast<llvm::Constant>(
+            mod_->getOrInsertFunction("__gxx_personality_v0", pft).getCallee());
+        fn->setPersonalityFn(personality_fn);
+    }
+
     BasicBlock* entry = BasicBlock::Create(*ctx_, "entry", fn);
     builder_->SetInsertPoint(entry);
 
@@ -746,6 +754,7 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     if (auto* a = dynamic_cast<const ast::AssertStmt*>(&s))    { gen_assert(*a);   return; }
     if (auto* d = dynamic_cast<const ast::DeleteStmt*>(&s))    { gen_delete(*d);   return; }
     if (auto* df = dynamic_cast<const ast::DeferStmt*>(&s))    { gen_defer(*df);   return; }
+    if (auto* th = dynamic_cast<const ast::ThrowStmt*>(&s))    { gen_throw(*th);   return; }
     if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))  {
         // Propagate label into the inner loop/while statement
         pending_label_ = ls->label;
@@ -1094,51 +1103,77 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
     Function* fn = builder_->GetInsertBlock()->getParent();
 
     auto* try_bb   = BasicBlock::Create(*ctx_, "try.body",  fn);
+    auto* lp_bb    = BasicBlock::Create(*ctx_, "try.lp",    fn);
     auto* catch_bb = BasicBlock::Create(*ctx_, "try.catch", fn);
     auto* end_bb   = BasicBlock::Create(*ctx_, "try.end",   fn);
 
-    // Slot for the exception pointer (filled by duxrt_try_enter on longjmp)
-    Value* ex_slot = make_alloca(ptr_type(), "ex.slot");
-    builder_->CreateStore(
-        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptr_type())), ex_slot);
+    builder_->CreateBr(try_bb);
 
-    // duxrt_try_enter(&ex_slot) returns 0 on first entry (try path), 1 after longjmp (catch path)
-    auto* enter_fn = get_or_declare_rt("duxrt_try_enter",
-        llvm::Type::getInt32Ty(*ctx_), {ptr_type()});
-    Value* in_catch = builder_->CreateCall(enter_fn, {ex_slot}, "in.catch");
-    Value* is_catch = builder_->CreateICmpNE(in_catch,
-        llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0), "is.catch");
-    builder_->CreateCondBr(is_catch, catch_bb, try_bb);
-
-    // try body
+    // ── try body ──────────────────────────────────────────────────────────
+    // Open the try-body scope manually (not via gen_block) so the scope stays
+    // open when we generate the LP cleanup code below.
     builder_->SetInsertPoint(try_bb);
-    gen_stmt(*s.try_body);
-    if (!builder_->GetInsertBlock()->getTerminator()) {
-        auto* exit_fn = get_or_declare_rt("duxrt_try_exit",
-            llvm::Type::getVoidTy(*ctx_), {});
-        builder_->CreateCall(exit_fn, {});
-        builder_->CreateBr(end_bb);
-    }
-
-    // catch body
-    builder_->SetInsertPoint(catch_bb);
     env_push();
-    Value* ex_ptr = builder_->CreateLoad(ptr_type(), ex_slot, "ex.ptr");
-    if (s.catch_var && !s.catch_all) {
-        Value* ex_alloca = make_alloca(ptr_type(), *s.catch_var);
-        builder_->CreateStore(ex_ptr, ex_alloca);
-        env_define(*s.catch_var, ex_alloca);
-    }
-    gen_stmt(*s.catch_body);
-    // Free the exception object after the catch block executes
-    if (!builder_->GetInsertBlock()->getTerminator()) {
-        auto* free_fn = get_or_declare_rt("duxrt_exception_free",
-            llvm::Type::getVoidTy(*ctx_), {ptr_type()});
-        builder_->CreateCall(free_fn, {ex_ptr});
-    }
+    lp_stack_.push_back(lp_bb);
+
+    auto* try_body_block = llvm::cast<ast::BlockStmt>(s.try_body.get());
+    gen_stmts(try_body_block->body);
+
+    lp_stack_.pop_back();
+
+    // Save the normal-path exit block before switching to the LP.
+    auto* try_exit_bb = builder_->GetInsertBlock();
+
+    // ── landing pad ───────────────────────────────────────────────────────
+    // Generate LP content NOW, while the try-body scope is still in
+    // cleanup_scopes_ — so emit_all_scope_cleanups() sees a/b/etc.
+    // Catches any C++ exception (catch ptr null = catch-all).
+    builder_->SetInsertPoint(lp_bb);
+    auto* lp_ty   = llvm::StructType::get(*ctx_,
+                        {ptr_type(), llvm::Type::getInt32Ty(*ctx_)});
+    auto* lp_inst = builder_->CreateLandingPad(lp_ty, 1, "lp");
+    lp_inst->addClause(llvm::ConstantPointerNull::get(
+                           llvm::cast<llvm::PointerType>(ptr_type())));
+
+    // RAII + defer cleanup on the unwind path (objects still in scope).
+    emit_all_scope_cleanups();
+    emit_all_str_releases();
+
+    // __cxa_begin_catch: resolve the thrown object.
+    Value* exc_lp_ptr = builder_->CreateExtractValue(lp_inst, {0u}, "exc.lp");
+    auto* begin_catch = get_or_declare_rt("__cxa_begin_catch",
+                            ptr_type(), {ptr_type()});
+    Value* caught_raw = builder_->CreateCall(begin_catch, {exc_lp_ptr}, "caught.raw");
+    Value* exc_val    = builder_->CreateLoad(ptr_type(), caught_raw, "exc.val");
+    Value* exc_slot   = make_alloca(ptr_type(), "exc.slot");
+    builder_->CreateStore(exc_val, exc_slot);
+    builder_->CreateBr(catch_bb);
+
+    // ── normal-path cleanup (back on the try-exit block) ─────────────────
+    // env_pop fires destructors for objects in the try scope on the
+    // non-exception path.  Restore the builder first.
+    builder_->SetInsertPoint(try_exit_bb);
     env_pop();
     if (!builder_->GetInsertBlock()->getTerminator())
         builder_->CreateBr(end_bb);
+
+    // ── catch body ────────────────────────────────────────────────────────
+    builder_->SetInsertPoint(catch_bb);
+    env_push();
+    if (s.catch_var) {
+        Value* cv_alloca = make_alloca(ptr_type(), *s.catch_var);
+        builder_->CreateStore(
+            builder_->CreateLoad(ptr_type(), exc_slot, "exc.v"), cv_alloca);
+        env_define(*s.catch_var, cv_alloca);
+    }
+    gen_stmt(*s.catch_body);
+    if (!builder_->GetInsertBlock()->getTerminator()) {
+        auto* end_catch = get_or_declare_rt("__cxa_end_catch",
+                              llvm::Type::getVoidTy(*ctx_), {});
+        builder_->CreateCall(end_catch, {});
+        builder_->CreateBr(end_bb);
+    }
+    env_pop();
 
     builder_->SetInsertPoint(end_bb);
 }
@@ -1569,7 +1604,7 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
                 v = coerce_to_llvm_type(v, (param_it++)->getType());
             args.push_back(v);
         }
-        return builder_->CreateCall(fn, args);
+        return emit_call(fn, args);
     }
 
     // Member call: obj.method(args)
@@ -1591,7 +1626,7 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
                     v = coerce_to_llvm_type(v, (param_it++)->getType());
                 args.push_back(v);
             }
-            return builder_->CreateCall(fn, args);
+            return emit_call(fn, args);
         }
         // Fallback: return null
         return llvm::ConstantPointerNull::get(
@@ -1692,13 +1727,14 @@ Value* Codegen::gen_new(const ast::NewExpr& e) {
         }
     }
 
-    // Call constructor if present
+    // Call constructor if present (use invoke inside try blocks so constructor
+    // exceptions propagate to the surrounding landingpad).
     std::string ctor_name = mangle(cls_name, cls_name);
     Function* ctor_fn = mod_->getFunction(ctor_name);
     if (ctor_fn) {
         std::vector<Value*> args = {raw};
         for (const auto& a : e.args) args.push_back(gen_expr(*a));
-        builder_->CreateCall(ctor_fn, args);
+        emit_call(ctor_fn, args);
     }
 
     return raw;
@@ -1999,7 +2035,73 @@ void Codegen::gen_defer(const ast::DeferStmt& s) {
     cleanup_scopes_.back().push_back({nullptr, {}, &s.body});
 }
 
+void Codegen::gen_throw(const ast::ThrowStmt& s) {
+    Value* exc = gen_expr(*s.expr);
+
+    // Allocate exception storage (sizeof(void*) = 8 bytes on LP64)
+    auto* alloc_exc = get_or_declare_rt("__cxa_allocate_exception",
+                          ptr_type(), {llvm::Type::getInt64Ty(*ctx_)});
+    Value* storage = builder_->CreateCall(alloc_exc,
+                         {llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), 8)},
+                         "exc.storage");
+    builder_->CreateStore(exc, storage);
+
+    // _ZTIPv = typeinfo for void* from libstdc++; used as a valid non-null
+    // type_info for __cxa_throw.  Since landingpads use catch ptr null
+    // (catch-all), the type is never matched against.
+    llvm::GlobalVariable* tinfo_gv = llvm::cast<llvm::GlobalVariable>(
+        mod_->getOrInsertGlobal("_ZTIPv", ptr_type()));
+    tinfo_gv->setExternallyInitialized(true);
+
+    Function* cxa_throw = get_or_declare_rt("__cxa_throw",
+                              llvm::Type::getVoidTy(*ctx_),
+                              {ptr_type(), ptr_type(), ptr_type()});
+    cxa_throw->setDoesNotReturn();
+    llvm::Value* null_dest =
+        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptr_type()));
+    std::vector<Value*> throw_args = {storage, tinfo_gv, null_dest};
+
+    if (!lp_stack_.empty()) {
+        // Inside a try block: use invoke so the EH table covers this site.
+        // The "normal" successor is unreachable because __cxa_throw never returns.
+        Function* fn = builder_->GetInsertBlock()->getParent();
+        auto* unreach_bb = BasicBlock::Create(*ctx_, "throw.cont", fn);
+        builder_->CreateInvoke(cxa_throw, unreach_bb, lp_stack_.back(), throw_args);
+        builder_->SetInsertPoint(unreach_bb);
+    } else {
+        builder_->CreateCall(cxa_throw, throw_args);
+    }
+    builder_->CreateUnreachable();
+}
+
+// Emit a call or invoke depending on whether we're inside a try block.
+Value* Codegen::emit_call(llvm::FunctionCallee callee,
+                          llvm::ArrayRef<Value*> args,
+                          const std::string& name) {
+    if (lp_stack_.empty())
+        return builder_->CreateCall(callee, args, name);
+
+    // Inside a try block: emit invoke so exceptions unwind to the landing pad.
+    Function* fn = builder_->GetInsertBlock()->getParent();
+    auto* cont_bb = BasicBlock::Create(*ctx_, "invoke.cont", fn);
+    auto* inst = builder_->CreateInvoke(callee, cont_bb, lp_stack_.back(), args, name);
+    builder_->SetInsertPoint(cont_bb);
+    return inst;
+}
+
 Value* Codegen::make_alloca(llvm::Type* t, const std::string& name) {
+    // Always create allocas in the function entry block so they dominate all
+    // uses — including landing pad blocks that may be unreachable via invoke
+    // continuations.
+    llvm::BasicBlock* cur = builder_->GetInsertBlock();
+    Function* fn = cur ? cur->getParent() : nullptr;
+    if (fn && !fn->empty()) {
+        llvm::BasicBlock& entry = fn->getEntryBlock();
+        llvm::IRBuilder<> eb(&entry, entry.begin());
+        Value* a = eb.CreateAlloca(t, nullptr, name);
+        alloca_type_[a] = t;
+        return a;
+    }
     Value* a = builder_->CreateAlloca(t, nullptr, name);
     alloca_type_[a] = t;
     return a;

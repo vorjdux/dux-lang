@@ -1,0 +1,5 @@
+dtor:b
+defer:a
+dtor:a
+caught
+done
