@@ -37,6 +37,7 @@ void ContinueStmt::accept(Visitor& v)  const { v.visit(*this); }
 void AssertStmt::accept(Visitor& v)    const { v.visit(*this); }
 void DeleteStmt::accept(Visitor& v)    const { v.visit(*this); }
 void LabeledStmt::accept(Visitor& v)   const { v.visit(*this); }
+void UnsafeStmt::accept(Visitor& v)    const { v.visit(*this); }
 
 void FunctionDecl::accept(Visitor& v)  const { v.visit(*this); }
 void FieldDecl::accept(Visitor& v)     const { v.visit(*this); }
@@ -44,6 +45,7 @@ void ClassDecl::accept(Visitor& v)     const { v.visit(*this); }
 void InterfaceDecl::accept(Visitor& v) const { v.visit(*this); }
 void ImportDecl::accept(Visitor& v)    const { v.visit(*this); }
 void NamespaceDecl::accept(Visitor& v) const { v.visit(*this); }
+void ExternDecl::accept(Visitor& v)    const { v.visit(*this); }
 
 void Program::accept(Visitor& v)       const { v.visit(*this); }
 

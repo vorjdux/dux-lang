@@ -276,6 +276,10 @@ void Codegen::declare_functions(const ast::DeclList& decls,
             declare_class_methods(*c);
         } else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(dp.get())) {
             declare_functions(ns->decls, ns->name);
+        } else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(dp.get())) {
+            std::vector<llvm::Type*> ptypes;
+            for (const auto& p : ext->params) ptypes.push_back(lower_type_expr(p.type));
+            get_or_declare_rt(ext->name, lower_type_expr(ext->ret), ptypes);
         }
     }
 }
@@ -322,8 +326,13 @@ void Codegen::gen_decl(const ast::Decl& d, const std::string& prefix) {
         if (!f->is_ctor && !f->is_dtor)
             gen_func(*f, mangle(prefix, f->name));
     }
-    else if (auto* c  = dynamic_cast<const ast::ClassDecl*>(&d))   gen_class(*c);
+    else if (auto* c  = dynamic_cast<const ast::ClassDecl*>(&d))     gen_class(*c);
     else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(&d)) gen_namespace(*ns);
+    else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(&d)) {
+        std::vector<llvm::Type*> ptypes;
+        for (const auto& p : ext->params) ptypes.push_back(lower_type_expr(p.type));
+        get_or_declare_rt(ext->name, lower_type_expr(ext->ret), ptypes);
+    }
     // ImportDecl: nothing to generate
 }
 
@@ -704,6 +713,7 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
         pending_label_.clear();
         return;
     }
+    if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s))   { gen_stmts(us->body); return; }
 }
 
 void Codegen::gen_block(const ast::BlockStmt& b) {

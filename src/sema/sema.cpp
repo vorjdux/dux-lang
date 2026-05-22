@@ -65,6 +65,7 @@ void Sema::warn(const ast::SourceLoc& loc, const std::string& msg) {
 }
 
 TypeId Sema::type_from_te(const ast::TypeExpr& te) const {
+    if (te.name == "ptr") return TR::TID_OBJECT;
     TypeId id = types_.from_type_expr(te);
     return id == TR::TID_UNKNOWN ? TR::TID_UNKNOWN : id;
 }
@@ -117,7 +118,22 @@ void Sema::hoist_top(const ast::DeclList& decls) {
             if (!scopes_.define(s.name, s))
                 err(f->loc, "function '" + f->name + "' already declared in this scope");
         }
+        else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(dp.get()))
+            hoist_extern(*ext);
     }
+}
+
+void Sema::hoist_extern(const ast::ExternDecl& e) {
+    TypeId ret = type_from_te(e.ret);
+    Symbol s;
+    s.name        = e.name;
+    s.kind        = SymKind::Function;
+    s.type        = ret;
+    s.return_type = ret;
+    s.loc         = e.loc;
+    for (const auto& p : e.params)
+        s.params.emplace_back(p.name, type_from_te(p.type));
+    scopes_.define(s.name, s);
 }
 
 void Sema::hoist_class(const ast::ClassDecl& c) {
@@ -180,6 +196,7 @@ void Sema::check_decl(const ast::Decl& d) {
     else if (auto* i  = dynamic_cast<const ast::InterfaceDecl*>(&d)) check_interface(*i);
     else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(&d)) check_namespace(*ns);
     else if (auto* im = dynamic_cast<const ast::ImportDecl*>(&d))    check_import(*im);
+    // ExternDecl: already hoisted in pass 1; nothing to check in pass 2
 }
 
 void Sema::check_func(const ast::FunctionDecl& f, TypeId /*class_type*/) {
@@ -382,6 +399,7 @@ void Sema::check_stmt(const ast::Stmt& s) {
     if (auto* d  = dynamic_cast<const ast::DeleteStmt*>(&s))    { check_delete(*d);   return; }
     // LabeledStmt, etc. — visit the inner stmt
     if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))   { check_stmt(*ls->stmt); return; }
+    if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s))    { check_stmts(us->body); return; }
 }
 
 void Sema::check_block(const ast::BlockStmt& b) {
