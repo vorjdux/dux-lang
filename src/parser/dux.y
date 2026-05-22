@@ -31,6 +31,9 @@ using namespace dux::ast;
 using PairList    = std::vector<std::pair<ExprPtr, ExprPtr>>;
 using VarItem     = std::pair<std::string, ExprPtr>;
 using VarItemList = std::vector<VarItem>;
+/* Generic type parameter: (param_name, bound_name). bound_name is empty if no bound. */
+using TypeParamEntry    = std::pair<std::string, std::string>;
+using TypeParamEntryList = std::vector<TypeParamEntry>;
 }
 
 /* Thread both driver and loc through parser and yylex */
@@ -140,7 +143,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 /* Types */
 %type <TypeExpr>                         type_expr
 %type <std::vector<TypeExpr>>            fn_type_params fn_type_params_ne type_arg_list_ne
-%type <std::vector<std::string>>         opt_type_params type_params_ne
+%type <TypeParamEntryList>               opt_type_params type_params_ne
 /* Access */
 %type <AccessMod>                        access_mod
 %type <std::string>                      dotted_name
@@ -151,6 +154,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <StmtPtr>  if_stmt while_stmt do_while_stmt for_stmt
 %type <StmtPtr>  switch_stmt try_stmt return_stmt break_stmt
 %type <StmtPtr>  continue_stmt assert_stmt delete_stmt defer_stmt throw_stmt unsafe_stmt
+%type <ExprPtr>  defer_expr defer_primary
 %type <std::unique_ptr<BlockStmt>>       block
 %type <std::vector<SwitchCase>>          switch_cases
 %type <SwitchCase>                       switch_case
@@ -351,7 +355,10 @@ class_decl
             n->loc           = sl(@$, driver);
             n->decorators    = std::move($1);
             n->name          = $3;
-            n->type_params   = std::move($4);
+            for (const auto& [pname, bname] : $4) {
+                n->type_params.push_back(pname);
+                if (!bname.empty()) n->type_bounds.push_back(TypeBound{pname, bname});
+            }
             n->bases         = std::move($5);
             n->members       = std::move($6);
             $$ = std::move(n);
@@ -484,7 +491,10 @@ func_decl
             f->loc          = sl(@$, driver);
             f->return_type  = $1;
             f->name         = $2;
-            f->type_params  = std::move($3);
+            for (const auto& [pname, bname] : $3) {
+                f->type_params.push_back(pname);
+                if (!bname.empty()) f->type_bounds.push_back(TypeBound{pname, bname});
+            }
             f->params       = std::move($5);
             f->modifier     = $7;
             f->body         = std::move(*$8);
@@ -493,13 +503,15 @@ func_decl
     ;
 
 opt_type_params
-    : %empty                        { $$ = std::vector<std::string>{}; }
+    : %empty                        { $$ = TypeParamEntryList{}; }
     | LT type_params_ne GT          { $$ = std::move($2); }
     ;
 
 type_params_ne
-    : IDENT                         { $$.push_back($1); }
-    | type_params_ne COMMA IDENT    { $1.push_back($3); $$ = std::move($1); }
+    : IDENT                               { $$.push_back({$1, ""}); }
+    | IDENT COLON IDENT                   { $$.push_back({$1, $3}); }
+    | type_params_ne COMMA IDENT          { $1.push_back({$3, ""}); $$ = std::move($1); }
+    | type_params_ne COMMA IDENT COLON IDENT { $1.push_back({$3, $5}); $$ = std::move($1); }
     ;
 
 opt_func_modifier
@@ -872,6 +884,34 @@ defer_stmt
             s->body = std::move($3);
             $$ = std::move(s);
         }
+    | KW_DEFER defer_expr SEMI
+        {
+            auto s  = mk<DeferStmt>(); s->loc = sl(@$, driver);
+            auto es = mk<ExprStmt>();  es->loc = sl(@$, driver);
+            es->expr = std::move($2);
+            s->body.push_back(std::move(es));
+            $$ = std::move(s);
+        }
+    ;
+
+/* defer_expr is like postfix_expr but must not start with '{' to avoid
+   a grammar conflict with the block form 'defer { stmt_list }'. */
+defer_expr
+    : defer_primary
+        { $$ = std::move($1); }
+    | defer_expr DOT IDENT
+        { auto e = mk<MemberExpr>(); e->loc = sl(@$, driver); e->object = std::move($1); e->member = $3; $$ = std::move(e); }
+    | defer_expr LPAREN arg_list RPAREN
+        { auto e = mk<CallExpr>(); e->loc = sl(@$, driver); e->callee = std::move($1); e->args = std::move($3); $$ = std::move(e); }
+    | defer_expr LBRACKET expr RBRACKET
+        { auto e = mk<IndexExpr>(); e->loc = sl(@$, driver); e->object = std::move($1); e->index = std::move($3); $$ = std::move(e); }
+    ;
+
+defer_primary
+    : IDENT          { auto e = mk<IdentExpr>();  e->loc = sl(@$, driver); e->name = $1; $$ = std::move(e); }
+    | KW_THIS        { auto e = mk<ThisExpr>();   e->loc = sl(@$, driver); $$ = std::move(e); }
+    | KW_SUPER       { auto e = mk<SuperExpr>();  e->loc = sl(@$, driver); $$ = std::move(e); }
+    | LPAREN expr RPAREN  { $$ = std::move($2); }
     ;
 
 /* -- Throw ------------------------------------------------------------- */

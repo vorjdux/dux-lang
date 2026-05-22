@@ -155,11 +155,17 @@ void Sema::hoist_extern(const ast::ExternDecl& e) {
 
 void Sema::hoist_class(const ast::ClassDecl& c) {
     TypeId id = types_.intern(c.name, TypeKind::Class);
-    // Wire up parent
+    // Wire up parent (first base) and register all interface bases
     if (!c.bases.empty()) {
         TypeId parent = types_.from_name(c.bases[0].name);
         if (parent == TR::TID_UNKNOWN) parent = TR::TID_OBJECT;
         types_.set_parent(id, parent);
+        for (const auto& base : c.bases) {
+            TypeId base_id = types_.from_name(base.name);
+            if (base_id == TR::TID_UNKNOWN) continue;
+            if (types_.info(base_id).kind == TypeKind::Interface)
+                types_.add_interface(id, base_id);
+        }
     }
     Symbol s;
     s.name = c.name;
