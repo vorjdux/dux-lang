@@ -306,10 +306,16 @@ struct InitEntry {
     ExprList    args;
 };
 
+struct TypeBound {
+    std::string param;           // e.g. "T"
+    std::string interface_name;  // e.g. "IComparable"
+};
+
 struct FunctionDecl final : Decl {
     TypeExpr                   return_type;
     std::string                name;
-    std::vector<std::string>   type_params;  // generic type params, e.g. {"T"}
+    std::vector<std::string>   type_params;   // generic type params, e.g. {"T"}
+    std::vector<TypeBound>     type_bounds;   // bounds, e.g. {T: IComparable}
     std::vector<Param>         params;
     std::optional<std::string> modifier;   // "get" or "set"
     std::optional<BlockStmt>   body;
@@ -341,6 +347,7 @@ struct ClassDecl final : Decl {
     std::vector<Decorator>   decorators;
     std::string              name;
     std::vector<std::string> type_params;  // generic type params, e.g. {"T"}
+    std::vector<TypeBound>   type_bounds;  // bounds, e.g. {T: IComparable}
     std::vector<BaseClass>   bases;
     std::vector<ClassMember> members;
     void accept(Visitor& v) const override;

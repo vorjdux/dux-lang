@@ -1,4 +1,5 @@
 #include "sema/generics.hpp"
+#include "driver/driver.hpp"
 #include <algorithm>
 #include <cassert>
 #include <queue>
@@ -311,6 +312,7 @@ static DeclPtr clone_class_decl(const ClassDecl& c, const std::string& new_name,
     r->loc           = c.loc;
     r->name          = new_name;
     r->type_params   = {};   // instantiated class has no type params
+    r->type_bounds   = {};   // instantiated class has no bounds
     // Skip decorators (they have non-copyable ExprList); not needed for generics
     r->bases         = c.bases;
     for (const auto& m : c.members) {
@@ -338,6 +340,7 @@ static DeclPtr clone_generic_func(const FunctionDecl& f, const std::string& new_
     auto r = dynamic_cast<FunctionDecl*>(clone_func_decl(f, s).release());
     r->name = new_name;
     r->type_params = {};
+    r->type_bounds = {};
     return DeclPtr(r);
 }
 
@@ -545,9 +548,29 @@ static void fix_decl(Decl* d,
     }
 }
 
+// ─── Bounds checking (AST-level, before TypeRegistry exists) ─────────────────
+
+// Check whether a concrete type name satisfies a bound by scanning prog.decls.
+// Returns true if satisfied or if the concrete type is unknown (built-in/opaque).
+static bool ast_satisfies_bound(const std::string& concrete_type,
+                                 const std::string& interface_name,
+                                 const ast::Program& prog) {
+    if (interface_name.empty()) return true;
+    for (const auto& dp : prog.decls) {
+        if (auto* c = dynamic_cast<const ClassDecl*>(dp.get())) {
+            if (c->name == concrete_type) {
+                for (const auto& base : c->bases)
+                    if (base.name == interface_name) return true;
+                return false;
+            }
+        }
+    }
+    return true; // unknown (built-in) — skip check
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
-void expand_generics(ast::Program& prog) {
+void expand_generics(ast::Program& prog, Driver& driver) {
     // Step 1: collect generic class and function templates
     std::unordered_map<std::string, const ClassDecl*>    generic_classes;
     std::unordered_map<std::string, const FunctionDecl*> generic_funcs;
@@ -592,6 +615,19 @@ void expand_generics(ast::Program& prog) {
             for (size_t i = 0; i < tmpl.type_params.size(); ++i)
                 subst[tmpl.type_params[i]] = key.type_args[i];
 
+            // Check type bounds
+            for (const auto& bound : tmpl.type_bounds) {
+                auto it = subst.find(bound.param);
+                if (it == subst.end()) continue;
+                const std::string& concrete_type = it->second.name;
+                if (!ast_satisfies_bound(concrete_type, bound.interface_name, prog)) {
+                    driver.error(tmpl.loc,
+                        "type '" + concrete_type + "' does not implement '" +
+                        bound.interface_name + "' (required by generic parameter '" +
+                        bound.param + "')");
+                }
+            }
+
             DeclPtr concrete = clone_class_decl(tmpl, key.mangled, subst);
 
             // Walk the new concrete class for more instantiations
@@ -610,6 +646,19 @@ void expand_generics(ast::Program& prog) {
             SubstMap subst;
             for (size_t i = 0; i < tmpl.type_params.size(); ++i)
                 subst[tmpl.type_params[i]] = key.type_args[i];
+
+            // Check type bounds
+            for (const auto& bound : tmpl.type_bounds) {
+                auto it = subst.find(bound.param);
+                if (it == subst.end()) continue;
+                const std::string& concrete_type = it->second.name;
+                if (!ast_satisfies_bound(concrete_type, bound.interface_name, prog)) {
+                    driver.error(tmpl.loc,
+                        "type '" + concrete_type + "' does not implement '" +
+                        bound.interface_name + "' (required by generic parameter '" +
+                        bound.param + "')");
+                }
+            }
 
             DeclPtr concrete = clone_generic_func(tmpl, key.mangled, subst);
             fix_decl(concrete.get(), done, pending, /*skip_generic=*/false);

@@ -441,6 +441,32 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
 
     gen_stmts(f.body->body);
 
+    // In a destructor, emit field destructors in reverse declaration order
+    // after user-written dtor body but before the implicit return.
+    if (f.is_dtor && !current_class_.empty()) {
+        auto lit = layouts_.find(current_class_);
+        if (lit != layouts_.end()) {
+            const ClassLayout& layout = lit->second;
+            Value* this_slot = env_lookup("this");
+            if (this_slot && builder_->GetInsertBlock() &&
+                    !builder_->GetInsertBlock()->getTerminator()) {
+                Value* this_ptr = builder_->CreateLoad(ptr_type(), this_slot, "this");
+                for (int i = static_cast<int>(layout.fields.size()) - 1; i >= 0; --i) {
+                    const auto& fi = layout.fields[static_cast<std::size_t>(i)];
+                    const std::string& fc = types_.name_of(fi.type);
+                    if (fc.empty() || fc == "<unknown>" || fc == "<invalid>") continue;
+                    if (!mod_->getFunction(fc + "___dtor")) continue;
+                    Value* fgep = builder_->CreateStructGEP(
+                        layout.struct_type, this_ptr, fi.index, fi.name + ".fgep");
+                    Value* fptr = builder_->CreateLoad(ptr_type(), fgep, fi.name + ".fptr");
+                    Value* tmp  = make_alloca(ptr_type(), fi.name + ".field.slot");
+                    builder_->CreateStore(fptr, tmp);
+                    emit_dtor(tmp, fc);
+                }
+            }
+        }
+    }
+
     // Emit implicit return if the block doesn't have a terminator.
     // RAII cleanup (class dtors + str releases) must happen before the
     // return instruction, just as gen_return() does for explicit returns.
@@ -1276,6 +1302,9 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
                     te.fn_params.push_back(p.type);
                 te.fn_ret = lam->inferred_ret;
                 fn_var_types_[name] = te;
+                // Register closure env for free() on scope exit
+                if (!cleanup_scopes_.empty())
+                    cleanup_scopes_.back().push_back({alloca, "__closure", nullptr});
             }
         }
         // Track variable→class for member access resolution
@@ -2370,6 +2399,8 @@ void Codegen::emit_dtor(Value* alloca, const std::string& class_name) {
     // Free the heap-allocated object.
     auto* free_fn = get_or_declare_rt("free", llvm::Type::getVoidTy(*ctx_), {ptr_type()});
     builder_->CreateCall(free_fn, {obj_ptr});
+    // Null out the slot so a second emit_dtor call (e.g. landing pad + return path) is a no-op.
+    builder_->CreateStore(null_v, alloca);
     builder_->CreateBr(end_bb);
 
     builder_->SetInsertPoint(end_bb);
