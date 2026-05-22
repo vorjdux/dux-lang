@@ -143,8 +143,8 @@ ALNUM   [a-zA-Z0-9_]
 "double"     { need_semi = false; return yy::parser::make_KW_DOUBLE(loc); }
 "str"        { need_semi = true;  return yy::parser::make_KW_STR(loc);    }
 "bool"       { need_semi = false; return yy::parser::make_KW_BOOL(loc);   }
-"list"       { need_semi = false; return yy::parser::make_KW_LIST(loc);   }
-"dict"       { need_semi = false; return yy::parser::make_KW_DICT(loc);   }
+"list"       { need_semi = true;  return yy::parser::make_KW_LIST(loc);   }
+"dict"       { need_semi = true;  return yy::parser::make_KW_DICT(loc);   }
 "tuple"      { need_semi = false; return yy::parser::make_KW_TUPLE(loc);  }
 "object"     { need_semi = false; return yy::parser::make_KW_OBJECT(loc); }
 "ptr"        { need_semi = false; return yy::parser::make_KW_PTR(loc);    }

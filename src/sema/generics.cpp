@@ -2,6 +2,7 @@
 #include "driver/driver.hpp"
 #include <algorithm>
 #include <cassert>
+#include <functional>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
@@ -56,6 +57,12 @@ static ExprPtr clone_expr(const Expr* e, const SubstMap& s) {
     }
     if (auto* n = dynamic_cast<const FloatLitExpr*>(e)) {
         auto r = std::make_unique<FloatLitExpr>(); r->loc = n->loc; r->value = n->value; return r;
+    }
+    if (auto* n = dynamic_cast<const LongLitExpr*>(e)) {
+        auto r = std::make_unique<LongLitExpr>(); r->loc = n->loc; r->value = n->value; return r;
+    }
+    if (auto* n = dynamic_cast<const RealLitExpr*>(e)) {
+        auto r = std::make_unique<RealLitExpr>(); r->loc = n->loc; r->value = n->value; return r;
     }
     if (auto* n = dynamic_cast<const StringLitExpr*>(e)) {
         auto r = std::make_unique<StringLitExpr>(); r->loc = n->loc; r->value = n->value; return r;
@@ -571,16 +578,23 @@ static bool ast_satisfies_bound(const std::string& concrete_type,
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 void expand_generics(ast::Program& prog, Driver& driver) {
-    // Step 1: collect generic class and function templates
+    // Step 1: collect generic class and function templates.
+    // Recurse into NamespaceDecl so templates inside imported stdlib files are found.
     std::unordered_map<std::string, const ClassDecl*>    generic_classes;
     std::unordered_map<std::string, const FunctionDecl*> generic_funcs;
 
-    for (const auto& dp : prog.decls) {
-        if (auto* c = dynamic_cast<const ClassDecl*>(dp.get()))
-            if (!c->type_params.empty()) generic_classes[c->name] = c;
-        if (auto* f = dynamic_cast<const FunctionDecl*>(dp.get()))
-            if (!f->type_params.empty()) generic_funcs[f->name] = f;
-    }
+    std::function<void(const DeclList&)> collect_templates;
+    collect_templates = [&](const DeclList& decls) {
+        for (const auto& dp : decls) {
+            if (auto* c = dynamic_cast<const ClassDecl*>(dp.get()))
+                if (!c->type_params.empty()) generic_classes[c->name] = c;
+            if (auto* f = dynamic_cast<const FunctionDecl*>(dp.get()))
+                if (!f->type_params.empty()) generic_funcs[f->name] = f;
+            if (auto* ns = dynamic_cast<const NamespaceDecl*>(dp.get()))
+                collect_templates(ns->decls);
+        }
+    };
+    collect_templates(prog.decls);
 
     if (generic_classes.empty() && generic_funcs.empty()) return;
 
@@ -678,6 +692,21 @@ void expand_generics(ast::Program& prog, Driver& driver) {
         if (auto* f = dynamic_cast<const FunctionDecl*>(dp.get()))
             is_generic = !f->type_params.empty();
         if (!is_generic) result.push_back(std::move(dp));
+    }
+    // Also strip generic templates from inside namespaces (e.g. imported stdlib files).
+    for (auto& dp : result) {
+        if (auto* ns = dynamic_cast<NamespaceDecl*>(dp.get())) {
+            DeclList kept;
+            for (auto& nd : ns->decls) {
+                bool is_ns_generic = false;
+                if (auto* c = dynamic_cast<const ClassDecl*>(nd.get()))
+                    is_ns_generic = !c->type_params.empty();
+                if (auto* f = dynamic_cast<const FunctionDecl*>(nd.get()))
+                    is_ns_generic = !f->type_params.empty();
+                if (!is_ns_generic) kept.push_back(std::move(nd));
+            }
+            ns->decls = std::move(kept);
+        }
     }
     prog.decls = std::move(result);
 }
