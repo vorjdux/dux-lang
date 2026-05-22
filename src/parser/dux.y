@@ -333,18 +333,18 @@ class_decl
     ;
 
 opt_base_list
-    : %empty
-    | LPAREN base_list RPAREN         { $$ = std::move($2); }
+    : %empty                             { $$ = std::vector<BaseClass>(); }
+    | LPAREN base_list RPAREN            { $$ = std::move($2); }
     ;
 
 class_body_or_semi
-    : SEMI
-    | LBRACE class_body RBRACE        { $$ = std::move($2); }
+    : SEMI                               { $$ = std::vector<ClassMember>(); }
+    | LBRACE class_body RBRACE           { $$ = std::move($2); }
     ;
 
 base_list
-    : %empty
-    | base_list_ne                    { $$ = std::move($1); }
+    : %empty                             { $$ = std::vector<BaseClass>(); }
+    | base_list_ne                       { $$ = std::move($1); }
     ;
 
 base_list_ne
@@ -366,7 +366,7 @@ class_ref
     ;
 
 class_body
-    : %empty
+    : %empty          { $$ = std::vector<ClassMember>(); }
     | class_members   { $$ = std::move($1); }
     ;
 
@@ -424,7 +424,7 @@ interface_decl
     ;
 
 interface_members
-    : %empty
+    : %empty                              { $$ = std::vector<ClassMember>(); }
     | interface_members SEMI              { $$ = std::move($1); }
     | interface_members interface_member
         { $1.push_back(std::move($2)); $$ = std::move($1); }
@@ -492,7 +492,7 @@ ctor_decl
     ;
 
 opt_init_list
-    : %empty
+    : %empty          { $$ = std::vector<InitEntry>(); }
     | COLON init_list { $$ = std::move($2); }
     ;
 
@@ -544,7 +544,7 @@ field_decl
    ===================================================================== */
 
 decorators
-    : %empty
+    : %empty                { $$ = std::vector<Decorator>(); }
     | decorators decorator  { $1.push_back(std::move($2)); $$ = std::move($1); }
     ;
 
@@ -571,7 +571,7 @@ decorator_name
    ===================================================================== */
 
 param_list
-    : %empty
+    : %empty          { $$ = std::vector<Param>(); }
     | param_list_ne   { $$ = std::move($1); }
     ;
 
@@ -737,7 +737,7 @@ switch_stmt
     ;
 
 switch_cases
-    : %empty
+    : %empty                          { $$ = std::vector<SwitchCase>(); }
     | switch_cases switch_case        { $1.push_back(std::move($2)); $$ = std::move($1); }
     ;
 
@@ -784,6 +784,8 @@ break_stmt
 continue_stmt
     : KW_CONTINUE SEMI
         { auto s = mk<ContinueStmt>(); s->loc = sl(@$, driver); $$ = std::move(s); }
+    | KW_CONTINUE AMP IDENT SEMI
+        { auto s = mk<ContinueStmt>(); s->loc = sl(@$, driver); s->label = $3; $$ = std::move(s); }
     ;
 
 /* -- Assert ------------------------------------------------------------ */
@@ -955,7 +957,7 @@ dict_lit
     ;
 
 dict_pairs
-    : %empty
+    : %empty                              { $$ = PairList(); }
     | expr COLON expr                     { $$.emplace_back(std::move($1), std::move($3)); }
     | dict_pairs COMMA expr COLON expr    { $1.emplace_back(std::move($3), std::move($5)); $$ = std::move($1); }
     | dict_pairs COMMA                    { $$ = std::move($1); }
