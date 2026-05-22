@@ -197,7 +197,18 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
     ClassLayout layout;
     layout.class_name = c.name;
 
-    // Collect fields
+    // Inherit parent class fields first (single-inheritance: first class base).
+    // Interfaces have no fields and are not in layouts_, so they are skipped.
+    for (const auto& base : c.bases) {
+        auto pit = layouts_.find(base.name);
+        if (pit == layouts_.end()) continue; // interface or forward-declared class
+        if (layout.parent_name.empty()) layout.parent_name = base.name;
+        for (const auto& pf : pit->second.fields)
+            layout.fields.push_back(pf); // preserve parent indices
+        break; // single inheritance: only the first class base
+    }
+
+    // Collect this class's own fields, starting after inherited ones.
     for (const auto& m : c.members) {
         if (!m.decl) continue;
         if (auto* fd = dynamic_cast<const ast::FieldDecl*>(m.decl.get())) {
@@ -210,7 +221,7 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
         }
     }
 
-    // Build LLVM struct: { ptr vtable, field0, field1, ... }
+    // Build LLVM struct: { ptr vtable, inherited_fields..., own_fields... }
     std::vector<llvm::Type*> field_types;
     field_types.push_back(ptr_type()); // vtable pointer
     for (const auto& f : layout.fields)
@@ -397,6 +408,28 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
     // Register fn-typed params for closure dispatch
     for (const auto& p : f.params)
         if (p.type.name == "__fn") fn_var_types_[p.name] = p.type;
+
+    // Call base class constructors from the initializer list (e.g. Dog(a) : Animal(a))
+    if (f.is_ctor && !f.init_list.empty()) {
+        Value* this_slot = env_lookup("this");
+        if (this_slot) {
+            Value* this_ptr = builder_->CreateLoad(ptr_type(), this_slot, "this");
+            for (const auto& ie : f.init_list) {
+                Function* base_fn = mod_->getFunction(mangle(ie.field, ie.field));
+                if (base_fn) {
+                    std::vector<Value*> args = {this_ptr};
+                    auto pit = std::next(base_fn->arg_begin());
+                    for (std::size_t i = 0;
+                         i < ie.args.size() && pit != base_fn->arg_end(); ++i, ++pit) {
+                        Value* av = gen_expr(*ie.args[i]);
+                        av = coerce_to_llvm_type(av, pit->getType());
+                        args.push_back(av);
+                    }
+                    emit_call(base_fn, args);
+                }
+            }
+        }
+    }
 
     // Save context
     auto saved_fn   = current_fn_;
@@ -639,7 +672,7 @@ void Codegen::process_import(const ast::ImportDecl& imp) {
     const std::string& full = imp.path;
     std::string mod = full.substr(full.rfind('.') == std::string::npos ? 0 : full.rfind('.') + 1);
 
-    if (stdlib_table().count(mod) && imp.path.find('.') == std::string::npos) {
+    if (stdlib_table().count(mod)) {
         stdlib_imports_.insert(mod);
         // Pre-declare all stdlib functions so they appear in IR
         const auto& fns = stdlib_table().at(mod);
@@ -1496,6 +1529,13 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
         return builder_->CreateCall(strcat_fn, {L, R});
     }
 
+    // List + list via rt call
+    if (op == "+" && (lt == TR::TID_LIST || rt == TR::TID_LIST)) {
+        auto* concat_fn = get_or_declare_rt("duxrt_list_concat",
+            ptr_type(), {ptr_type(), ptr_type()});
+        return builder_->CreateCall(concat_fn, {L, R});
+    }
+
     // Arithmetic
     if (op == "+")  return is_fp ? builder_->CreateFAdd(L, R) : builder_->CreateAdd(L, R);
     if (op == "-")  return is_fp ? builder_->CreateFSub(L, R) : builder_->CreateSub(L, R);
@@ -1678,6 +1718,21 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
         cls_name = resolve_class_name(*mem->object, obj_tid);
         std::string mangled = mangle(cls_name, mem->member);
         Function* fn = mod_->getFunction(mangled);
+
+        // Walk the inheritance chain when the method is not defined in the
+        // declared class (inherited method dispatch).
+        if (!fn) {
+            std::string cur = cls_name;
+            while (!cur.empty()) {
+                auto lit = layouts_.find(cur);
+                if (lit == layouts_.end()) break;
+                cur = lit->second.parent_name;
+                if (cur.empty()) break;
+                fn = mod_->getFunction(mangle(cur, mem->member));
+                if (fn) break;
+            }
+        }
+
         if (fn) {
             std::vector<Value*> args = {obj};
             auto param_it = std::next(fn->arg_begin()); // skip 'this'
@@ -2500,7 +2555,17 @@ Value* Codegen::rt_println(Value* v, TypeId t) {
         else if (v->getType()->isFloatingPointTy()) t = TR::TID_DOUBLE;
         else t = TR::TID_STR;
     }
-    if (t == TR::TID_INT || t == TR::TID_LONG || t == TR::TID_BOOL) {
+    if (t == TR::TID_BOOL) {
+        // Print "true" or "false".  CreateSExt on i1 would give -1 for true.
+        llvm::Type* i1 = llvm::Type::getInt1Ty(*ctx_);
+        Value* cond = (v->getType() == i1)
+            ? v : builder_->CreateTrunc(v, i1);
+        Value* msg = builder_->CreateSelect(cond, str_literal("true"), str_literal("false"));
+        auto* sfn = get_or_declare_rt("duxrt_println_str",
+            llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+        return builder_->CreateCall(sfn, {msg});
+    }
+    if (t == TR::TID_INT || t == TR::TID_LONG) {
         auto* fn = get_or_declare_rt("duxrt_println_int",
             llvm::Type::getVoidTy(*ctx_), {llvm::Type::getInt64Ty(*ctx_)});
         Value* v64 = v->getType() == llvm::Type::getInt64Ty(*ctx_)
