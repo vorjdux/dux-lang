@@ -264,6 +264,8 @@ namespace_body
 dotted_name
     : IDENT                     { $$ = $1; }
     | KW_STR                    { $$ = "str"; }
+    | KW_LIST                   { $$ = "list"; }
+    | KW_DICT                   { $$ = "dict"; }
     | dotted_name DOT IDENT     { $$ = $1 + '.' + $3; }
     ;
 
