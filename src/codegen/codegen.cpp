@@ -280,11 +280,20 @@ void Codegen::declare_functions(const ast::DeclList& decls,
     }
 }
 
+// Returns the canonical mangled name for a class method or special member.
+// Destructors get a dedicated symbol <Class>___dtor to avoid collision with
+// the constructor which also carries the class name.
+static std::string mangle_class_member(const std::string& cls,
+                                       const ast::FunctionDecl& f) {
+    if (f.is_dtor) return cls + "___dtor";
+    return cls + "__" + f.name;
+}
+
 void Codegen::declare_class_methods(const ast::ClassDecl& c) {
     for (const auto& m : c.members) {
         if (!m.decl) continue;
         if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
-            std::string mangled = mangle(c.name, f->name);
+            std::string mangled = mangle_class_member(c.name, *f);
             if (mod_->getFunction(mangled)) continue;
 
             // For methods: prepend 'this' pointer as first parameter
@@ -305,8 +314,8 @@ void Codegen::declare_class_methods(const ast::ClassDecl& c) {
             for (auto it = std::next(fn->arg_begin()); it != fn->arg_end(); ++it)
                 it->setName(f->params[idx++ - 1].name);
 
-            // Record in layout
-            if (layouts_.count(c.name)) {
+            // Record in layout (non-ctor/dtor methods only)
+            if (!f->is_ctor && !f->is_dtor && layouts_.count(c.name)) {
                 for (auto& mi : layouts_[c.name].methods) {
                     if (mi.name == f->name) { mi.fn = fn; break; }
                 }
@@ -377,8 +386,12 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
 
     gen_stmts(f.body->body);
 
-    // Emit implicit return if the block doesn't have a terminator
+    // Emit implicit return if the block doesn't have a terminator.
+    // RAII cleanup (class dtors + str releases) must happen before the
+    // return instruction, just as gen_return() does for explicit returns.
     if (!builder_->GetInsertBlock()->getTerminator()) {
+        emit_all_obj_dtors();
+        emit_all_str_releases();
         if (current_ret_type_ == TR::TID_VOID)
             builder_->CreateRetVoid();
         else
@@ -432,7 +445,7 @@ void Codegen::gen_class(const ast::ClassDecl& c) {
                 driver_.warning(d.loc, "decorator '@" + d.name + "' is not yet implemented and will be ignored");
         }
         if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
-            std::string mangled = mangle(c.name, f->name);
+            std::string mangled = mangle_class_member(c.name, *f);
             gen_func(*f, mangled, cls_type);
         }
     }
@@ -1140,7 +1153,9 @@ void Codegen::gen_return(const ast::ReturnStmt& s) {
         if (current_ret_type_ == TR::TID_STR)
             val = maybe_retain_str(val);
     }
-    // Release all tracked str variables across all active scopes before returning.
+    // Destroy class instances and release str variables across all active scopes.
+    // Objects first (they may own str fields), then bare str locals.
+    emit_all_obj_dtors();
     emit_all_str_releases();
     if (val)
         builder_->CreateRet(val);
@@ -1203,13 +1218,47 @@ void Codegen::gen_assert(const ast::AssertStmt& s) {
 }
 
 void Codegen::gen_delete(const ast::DeleteStmt& s) {
-    Value* ptr = gen_expr(*s.expr);
     TypeId tid = type_id_of(*s.expr);
     if (tid == TR::TID_STR) {
-        /* Strings are refcounted — must go through release, not raw free,
-           so the ext heap buffer is freed for long strings. */
+        // Strings are refcounted — must release, not raw free.
+        Value* ptr = gen_expr(*s.expr);
         emit_str_release(ptr);
+        return;
+    }
+
+    // For class instances: call the destructor then free, and null the slot
+    // so that the RAII cleanup in env_pop() skips the already-freed object.
+    Value* slot = lvalue_of(*s.expr);
+    if (slot) {
+        Value* ptr = builder_->CreateLoad(ptr_type(), slot, "del.obj");
+        // Null guard (safe to delete null)
+        Function* fn   = builder_->GetInsertBlock()->getParent();
+        auto* call_bb  = BasicBlock::Create(*ctx_, "del.call", fn);
+        auto* end_bb   = BasicBlock::Create(*ctx_, "del.end",  fn);
+        Value* null_v  = llvm::ConstantPointerNull::get(
+                             llvm::cast<llvm::PointerType>(ptr_type()));
+        builder_->CreateCondBr(
+            builder_->CreateICmpEQ(ptr, null_v, "del.isnull"),
+            end_bb, call_bb);
+
+        builder_->SetInsertPoint(call_bb);
+        std::string cls_name = resolve_class_name(*s.expr, tid);
+        if (!cls_name.empty()) {
+            std::string dtor_sym = cls_name + "___dtor";
+            if (Function* dtor_fn = mod_->getFunction(dtor_sym))
+                builder_->CreateCall(dtor_fn, {ptr});
+        }
+        auto* free_fn = get_or_declare_rt("free",
+            llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+        builder_->CreateCall(free_fn, {ptr});
+        // Null out the slot to prevent a second dtor call from RAII cleanup.
+        builder_->CreateStore(null_v, slot);
+        builder_->CreateBr(end_bb);
+
+        builder_->SetInsertPoint(end_bb);
     } else {
+        // Fallback: cannot get lvalue; just free without null-guard.
+        Value* ptr = gen_expr(*s.expr);
         auto* free_fn = get_or_declare_rt("free",
             llvm::Type::getVoidTy(*ctx_), {ptr_type()});
         builder_->CreateCall(free_fn, {ptr});
@@ -1853,13 +1902,27 @@ TypeId Codegen::type_id_of(const ast::Expr& e) const {
 void Codegen::env_push() {
     env_.emplace_back();
     str_scopes_.emplace_back();
+    obj_scopes_.emplace_back();
 }
 
 void Codegen::env_pop() {
-    // Emit releases for str variables going out of scope (only on live paths).
+    auto* bb = builder_->GetInsertBlock();
+    bool live = bb && !bb->getTerminator();
+
+    // Call dtors for class instances in LIFO order.
+    if (!obj_scopes_.empty()) {
+        if (live) {
+            auto& scope = obj_scopes_.back();
+            for (int i = static_cast<int>(scope.size()) - 1; i >= 0; --i)
+                emit_dtor(scope[static_cast<std::size_t>(i)].alloca,
+                          scope[static_cast<std::size_t>(i)].class_name);
+        }
+        obj_scopes_.pop_back();
+    }
+
+    // Emit releases for str variables going out of scope.
     if (!str_scopes_.empty()) {
-        auto* bb = builder_->GetInsertBlock();
-        if (bb && !bb->getTerminator()) {
+        if (live) {
             for (Value* alloca : str_scopes_.back()) {
                 Value* v = builder_->CreateLoad(ptr_type(), alloca, "str.rel");
                 emit_str_release(v);
@@ -1872,8 +1935,55 @@ void Codegen::env_pop() {
 
 void Codegen::env_define(const std::string& name, Value* alloca, TypeId tid) {
     if (!env_.empty()) env_.back()[name] = alloca;
-    if (tid == TR::TID_STR && !str_scopes_.empty())
+    if (tid == TR::TID_STR && !str_scopes_.empty()) {
         str_scopes_.back().push_back(alloca);
+        return;
+    }
+    // Register class instances that have a destructor for automatic cleanup.
+    if (tid > TR::TID_NULL && !obj_scopes_.empty()) {
+        const std::string& cls_name = types_.name_of(tid);
+        if (!cls_name.empty() && mod_->getFunction(cls_name + "___dtor"))
+            obj_scopes_.back().push_back({alloca, cls_name});
+    }
+}
+
+void Codegen::emit_dtor(Value* alloca, const std::string& class_name) {
+    auto* bb = builder_->GetInsertBlock();
+    if (!bb || bb->getTerminator()) return;
+
+    Value* obj_ptr = builder_->CreateLoad(ptr_type(), alloca, "dtor.obj");
+
+    // Null guard: skip if the pointer is already null (e.g. after explicit delete).
+    Function* fn      = bb->getParent();
+    auto* call_bb     = BasicBlock::Create(*ctx_, "dtor.call", fn);
+    auto* end_bb      = BasicBlock::Create(*ctx_, "dtor.end",  fn);
+    Value* null_v     = llvm::ConstantPointerNull::get(
+                            llvm::cast<llvm::PointerType>(ptr_type()));
+    Value* is_null    = builder_->CreateICmpEQ(obj_ptr, null_v, "dtor.isnull");
+    builder_->CreateCondBr(is_null, end_bb, call_bb);
+
+    builder_->SetInsertPoint(call_bb);
+    // Call the user-defined destructor if one was declared.
+    std::string dtor_sym = class_name + "___dtor";
+    if (Function* dtor_fn = mod_->getFunction(dtor_sym))
+        builder_->CreateCall(dtor_fn, {obj_ptr});
+    // Free the heap-allocated object.
+    auto* free_fn = get_or_declare_rt("free", llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+    builder_->CreateCall(free_fn, {obj_ptr});
+    builder_->CreateBr(end_bb);
+
+    builder_->SetInsertPoint(end_bb);
+}
+
+void Codegen::emit_all_obj_dtors() {
+    auto* bb = builder_->GetInsertBlock();
+    if (!bb || bb->getTerminator()) return;
+    for (int i = static_cast<int>(obj_scopes_.size()) - 1; i >= 0; --i) {
+        auto& scope = obj_scopes_[static_cast<std::size_t>(i)];
+        for (int j = static_cast<int>(scope.size()) - 1; j >= 0; --j)
+            emit_dtor(scope[static_cast<std::size_t>(j)].alloca,
+                      scope[static_cast<std::size_t>(j)].class_name);
+    }
 }
 
 Value* Codegen::make_alloca(llvm::Type* t, const std::string& name) {
