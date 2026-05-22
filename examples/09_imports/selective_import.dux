@@ -1,0 +1,26 @@
+# Selective imports: pick only what you need from a module.
+# Syntax:  import { name1, name2 } from module_path
+#
+# The imported names enter the global scope directly.
+
+import { int_to_str, repeat, pad_left } from lib.strings
+import { gcd, lcm, clamp } from lib.math_extra
+
+void main() {
+    # String helpers from lib/strings.dux
+    println(int_to_str(42))            # 42
+    println(int_to_str(-17))           # -17
+    println(repeat("=-", 10))          # =-=-=-=-=-=-=-=-=-=-
+    println(pad_left("hello", 10))     #      hello
+
+    # Math helpers from lib/math_extra.dux
+    println(gcd(48, 18))               # 6
+    println(gcd(100, 75))              # 25
+
+    println(lcm(4, 6))                 # 12
+    println(lcm(7, 5))                 # 35
+
+    println(clamp(15, 0, 10))          # 10
+    println(clamp(-3, 0, 10))          # 0
+    println(clamp(5,  0, 10))          # 5
+}

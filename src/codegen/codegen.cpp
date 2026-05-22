@@ -469,10 +469,14 @@ void Codegen::emit_main_wrapper() {
 }
 
 void Codegen::gen_namespace(const ast::NamespaceDecl& ns) {
+    if (ns.is_package_decl) return;
     build_layouts(ns.decls);
     declare_functions(ns.decls, ns.name);
+    auto saved_ns   = current_namespace_;
+    current_namespace_ = ns.name;
     for (const auto& d : ns.decls) gen_decl(*d, ns.name);
     gen_stmts(ns.stmts);
+    current_namespace_ = saved_ns;
 }
 
 // ─── Optimization pipeline (#37) ─────────────────────────────────────────────
@@ -606,7 +610,7 @@ void Codegen::process_import(const ast::ImportDecl& imp) {
     const std::string& full = imp.path;
     std::string mod = full.substr(full.rfind('.') == std::string::npos ? 0 : full.rfind('.') + 1);
 
-    if (stdlib_table().count(mod)) {
+    if (stdlib_table().count(mod) && imp.path.find('.') == std::string::npos) {
         stdlib_imports_.insert(mod);
         // Pre-declare all stdlib functions so they appear in IR
         const auto& fns = stdlib_table().at(mod);
@@ -615,8 +619,15 @@ void Codegen::process_import(const ast::ImportDecl& imp) {
             for (auto tid : sf.params) ptypes.push_back(lower_type(tid));
             get_or_declare_rt(sf.rt_sym, lower_type(sf.ret), ptypes);
         }
+    } else if (!imp.global_scope) {
+        // Namespace import (full, selective, or glob): calls use  ns.fn()  syntax.
+        // Register the accessor name (alias if set, else last path component) so
+        // try_stdlib_call can route  ns.fn()  →  mangle(ns, fn).
+        const std::string ns_name = imp.alias.empty() ? mod : imp.alias;
+        user_module_imports_.insert(ns_name);
     }
-    // File-based imports would be handled here in a future pass
+    // Selective global imports (global_scope=true) inject into global scope —
+    // no routing table needed; they resolve as plain function calls.
 }
 
 Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
@@ -626,6 +637,26 @@ Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
     if (!id) return nullptr;
 
     const std::string& mod = id->name;
+
+    // ── User file-based module: mod.fn(args) → mangle(mod, fn) ──────────
+    if (user_module_imports_.count(mod)) {
+        std::string mangled = mangle(mod, mem->member);
+        Function* fn = mod_->getFunction(mangled);
+        if (fn) {
+            std::vector<Value*> args;
+            auto param_it = fn->arg_begin();
+            for (std::size_t i = 0; i < e.args.size() && param_it != fn->arg_end();
+                 ++i, ++param_it) {
+                Value* v = gen_expr(*e.args[i]);
+                v = coerce_to_llvm_type(v, param_it->getType());
+                args.push_back(v);
+            }
+            return builder_->CreateCall(fn, args);
+        }
+        return llvm::ConstantPointerNull::get(
+            llvm::cast<llvm::PointerType>(ptr_type()));
+    }
+
     if (!stdlib_imports_.count(mod)) return nullptr;
 
     auto it_mod = stdlib_table().find(mod);
@@ -1446,8 +1477,12 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
             return builder_->CreateCall(fn, {arg});
         }
 
-        // Look up a declared function
+        // Look up a declared function — also try current namespace prefix
+        // so that intra-namespace calls (e.g. factorial calling itself when
+        // compiled as mathutils__factorial) resolve correctly.
         Function* fn = mod_->getFunction(name);
+        if (!fn && !current_namespace_.empty())
+            fn = mod_->getFunction(mangle(current_namespace_, name));
         if (!fn) {
             return llvm::ConstantPointerNull::get(
                 llvm::cast<llvm::PointerType>(ptr_type()));

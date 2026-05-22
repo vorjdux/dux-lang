@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 #include "ast/ast.hpp"
 
@@ -18,6 +19,14 @@ public:
     // Parse file (or stdin when filename is empty or "-").
     // Returns 0 on success, non-zero on failure.
     int parse(const std::string& filename);
+
+    // Resolve file-based imports in prog.
+    // base_dir  — directory of the file that owns prog (for relative resolution).
+    // visited   — already-resolved canonical paths (cycle guard), shared across recursion.
+    // Emits warnings to stderr for missing modules; never aborts on import errors.
+    void resolve_imports(dux::ast::Program& prog,
+                         const std::string& base_dir,
+                         std::unordered_set<std::string>& visited);
 
     // Parsed result — valid after a successful parse().
     std::unique_ptr<dux::ast::Program> result;
