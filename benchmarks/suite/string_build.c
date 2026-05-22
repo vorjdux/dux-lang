@@ -9,7 +9,7 @@ int main(void) {
         buf[i] = 'x';
         buf[i+1] = '\0';
     }
-    printf("%d\n", N);
+    printf("%zu\n", strlen(buf));
     free(buf);
     return 0;
 }
