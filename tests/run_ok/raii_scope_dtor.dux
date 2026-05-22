@@ -1,0 +1,25 @@
+class Tracked(object) {
+    public:
+
+    Tracked() {
+        println("created")
+    }
+
+    ~Tracked() {
+        println("destroyed")
+    }
+}
+
+void scoped() {
+    Tracked t = new Tracked()
+    println("in scope")
+}
+
+void main() {
+    scoped()
+    println("after scoped")
+
+    Tracked a = new Tracked()
+    Tracked b = new Tracked()
+    println("both live")
+}
