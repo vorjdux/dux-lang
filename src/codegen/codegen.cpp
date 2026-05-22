@@ -1360,8 +1360,14 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
         return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_),
                                       static_cast<int32_t>(p->value), true);
 
+    if (auto* p = dynamic_cast<const ast::LongLitExpr*>(&e))
+        return llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), p->value, true);
+
     if (auto* p = dynamic_cast<const ast::FloatLitExpr*>(&e))
         return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*ctx_), p->value);
+
+    if (auto* p = dynamic_cast<const ast::RealLitExpr*>(&e))
+        return llvm::ConstantFP::get(llvm::Type::getFloatTy(*ctx_), p->value);
 
     if (auto* p = dynamic_cast<const ast::StringLitExpr*>(&e)) {
         return str_literal(p->value);

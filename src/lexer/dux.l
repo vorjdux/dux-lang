@@ -149,11 +149,24 @@ ALNUM   [a-zA-Z0-9_]
 "object"     { need_semi = false; return yy::parser::make_KW_OBJECT(loc); }
 "ptr"        { need_semi = false; return yy::parser::make_KW_PTR(loc);    }
 
+{DIGIT}+"."{DIGIT}*"f"|"."{DIGIT}+"f"  {
+    need_semi = true;
+    std::string s(yytext); s.pop_back();
+    return yy::parser::make_REAL_LIT(std::stod(s), loc);
+}
+{DIGIT}+"."{DIGIT}*"d"|"."{DIGIT}+"d"  {
+    need_semi = true;
+    std::string s(yytext); s.pop_back();
+    return yy::parser::make_FLOAT_LIT(std::stod(s), loc);
+}
 {DIGIT}+"."{DIGIT}+|"."{DIGIT}+  {
     need_semi = true;
     return yy::parser::make_FLOAT_LIT(std::stod(yytext), loc);
 }
-
+{DIGIT}+"i"  { need_semi = true; return yy::parser::make_INT_LIT(std::stoll(yytext), loc); }
+{DIGIT}+"l"  { need_semi = true; return yy::parser::make_LONG_LIT(std::stoll(yytext), loc); }
+{DIGIT}+"d"  { need_semi = true; return yy::parser::make_FLOAT_LIT(static_cast<double>(std::stoll(yytext)), loc); }
+{DIGIT}+"f"  { need_semi = true; return yy::parser::make_REAL_LIT(static_cast<double>(std::stoll(yytext)), loc); }
 {DIGIT}+  {
     need_semi = true;
     return yy::parser::make_INT_LIT(std::stoll(yytext), loc);
