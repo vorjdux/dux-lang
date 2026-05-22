@@ -126,6 +126,8 @@ ALNUM   [a-zA-Z0-9_]
 "fn"         { need_semi = false; return yy::parser::make_KW_FN(loc);        }
 "defer"      { need_semi = false; return yy::parser::make_KW_DEFER(loc);     }
 "throw"      { need_semi = false; return yy::parser::make_KW_THROW(loc);     }
+"unsafe"     { need_semi = false; return yy::parser::make_KW_UNSAFE(loc);    }
+"extern"     { need_semi = false; return yy::parser::make_KW_EXTERN(loc);    }
 "and"        { need_semi = false; return yy::parser::make_KW_AND(loc);       }
 "or"         { need_semi = false; return yy::parser::make_KW_OR(loc);        }
 "not"        { need_semi = false; return yy::parser::make_KW_NOT(loc);       }
@@ -144,6 +146,7 @@ ALNUM   [a-zA-Z0-9_]
 "dict"       { need_semi = false; return yy::parser::make_KW_DICT(loc);   }
 "tuple"      { need_semi = false; return yy::parser::make_KW_TUPLE(loc);  }
 "object"     { need_semi = false; return yy::parser::make_KW_OBJECT(loc); }
+"ptr"        { need_semi = false; return yy::parser::make_KW_PTR(loc);    }
 
 {DIGIT}+"."{DIGIT}+|"."{DIGIT}+  {
     need_semi = true;

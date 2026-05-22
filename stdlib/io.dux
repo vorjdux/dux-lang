@@ -1,6 +1,15 @@
-// io — input/output module
-// Usage: import io
+extern "C" void duxrt_println_str(ptr s)
+extern "C" void duxrt_print_str(ptr s)
+extern "C" ptr duxrt_readline()
 
-void println(str s)
-void print(str s)
-str readline()
+void println(str s) {
+    duxrt_println_str(s)
+}
+
+void print(str s) {
+    duxrt_print_str(s)
+}
+
+str readline() {
+    return duxrt_readline()
+}

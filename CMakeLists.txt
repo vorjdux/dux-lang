@@ -111,12 +111,13 @@ target_include_directories(dux PRIVATE
     ${LLVM_INCLUDE_DIRS}
 )
 
-# Bake duxrt paths into the compiler so --compile works from any directory
+# Bake duxrt paths and stdlib dir into the compiler
 target_compile_definitions(dux PRIVATE
     DUX_VERSION="${PROJECT_VERSION}"
     ${LLVM_DEFINITIONS}
     DUXRT_LIB_PATH="${DUXRT_LIB_PATH}"
     DUXRT_INCLUDE_DIR="${DUXRT_INCLUDE_DIR}"
+    DUX_STDLIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
 )
 
 target_link_libraries(dux PRIVATE ${LLVM_LIBS})
