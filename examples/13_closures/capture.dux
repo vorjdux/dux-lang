@@ -6,22 +6,40 @@ int apply(fn(int) -> int f, int x) {
 }
 
 int main() {
-    # Lambda stored in a variable — auto + explicit return type
+    # Style A: return type inside the lambda, auto on the left
     auto sq = fn(int n) -> int => n * n
     println(sq(5))
     println(sq(7))
 
-    # Closure capturing a local variable
+    # Style B: return type as the variable prefix, lambda is untyped
+    int sq2 = fn(int n) => n * n
+    println(sq2(5))
+    println(sq2(7))
+
+    # Block body — Style A
+    auto cube = fn(int n) -> int {
+        return n * n * n
+    }
+    println(cube(3))
+
+    # Block body — Style B
+    int cube2 = fn(int n) {
+        return n * n * n
+    }
+    println(cube2(3))
+
+    # Closures capturing a local variable
     int base = 100
     auto addBase = fn(int n) -> int => n + base
+    int  addBase2 = fn(int n) => n + base
     println(addBase(7))
-    println(addBase(50))
+    println(addBase2(7))
 
-    # Passing a lambda to a higher-order function
+    # Passing lambdas to higher-order functions
     println(apply(sq, 4))
-    println(apply(addBase, 3))
+    println(apply(sq2, 4))
 
-    # Multi-statement lambda body (block form; closing } must be on its own line)
+    # Multi-statement block body
     auto greet = fn(str name) -> void {
         str msg = "hello, " + name
         println(msg)
@@ -29,18 +47,11 @@ int main() {
     greet("world")
     greet("dux")
 
-    # Closures capturing different locals
-    int offset10 = 10
-    int offset20 = 20
-    auto add10 = fn(int n) -> int => n + offset10
-    auto add20 = fn(int n) -> int => n + offset20
-    println(add10(5))
-    println(add20(5))
-
     # Two-argument lambda
     auto add = fn(int x, int y) -> int => x + y
+    int  add2 = fn(int x, int y) => x + y
     println(add(3, 4))
-    println(add(10, 20))
+    println(add2(3, 4))
 
     return 0
 }

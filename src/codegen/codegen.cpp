@@ -1250,7 +1250,8 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
         if (init_ptr) {
             init_val = gen_expr(*init_ptr);
             TypeId init_tid = type_id_of(*init_ptr);
-            if (var_tid == TR::TID_UNKNOWN) var_tid = init_tid;
+            bool is_lambda = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get()) != nullptr;
+            if (var_tid == TR::TID_UNKNOWN || is_lambda) var_tid = init_tid;
             init_val = coerce(init_val, init_tid, var_tid);
         }
         if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;
