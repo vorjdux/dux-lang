@@ -30,6 +30,7 @@ struct TypeExpr {
     SourceLoc   loc;
     std::vector<TypeExpr> fn_params;  // for function types: fn(T...) -> R
     std::string           fn_ret;     // for function types: return type name
+    std::vector<TypeExpr> type_args;  // for generic instantiations: Stack<int>
 };
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
@@ -291,6 +292,7 @@ struct InitEntry {
 struct FunctionDecl final : Decl {
     TypeExpr                   return_type;
     std::string                name;
+    std::vector<std::string>   type_params;  // generic type params, e.g. {"T"}
     std::vector<Param>         params;
     std::optional<std::string> modifier;   // "get" or "set"
     std::optional<BlockStmt>   body;
@@ -321,6 +323,7 @@ struct BaseClass {
 struct ClassDecl final : Decl {
     std::vector<Decorator>   decorators;
     std::string              name;
+    std::vector<std::string> type_params;  // generic type params, e.g. {"T"}
     std::vector<BaseClass>   bases;
     std::vector<ClassMember> members;
     void accept(Visitor& v) const override;

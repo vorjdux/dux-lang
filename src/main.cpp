@@ -10,6 +10,7 @@
 
 #include "ast/printer.hpp"
 #include "driver/driver.hpp"
+#include "sema/generics.hpp"
 #include "sema/sema.hpp"
 #include "codegen/codegen.hpp"
 
@@ -164,6 +165,9 @@ int main(int argc, char** argv) {
         }
         driver.resolve_imports(*driver.result, base_dir, visited);
     }
+
+    // Expand generic class/function instantiations before sema
+    dux::sema::expand_generics(*driver.result);
 
     // Always run sema when codegen / compile is requested
     bool need_sema = opts.check || opts.emit_ir || opts.emit_obj || opts.compile;

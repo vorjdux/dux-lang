@@ -99,6 +99,7 @@ add_executable(dux
     src/sema/types.cpp
     src/sema/symbol.cpp
     src/sema/sema.cpp
+    src/sema/generics.cpp
     src/codegen/codegen.cpp
     ${FLEX_DuxLexer_OUTPUTS}
     ${BISON_DuxParser_OUTPUTS}
