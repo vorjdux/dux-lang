@@ -258,6 +258,11 @@ struct ThrowStmt final : Stmt {
     void accept(Visitor& v) const override;
 };
 
+struct UnsafeStmt final : Stmt {
+    StmtList body;
+    void accept(Visitor& v) const override;
+};
+
 // ─── Declarations ────────────────────────────────────────────────────────────
 
 struct Decl : Node {};
@@ -351,6 +356,14 @@ struct NamespaceDecl final : Decl {
     void accept(Visitor& v) const override;
 };
 
+struct ExternDecl final : Decl {
+    std::string        abi;     // "C"
+    TypeExpr           ret;
+    std::string        name;
+    std::vector<Param> params;
+    void accept(Visitor& v) const override;
+};
+
 // ─── Program ─────────────────────────────────────────────────────────────────
 
 struct Program final : Node {
@@ -401,6 +414,7 @@ struct Visitor {
     virtual void visit(const LabeledStmt&)   = 0;
     virtual void visit(const DeferStmt&)     = 0;
     virtual void visit(const ThrowStmt&)     = 0;
+    virtual void visit(const UnsafeStmt&)    = 0;
 
     virtual void visit(const FunctionDecl&)  = 0;
     virtual void visit(const FieldDecl&)     = 0;
@@ -408,6 +422,7 @@ struct Visitor {
     virtual void visit(const InterfaceDecl&) = 0;
     virtual void visit(const ImportDecl&)    = 0;
     virtual void visit(const NamespaceDecl&) = 0;
+    virtual void visit(const ExternDecl&)    = 0;
 
     virtual void visit(const Program&)       = 0;
 };
