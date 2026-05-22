@@ -463,17 +463,6 @@ func_decl
             f->body         = std::move(*$7);
             $$ = std::move(f);
         }
-    | type_expr IDENT LPAREN param_list RPAREN opt_func_modifier block SEMI
-        {
-            auto f          = mk<FunctionDecl>();
-            f->loc          = sl(@$, driver);
-            f->return_type  = $1;
-            f->name         = $2;
-            f->params       = std::move($4);
-            f->modifier     = $6;
-            f->body         = std::move(*$7);
-            $$ = std::move(f);
-        }
     ;
 
 opt_func_modifier
@@ -490,17 +479,6 @@ opt_func_modifier
 
 ctor_decl
     : IDENT LPAREN param_list RPAREN opt_init_list block
-        {
-            auto f       = mk<FunctionDecl>();
-            f->loc       = sl(@$, driver);
-            f->name      = $1;
-            f->params    = std::move($3);
-            f->init_list = std::move($5);
-            f->body      = std::move(*$6);
-            f->is_ctor   = true;
-            $$ = std::move(f);
-        }
-    | IDENT LPAREN param_list RPAREN opt_init_list block SEMI
         {
             auto f       = mk<FunctionDecl>();
             f->loc       = sl(@$, driver);
@@ -532,15 +510,6 @@ init_entry
 
 dtor_decl
     : TILDE IDENT LPAREN RPAREN block
-        {
-            auto f     = mk<FunctionDecl>();
-            f->loc     = sl(@$, driver);
-            f->name    = $2;
-            f->body    = std::move(*$5);
-            f->is_dtor = true;
-            $$ = std::move(f);
-        }
-    | TILDE IDENT LPAREN RPAREN block SEMI
         {
             auto f     = mk<FunctionDecl>();
             f->loc     = sl(@$, driver);
@@ -689,8 +658,7 @@ block
     ;
 
 block_body
-    : %empty      { $$ = StmtList{}; }
-    | stmt_list   { $$ = std::move($1); }
+    : stmt_list   { $$ = std::move($1); }
     ;
 
 /* -- If ---------------------------------------------------------------- */
@@ -832,16 +800,10 @@ delete_stmt
 
 /* -- Variable declaration ---------------------------------------------- */
 var_decl_stmt
-    : KW_CONST type_expr var_decl_items SEMI
+    : type_expr var_decl_items SEMI
         {
             auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $2; v->is_const = true; v->decls = std::move($3);
-            $$ = std::move(v);
-        }
-    | type_expr var_decl_items SEMI
-        {
-            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $1; v->decls = std::move($2);
+            v->type = $1; v->is_const = $1.is_const; v->decls = std::move($2);
             $$ = std::move(v);
         }
     ;
