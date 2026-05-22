@@ -194,6 +194,13 @@ private:
     // ── Optimization pass (#37) ──────────────────────────────────────────
     void optimize();
 
+    // ── LTO: merge runtime bitcode before optimisation ───────────────────
+    // Loads DUXRT_BC_PATH, links runtime IR into mod_, marks linked
+    // definitions available_externally so they are not emitted in the
+    // output object (avoiding duplicate-symbol conflicts with duxrt.a).
+    // No-op and returns true when DUXRT_BC_PATH is empty (LTO disabled).
+    bool lto_merge_runtime();
+
     // ── DWARF debug info (#36) ───────────────────────────────────────────
     void debug_init(const std::string& source_path);
     llvm::DISubprogram* debug_func(const ast::FunctionDecl& f,

@@ -22,6 +22,9 @@
 #ifndef DUXRT_LIB_PATH
 #define DUXRT_LIB_PATH ""
 #endif
+#ifndef DUXRT_BC_PATH
+#define DUXRT_BC_PATH ""
+#endif
 #ifndef DUXRT_INCLUDE_DIR
 #define DUXRT_INCLUDE_DIR ""
 #endif
