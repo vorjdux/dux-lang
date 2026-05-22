@@ -151,6 +151,7 @@ void Sema::hoist_interface(const ast::InterfaceDecl& i) {
 }
 
 void Sema::hoist_namespace(const ast::NamespaceDecl& ns) {
+    if (ns.is_package_decl) return;
     Symbol s;
     s.name = ns.name;
     s.kind = SymKind::Namespace;
@@ -332,6 +333,7 @@ void Sema::check_interface(const ast::InterfaceDecl& i) {
 }
 
 void Sema::check_namespace(const ast::NamespaceDecl& ns) {
+    if (ns.is_package_decl) return;
     scopes_.push();
     hoist_top(ns.decls);
     for (const auto& d : ns.decls) check_decl(*d);
@@ -347,7 +349,7 @@ void Sema::check_import(const ast::ImportDecl& imp) {
     std::string last  = imp.path.substr(
         imp.path.rfind('.') == std::string::npos ? 0 : imp.path.rfind('.') + 1);
 
-    if (kStdlib.count(last)) {
+    if (kStdlib.count(last) && imp.path.find('.') == std::string::npos) {
         // Stdlib: register the module name so member-call resolution works.
         if (!first.empty() && !scopes_.lookup(first)) {
             Symbol s;

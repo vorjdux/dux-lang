@@ -1,0 +1,17 @@
+# Selective namespace import: pick symbols, keep namespace prefix
+#
+#   import path::{fn1, fn2}        →  utils.fn1(), utils.fn2()
+#   import path::{fn1, fn2} as u   →  u.fn1(), u.fn2()
+
+import com.envoxy.backend.utils::{greet, add}
+import com.envoxy.backend.math::{clamp, gcd} as calc
+
+void main() {
+    # Selective: only greet and add are intended, accessed as utils.*
+    println(utils.greet("Dux"))       # Hello, Dux!
+    println(utils.add(3, 4))          # 7
+
+    # Selective with alias: accessed as calc.*
+    println(calc.clamp(15, 0, 10))    # 10
+    println(calc.gcd(36, 48))         # 12
+}

@@ -469,6 +469,7 @@ void Codegen::emit_main_wrapper() {
 }
 
 void Codegen::gen_namespace(const ast::NamespaceDecl& ns) {
+    if (ns.is_package_decl) return;
     build_layouts(ns.decls);
     declare_functions(ns.decls, ns.name);
     auto saved_ns   = current_namespace_;
@@ -609,7 +610,7 @@ void Codegen::process_import(const ast::ImportDecl& imp) {
     const std::string& full = imp.path;
     std::string mod = full.substr(full.rfind('.') == std::string::npos ? 0 : full.rfind('.') + 1);
 
-    if (stdlib_table().count(mod)) {
+    if (stdlib_table().count(mod) && imp.path.find('.') == std::string::npos) {
         stdlib_imports_.insert(mod);
         // Pre-declare all stdlib functions so they appear in IR
         const auto& fns = stdlib_table().at(mod);
@@ -618,14 +619,15 @@ void Codegen::process_import(const ast::ImportDecl& imp) {
             for (auto tid : sf.params) ptypes.push_back(lower_type(tid));
             get_or_declare_rt(sf.rt_sym, lower_type(sf.ret), ptypes);
         }
-    } else if (imp.symbols.empty()) {
-        // Full file-based import: calls use  mod.fn()  syntax.
-        // The import resolver already injected a NamespaceDecl; we just need
-        // to register the module name so try_stdlib_call can route these calls.
-        user_module_imports_.insert(mod);
+    } else if (!imp.global_scope) {
+        // Namespace import (full, selective, or glob): calls use  ns.fn()  syntax.
+        // Register the accessor name (alias if set, else last path component) so
+        // try_stdlib_call can route  ns.fn()  →  mangle(ns, fn).
+        const std::string ns_name = imp.alias.empty() ? mod : imp.alias;
+        user_module_imports_.insert(ns_name);
     }
-    // Selective imports (imp.symbols non-empty) inject directly into global
-    // scope — no routing table needed; they resolve as plain function calls.
+    // Selective global imports (global_scope=true) inject into global scope —
+    // no routing table needed; they resolve as plain function calls.
 }
 
 Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {

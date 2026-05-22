@@ -94,6 +94,7 @@ ALNUM   [a-zA-Z0-9_]
 "namespace"  { need_semi = false; return yy::parser::make_KW_NAMESPACE(loc); }
 "import"     { need_semi = false; return yy::parser::make_KW_IMPORT(loc);    }
 "from"       { need_semi = false; return yy::parser::make_KW_FROM(loc);      }
+"as"         { need_semi = false; return yy::parser::make_KW_AS(loc);        }
 "class"      { need_semi = false; return yy::parser::make_KW_CLASS(loc);     }
 "interface"  { need_semi = false; return yy::parser::make_KW_INTERFACE(loc); }
 "public"     { need_semi = false; return yy::parser::make_KW_PUBLIC(loc);    }

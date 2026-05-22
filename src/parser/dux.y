@@ -70,7 +70,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token <bool>        BOOL_LIT   "bool literal"
 
 /* Keywords */
-%token KW_NAMESPACE KW_IMPORT KW_FROM KW_CLASS KW_INTERFACE
+%token KW_NAMESPACE KW_IMPORT KW_FROM KW_AS KW_CLASS KW_INTERFACE
 %token KW_PUBLIC KW_PRIVATE KW_PROTECTED
 %token KW_NEW KW_DELETE KW_THIS KW_SUPER KW_NULL
 %token KW_RETURN KW_BREAK KW_CONTINUE
@@ -223,6 +223,14 @@ namespace_decl
             n->stmts  = std::move($4->stmts);
             $$ = std::move(n);
         }
+    | KW_NAMESPACE dotted_name SEMI
+        {
+            auto n              = mk<NamespaceDecl>();
+            n->loc              = sl(@$, driver);
+            n->name             = $2;
+            n->is_package_decl  = true;
+            $$ = std::move(n);
+        }
     ;
 
 /* Accumulate namespace body items into a temporary Program node */
@@ -258,12 +266,46 @@ import_decl
             n->path = $2;
             $$ = std::move(n);
         }
-    | KW_IMPORT LBRACE ident_list RBRACE KW_FROM dotted_name SEMI
+    | KW_IMPORT dotted_name KW_AS IDENT SEMI
+        {
+            auto n    = mk<ImportDecl>();
+            n->loc    = sl(@$, driver);
+            n->path   = $2;
+            n->alias  = $4;
+            $$ = std::move(n);
+        }
+    | KW_IMPORT dotted_name DCOLON LBRACE ident_list RBRACE SEMI
         {
             auto n     = mk<ImportDecl>();
             n->loc     = sl(@$, driver);
-            n->path    = $6;
-            n->symbols = std::move($3);
+            n->path    = $2;
+            n->symbols = std::move($5);
+            $$ = std::move(n);
+        }
+    | KW_IMPORT dotted_name DCOLON LBRACE ident_list RBRACE KW_AS IDENT SEMI
+        {
+            auto n     = mk<ImportDecl>();
+            n->loc     = sl(@$, driver);
+            n->path    = $2;
+            n->symbols = std::move($5);
+            n->alias   = $8;
+            $$ = std::move(n);
+        }
+    | KW_IMPORT dotted_name DCOLON STAR SEMI
+        {
+            auto n  = mk<ImportDecl>();
+            n->loc  = sl(@$, driver);
+            n->path = $2;
+            n->symbols = {"*"};
+            $$ = std::move(n);
+        }
+    | KW_IMPORT LBRACE ident_list RBRACE KW_FROM dotted_name SEMI
+        {
+            auto n              = mk<ImportDecl>();
+            n->loc              = sl(@$, driver);
+            n->path             = $6;
+            n->symbols          = std::move($3);
+            n->global_scope     = true;
             $$ = std::move(n);
         }
     ;
