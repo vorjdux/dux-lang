@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
     }
 
     // Expand generic class/function instantiations before sema
-    dux::sema::expand_generics(*driver.result);
+    dux::sema::expand_generics(*driver.result, driver);
 
     // Always run sema when codegen / compile is requested
     bool need_sema = opts.check || opts.emit_ir || opts.emit_obj || opts.compile;

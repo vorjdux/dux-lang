@@ -1,6 +1,8 @@
 #pragma once
 #include "ast/ast.hpp"
 
+class Driver;
+
 namespace dux::sema {
 
 // Expand all generic class/function instantiations in the program.
@@ -17,7 +19,8 @@ namespace dux::sema {
 //
 // After this pass the program contains only concrete definitions and sema/
 // codegen need no special handling for generics.
-void expand_generics(ast::Program& prog);
+// driver is used to emit errors (e.g. unsatisfied type bounds).
+void expand_generics(ast::Program& prog, Driver& driver);
 
 // Compute the mangled name for a generic instantiation.
 // e.g. mangle_generic("Stack", [int]) → "Stack__int"

@@ -56,6 +56,7 @@ public:
     bool is_numeric(TypeId id) const;
     bool is_integral(TypeId id) const;
     bool is_subtype(TypeId child, TypeId ancestor) const;
+    bool satisfies(TypeId cls, TypeId iface) const;
 
     void set_parent(TypeId child, TypeId parent);
     void add_interface(TypeId cls, TypeId iface);

@@ -147,6 +147,18 @@ void TypeRegistry::add_interface(TypeId cls, TypeId iface) {
         types_[static_cast<std::size_t>(cls)].ifaces.push_back(iface);
 }
 
+bool TypeRegistry::satisfies(TypeId cls, TypeId iface) const {
+    if (cls == iface || iface == TID_OBJECT) return true;
+    if (cls == TID_UNKNOWN || iface == TID_UNKNOWN) return true;
+    if (cls < 0 || cls >= static_cast<TypeId>(types_.size())) return false;
+    for (TypeId i : types_[static_cast<std::size_t>(cls)].ifaces)
+        if (i == iface) return true;
+    TypeId par = types_[static_cast<std::size_t>(cls)].parent;
+    if (par != cls && par >= 0 && par != TID_UNKNOWN)
+        return satisfies(par, iface);
+    return false;
+}
+
 std::string TypeRegistry::name_of(TypeId id) const {
     if (id == TID_UNKNOWN) return "<unknown>";
     if (id < 0 || id >= static_cast<TypeId>(types_.size())) return "<invalid>";
