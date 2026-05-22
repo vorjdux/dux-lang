@@ -25,8 +25,13 @@ Statically typed, clean syntax, no runtime surprises.
 
 ```bash
 # Ubuntu / Debian
-sudo apt install cmake flex bison g++-13 llvm-18-dev
+sudo apt install cmake flex bison g++-13 llvm-18-dev clang-18
 ```
+
+> `clang-18` is optional but enables **LTO** (link-time optimisation): the compiler
+> merges the runtime into your program module before optimisation, allowing LLVM to
+> inline runtime helpers end-to-end.  Without it the compiler still works; LTO is
+> silently skipped.
 
 ## Build
 
@@ -60,8 +65,8 @@ Options:
 
 ```bash
 # Compile and run a program
-./build/dux examples/euler12.dux -O2 -o /tmp/euler12
-/tmp/euler12        # prints 842161320
+./build/dux --compile -O2 examples/euler12.dux -o euler12
+./euler12        # prints 842161320
 
 # Dump AST
 ./build/dux --dump-ast examples/design.dux
@@ -79,12 +84,12 @@ Options:
 cmake --build build && ctest --test-dir build --output-on-failure
 ```
 
+---
+
 ## Language sample
 
 ```dux
 import math
-
-# ── Type-inferred variables (auto) ───────────────────────────────────────────
 
 int main() {
     auto name  = "Dux"        # str
@@ -94,31 +99,17 @@ int main() {
     auto temp  = 98.6f        # real  (f suffix, 32-bit float)
 
     println(name)
-    println(count)
 
-    # ── Lambdas ───────────────────────────────────────────────────────────────
-
-    # Style A: return type lives inside the lambda, auto on the left
+    # Lambdas
     auto sq = fn(int n) -> int => n * n
     println(sq(7))   # 49
-
-    # Style B: return type is the variable prefix, lambda body is untyped
-    int cube = fn(int n) => n * n * n
-    println(cube(3)) # 27
 
     # Closure — captures outer variable by value
     int base = 10
     auto addBase = fn(int n) -> int => n + base
     println(addBase(5))  # 15
 
-    # Block body (multi-line)
-    auto greet = fn(str name) -> void {
-        str msg = "hello, " + name
-        println(msg)
-    }
-    greet("world")
-
-    # ── Stdlib ───────────────────────────────────────────────────────────────
+    # Stdlib
     println(math.sqrt(2.0))  # 1.41421...
 
     return 0
@@ -128,6 +119,297 @@ int main() {
 More examples in [`examples/`](examples/), including the full language showcase in
 [`examples/design.dux`](examples/design.dux).
 
+---
+
+## Language features
+
+### Types
+
+| Type | Description |
+|------|-------------|
+| `int` | 32-bit signed integer |
+| `long` | 64-bit signed integer |
+| `double` | 64-bit float |
+| `real` | 32-bit float |
+| `bool` | boolean |
+| `str` | reference-counted string (hybrid inline/heap allocation) |
+| `list` | dynamic array |
+| `dict` | hash map |
+| `ptr` | raw pointer (for C FFI / unsafe code) |
+
+### Type inference and literal suffixes
+
+```dux
+auto age  = 42           # int
+auto bigl = 9000000000l  # long  (l suffix)
+auto pi   = 3.14159      # double
+auto temp = 98.6f        # real  (f suffix, 32-bit float)
+auto name = "Dux"        # str
+auto ok   = true         # bool
+```
+
+| Suffix | Type | Example |
+|--------|------|---------|
+| *(none)* | `int` | `42` |
+| `l` | `long` | `42l` |
+| *(none)* | `double` | `3.14` |
+| `f` | `real` | `3.14f` |
+| `d` | `double` (from int literal) | `42d` |
+
+### Classes, inheritance and interfaces
+
+```dux
+class Animal {
+    str name
+
+    Animal(str n) {
+        this.name = n
+    }
+
+    str speak() {
+        return "..."
+    }
+}
+
+class Dog(Animal) {
+    Dog(str n) {
+        Animal(n)
+    }
+
+    str speak() {
+        return "Woof!"
+    }
+}
+
+int main() {
+    Dog d = new Dog("Rex")
+    println(d.speak())   # Woof!
+    return 0
+}
+```
+
+Destructors (`~ClassName()`) are called automatically at scope exit (RAII).
+Empty destructors are elided at compile time — no overhead for trivial types.
+
+### Generics
+
+Parametric classes via monomorphisation — each instantiation is a separate native type:
+
+```dux
+class Box<T> {
+    T value
+    Box(T v) { this.value = v }
+    T unwrap() { return this.value }
+}
+
+class Pair<A, B> {
+    A first
+    B second
+    Pair(A a, B b) { this.first = a; this.second = b }
+}
+
+int main() {
+    Box<int>     bi = new Box<int>(42)
+    Box<str>     bs = new Box<str>("hello")
+    Pair<int,str> p = new Pair<int,str>(7, "seven")
+    println(bi.unwrap())   # 42
+    println(bs.unwrap())   # hello
+    println(p.first)       # 7
+    return 0
+}
+```
+
+### Closures and lambdas
+
+```dux
+# Style A — return type inside the lambda
+auto sq = fn(int n) -> int => n * n
+
+# Style B — return type as variable prefix
+int cube = fn(int n) => n * n * n
+
+# Block body (multi-line)
+auto greet = fn(str name) -> void {
+    println("hello, " + name)
+}
+
+# Higher-order function
+int apply(fn(int) -> int f, int x) {
+    return f(x)
+}
+```
+
+### Operator overloading
+
+```dux
+class Vec2 {
+    double x
+    double y
+    Vec2(double x, double y) { this.x = x; this.y = y }
+
+    Vec2 operator__add(Vec2 other) {
+        return new Vec2(this.x + other.x, this.y + other.y)
+    }
+
+    bool operator__eq(Vec2 other) {
+        return this.x == other.x and this.y == other.y
+    }
+}
+
+int main() {
+    Vec2 a = new Vec2(1.0, 2.0)
+    Vec2 b = new Vec2(3.0, 4.0)
+    Vec2 c = a + b   # calls operator__add
+    println(c.x)     # 4.0
+    return 0
+}
+```
+
+Supported operators: `+` `−` `*` `/` `==` `!=` `<` `>` `<=` `>=` `[]`
+
+### Exception handling
+
+```dux
+class ValueError(Exception) {
+    ValueError(str msg) { Exception(msg) }
+}
+
+int parse(str s) {
+    if s == "" {
+        throw new ValueError("empty input")
+    }
+    return 42
+}
+
+int main() {
+    try {
+        int v = parse("")
+    } catch (ValueError e) {
+        println("caught: " + e.message)
+    }
+    return 0
+}
+```
+
+### Defer and RAII
+
+```dux
+int main() {
+    defer { println("cleanup 2") }
+    defer { println("cleanup 1") }  # runs first (LIFO)
+    println("work")
+    return 0
+    # prints: work / cleanup 1 / cleanup 2
+}
+```
+
+Class destructors are called automatically at scope exit:
+
+```dux
+class Handle {
+    Handle()  { println("open")  }
+    ~Handle() { println("close") }  # called when handle goes out of scope
+}
+
+int main() {
+    Handle h = new Handle()
+    println("using")
+    return 0
+    # prints: open / using / close
+}
+```
+
+### Namespaces and imports
+
+```dux
+# Import a stdlib module
+import math
+println(math.sqrt(2.0))
+
+# Import specific symbols from a file
+import { factorial, fibonacci } from "./algorithms"
+
+# Full file import — all exported names available with module prefix
+import "./utils"
+utils.helper()
+
+# Package-style namespace declaration
+namespace com.example.mylib
+```
+
+### Unsafe blocks and C FFI
+
+Call any C function directly with `extern "C"` and access low-level operations inside
+`unsafe` blocks:
+
+```dux
+extern "C" ptr malloc(long size)
+extern "C" void free(ptr p)
+
+int main() {
+    ptr buf = null
+    unsafe {
+        buf = malloc(1024l)
+    }
+    # ... use buf ...
+    unsafe { free(buf) }
+    return 0
+}
+```
+
+### StringBuilder
+
+Efficient mutable string accumulation backed by a pre-allocated contiguous buffer —
+O(1) amortised append, single allocation at build time:
+
+```dux
+import string_builder
+
+int main() {
+    StringBuilder sb = new StringBuilder()
+    sb.append("hello")
+    sb.append(", ")
+    sb.append("world")
+    str result = sb.build()
+    println(result)   # hello, world
+    return 0
+}
+```
+
+### Standard library
+
+| Module | Contents |
+|--------|----------|
+| `math` | `sqrt`, `pow`, `floor`, `ceil`, `abs`, `min`, `max`, `log`, `log2`, `sin`, `cos` |
+| `str` | `len`, `slice`, `index`, `eq`, `from_int`, `from_double` |
+| `io` | `println`, `print`, `readline` |
+| `string_builder` | `StringBuilder` class — efficient string accumulation |
+
+---
+
+## Performance
+
+Dux compiles to native code through LLVM and matches C performance on most workloads.
+At `-O2`, the compiler enables **LTO**: the runtime library is merged into the
+program module as LLVM bitcode before optimisation, so the inliner can eliminate
+call overhead across the translation-unit boundary — the same advantage that
+C++ gets from header-only implementation.
+
+| | math loop | fib(35) | string build | alloc 1M |
+|--|:---------:|:-------:|:------------:|:--------:|
+| **C** (gcc -O2) | 2 ms | 21 ms | 3 ms | 3 ms |
+| **C++** (g++ -O2) | 2 ms | 21 ms | 3 ms | 3 ms |
+| **Go** | 39 ms | 56 ms | 3 ms | 3 ms |
+| **Dux** (-O2 + LTO) | **3 ms** | **31 ms** | **3 ms** | **2 ms** |
+| Node.js 22 | 92 ms | 134 ms | 37 ms | 44 ms |
+| Python 3.11 | 4 110 ms | 1 180 ms | 14 ms | 225 ms |
+
+*4-core Intel Xeon @ 2.80 GHz, Linux 6.18 (x86-64). Best of 3 runs.*
+
+→ **[Full benchmark analysis with methodology and per-fix breakdown](benchmarks/README.md)**
+
+---
+
 ## Variables and type inference
 
 Dux is statically typed. Every variable has a fixed type determined at compile time.
@@ -136,99 +418,29 @@ You can either annotate the type explicitly or let the compiler infer it with `a
 ```dux
 # Explicit type
 int    age  = 42
-long   big  = 9000000000
+long   big  = 9000000000l
 double pi   = 3.14159
-real   temp = 98.6       # 32-bit float
+real   temp = 98.6f
 str    name = "Dux"
 bool   ok   = true
 
 # Inferred with auto
 auto age  = 42
-auto big  = 9000000000   # inferred as int — use suffix for long:
-auto bigl = 9000000000l  # long
 auto pi   = 3.14159
 auto name = "Dux"
-auto ok   = true
 ```
 
-## Literal suffixes
+## Compiler flags
 
-Suffix a literal to pin its type when `auto` would otherwise pick the wrong width:
-
-| Suffix | Type     | Example  | Notes                        |
-|--------|----------|----------|------------------------------|
-| *(none)*| `int`   | `42`     | 32-bit signed integer        |
-| `i`    | `int`    | `42i`    | explicit, same as plain `42` |
-| `l`    | `long`   | `42l`    | 64-bit signed integer        |
-| *(none)*| `double`| `3.14`   | 64-bit float                 |
-| `d`    | `double` | `3.14d`  | explicit, or `42d` = 42.0    |
-| `f`    | `real`   | `3.14f`  | 32-bit float                 |
-
-```dux
-auto a = 42        # int
-auto b = 42l       # long
-auto c = 3.14      # double
-auto d = 3.14f     # real (32-bit)
-auto e = 42d       # double from integer literal
-auto f = 42f       # real  from integer literal
-```
-
-## Lambdas
-
-Lambda expressions are first-class values. Two equivalent declaration styles:
-
-```dux
-# Style A — return type inside the lambda, auto on the left
-auto sq = fn(int n) -> int => n * n
-auto sq = fn(int n) -> int { return n * n }
-
-# Style B — return type as the variable prefix, lambda body is untyped
-int sq = fn(int n) => n * n
-int sq = fn(int n) { return n * n }
-```
-
-Lambdas close over variables in the enclosing scope:
-
-```dux
-int offset = 10
-auto add = fn(int n) -> int => n + offset
-println(add(5))  # 15
-```
-
-Higher-order functions declare their parameter type with the full `fn(T) -> R` form:
-
-```dux
-int apply(fn(int) -> int f, int x) {
-    return f(x)
-}
-
-int main() {
-    auto double_ = fn(int n) -> int => n * 2
-    println(apply(double_, 7))  # 14
-    return 0
-}
-```
-
-## Language features
-
-- **Types**: `int`, `long`, `real`, `double`, `bool`, `str`, `list`, `dict`, `ptr`
-- **Type inference**: `auto` for variables; literal suffixes `i` `l` `d` `f` to pin numeric width
-- **Classes** with constructors, destructors, field defaults, single inheritance, interfaces
-- **Generics**: parametric classes via monomorphisation (`Box<T>`, `Pair<A, B>`)
-- **Closures / lambdas**: `auto f = fn(params) -> R => expr` or `R f = fn(params) => expr`; lexical capture
-- **Operator overloading**: `operator__add`, `operator__eq`, `operator__lt`, `operator__index`, …
-- **Namespaces**: dotted names (`com.example.pkg`), file-based imports, selective imports
-- **Control flow**: `if/else`, `while`, `do/while`, `for … in` (range, `range(n)`, C-style), `switch`
-- **Labeled breaks/continues**: `&label while …` / `break &label`
-- **Exception handling**: `try { … } catch (ExcType e) { … }` / `catch …`; `throw expr`
-- **Defer**: LIFO scope-exit cleanup blocks (`defer { … }`)
-- **RAII**: destructors called automatically on scope exit
-- **Unsafe blocks**: `unsafe { … }` for low-level operations
-- **C FFI**: `extern "C" ret name(params)` to call any C function directly
-- **Stdlib**: `import math`, `import str`, `import io`
-- **Built-ins**: `println`, `print`, `readline`, `range`, `len`, `assert`, `str()`, `int()`, `double()`
-- **Optimisation**: `-O0` through `-O3` via LLVM `PassBuilder`
-- **Debug info**: `-g` emits DWARF via `DIBuilder`
+| Flag | Effect |
+|------|--------|
+| `--compile` | Compile to native executable |
+| `--emit-ir` | Dump LLVM IR (useful for debugging codegen) |
+| `--emit-obj` | Emit object file only |
+| `--check` | Semantic analysis only, no codegen |
+| `-O0` … `-O3` | Optimisation level (LTO kicks in at `-O1`+) |
+| `-g` | Emit DWARF debug information |
+| `--dump-ast` | Print the parsed AST |
 
 See [`docs/spec.md`](docs/spec.md) for the full language specification and
 [`docs/stdlib/`](docs/stdlib/) for the standard library API reference.
