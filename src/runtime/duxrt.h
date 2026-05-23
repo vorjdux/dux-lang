@@ -479,6 +479,25 @@ void    duxrt_http_req_free(void* req);
 DuxStr* duxrt_http_format_response(int32_t status, DuxStr* status_text,
                                     void* headers_dict, DuxStr* body);
 
+/* ── Async scheduler (Phase 1) ───────────────────────────────────────────── */
+void    duxrt_async_sleep_ms(int64_t ms);
+void    duxrt_async_yield(void);
+void    duxrt_async_run(void);
+void    duxrt_async_stop(void);
+int32_t duxrt_async_is_running(void);
+
+/* ── Async non-blocking ring-buffer channels ─────────────────────────────── */
+void*   duxrt_achan_new(int64_t cap);
+void    duxrt_achan_free(void* ch);
+void    duxrt_achan_close(void* ch);
+int32_t duxrt_achan_is_closed(void* ch);
+int64_t duxrt_achan_len(void* ch);
+int64_t duxrt_achan_cap(void* ch);
+int32_t duxrt_achan_try_send(void* ch, void* val);  /* 1=sent, 0=full/closed */
+void*   duxrt_achan_try_recv(void* ch);              /* NULL if empty         */
+void    duxrt_achan_send(void* ch, void* val);       /* blocks until space    */
+void*   duxrt_achan_recv(void* ch);                  /* blocks; NULL=closed+empty */
+
 /* ── Exceptions ──────────────────────────────────────────────────────────── */
 typedef struct DuxException {
     const char* type_name;

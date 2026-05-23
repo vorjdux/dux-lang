@@ -1,0 +1,121 @@
+# async.chan — non-blocking ring-buffer channels
+#
+# AsyncChan wraps a fixed-capacity ring buffer.
+# try_send / try_recv are non-blocking; send / recv block until ready.
+#
+# Usage: import async.chan
+
+namespace achan {
+    extern "C" ptr  duxrt_achan_new(long cap) ;
+    extern "C" void duxrt_achan_free(ptr ch) ;
+    extern "C" void duxrt_achan_close(ptr ch) ;
+    extern "C" int  duxrt_achan_is_closed(ptr ch) ;
+    extern "C" long duxrt_achan_len(ptr ch) ;
+    extern "C" long duxrt_achan_cap(ptr ch) ;
+    extern "C" int  duxrt_achan_try_send(ptr ch, ptr val) ;
+    extern "C" ptr  duxrt_achan_try_recv(ptr ch) ;
+    extern "C" void duxrt_achan_send(ptr ch, ptr val) ;
+    extern "C" ptr  duxrt_achan_recv(ptr ch) ;
+}
+
+# AsyncChan — a non-blocking, fixed-capacity ring-buffer channel.
+#
+# cap must be > 0.  Items are opaque pointers (ptr); the channel does not
+# manage the lifetime of the values it carries.
+#
+# Example:
+#   AsyncChan ch = new AsyncChan(8)
+#   bool ok = ch.try_send(null)   # non-blocking
+#   ptr  v  = ch.try_recv()       # null if empty
+#   ch.close()
+class AsyncChan {
+    ptr  _ch
+    bool _closed
+
+    AsyncChan(int cap) {
+        this._closed = false
+        unsafe {
+            this._ch = duxrt_achan_new(cap)
+        }
+    }
+
+    # Non-blocking send.
+    # Returns true if the item was queued, false if the buffer is full or closed.
+    bool try_send(ptr val) {
+        int r = 0
+        unsafe {
+            r = duxrt_achan_try_send(this._ch, val)
+        }
+        return r != 0
+    }
+
+    # Non-blocking receive.
+    # Returns the next item, or null if the channel is empty.
+    ptr try_recv() {
+        ptr r = null
+        unsafe {
+            r = duxrt_achan_try_recv(this._ch)
+        }
+        return r
+    }
+
+    # Blocking send — waits until there is space in the buffer.
+    # No-op if the channel is closed.
+    void send(ptr val) {
+        unsafe {
+            duxrt_achan_send(this._ch, val)
+        }
+    }
+
+    # Blocking receive — waits until an item is available.
+    # Returns null if the channel is closed and empty.
+    ptr recv() {
+        ptr r = null
+        unsafe {
+            r = duxrt_achan_recv(this._ch)
+        }
+        return r
+    }
+
+    # Number of items currently buffered.
+    long pending() {
+        long n = 0
+        unsafe {
+            n = duxrt_achan_len(this._ch)
+        }
+        return n
+    }
+
+    # Maximum capacity of the ring buffer.
+    long capacity() {
+        long n = 0
+        unsafe {
+            n = duxrt_achan_cap(this._ch)
+        }
+        return n
+    }
+
+    bool is_closed() {
+        int r = 0
+        unsafe {
+            r = duxrt_achan_is_closed(this._ch)
+        }
+        return r != 0
+    }
+
+    void close() {
+        this._closed = true
+        unsafe {
+            duxrt_achan_close(this._ch)
+        }
+    }
+
+    ~AsyncChan() {
+        if !this._closed {
+            this.close()
+        }
+        unsafe {
+            duxrt_achan_free(this._ch)
+        }
+    }
+}

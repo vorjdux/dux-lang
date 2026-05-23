@@ -1,0 +1,11 @@
+empty ok
+open ok
+cap ok
+recv_empty ok
+send1 ok
+send2 ok
+pending2 ok
+drained ok
+full ok
+closed ok
+chan ok
