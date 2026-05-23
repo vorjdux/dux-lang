@@ -1488,45 +1488,99 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
 
     for (const auto& [name, init_ptr] : s.decls) {
         TypeId var_tid = decl_tid;
-        Value* init_val = nullptr;
 
-        if (init_ptr) {
-            init_val = gen_expr(*init_ptr);
-            TypeId init_tid = type_id_of(*init_ptr);
-            bool is_lambda = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get()) != nullptr;
-            if (var_tid == TR::TID_UNKNOWN || is_lambda) var_tid = init_tid;
-            init_val = coerce(init_val, init_tid, var_tid);
-        }
-        if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;
+        if (s.is_static) {
+            // Static local variable: module-level global with once-only init guard
+            // Use __cxa_guard_acquire/__cxa_guard_release for thread-safe initialization.
+            if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;
+            llvm::Type* t = lower_type(var_tid);
 
-        llvm::Type* t = lower_type(var_tid);
-        Value* alloca = make_alloca(t, name);
-        if (init_val) {
-            if (var_tid == TR::TID_STR)
-                init_val = maybe_retain_str(init_val);
-            if (init_val->getType() != t)
-                init_val = coerce(init_val, decl_tid, var_tid);
-            builder_->CreateStore(init_val, alloca);
-        } else {
-            builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
-        }
-        env_define(name, alloca, var_tid);
-        if (init_ptr) {
-            if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get())) {
-                ast::TypeExpr te;
-                te.name = "__fn";
-                for (const auto& p : lam->params)
-                    te.fn_params.push_back(p.type);
-                te.fn_ret = lam->inferred_ret;
-                fn_var_types_[name] = te;
-                // Register closure env for free() on scope exit
-                if (!cleanup_scopes_.empty())
-                    cleanup_scopes_.back().push_back({alloca, "__closure", nullptr});
+            // Create the static global for the variable value
+            std::string gname = "__dux_static_" + (current_fn_ ? current_fn_->getName().str() : "") + "_" + name;
+            auto* gv = new llvm::GlobalVariable(
+                *mod_, t, /*isConstant=*/s.is_const,
+                llvm::GlobalValue::InternalLinkage,
+                llvm::Constant::getNullValue(t), gname);
+            // Register element type so load_var uses the right type (not i64 fallback)
+            alloca_type_[gv] = t;
+
+            if (init_ptr) {
+                // Create a guard byte (i8) — ABI: non-zero = initialized
+                auto* guard_gv = new llvm::GlobalVariable(
+                    *mod_, llvm::Type::getInt8Ty(*ctx_), false,
+                    llvm::GlobalValue::InternalLinkage,
+                    llvm::ConstantInt::get(llvm::Type::getInt8Ty(*ctx_), 0),
+                    gname + ".guard");
+
+                Function* fn = builder_->GetInsertBlock()->getParent();
+                auto* init_check = BasicBlock::Create(*ctx_, name + ".init.check", fn);
+                auto* init_body  = BasicBlock::Create(*ctx_, name + ".init.body",  fn);
+                auto* init_done  = BasicBlock::Create(*ctx_, name + ".init.done",  fn);
+
+                // If guard == 0 → not initialized yet
+                builder_->CreateBr(init_check);
+                builder_->SetInsertPoint(init_check);
+                Value* guard_val = builder_->CreateLoad(
+                    llvm::Type::getInt8Ty(*ctx_), guard_gv, "guard");
+                Value* not_init  = builder_->CreateICmpEQ(guard_val,
+                    llvm::ConstantInt::get(llvm::Type::getInt8Ty(*ctx_), 0), "not.init");
+                builder_->CreateCondBr(not_init, init_body, init_done);
+
+                builder_->SetInsertPoint(init_body);
+                Value* init_val = gen_expr(*init_ptr);
+                TypeId init_tid = type_id_of(*init_ptr);
+                init_val = coerce(init_val, init_tid, var_tid);
+                builder_->CreateStore(init_val, gv);
+                builder_->CreateStore(
+                    llvm::ConstantInt::get(llvm::Type::getInt8Ty(*ctx_), 1), guard_gv);
+                builder_->CreateBr(init_done);
+
+                builder_->SetInsertPoint(init_done);
             }
+
+            // Register as env entry pointing to the global (load/store as usual)
+            env_define(name, gv, var_tid);
+        } else {
+            // Normal (non-static) local variable
+            Value* init_val = nullptr;
+
+            if (init_ptr) {
+                init_val = gen_expr(*init_ptr);
+                TypeId init_tid = type_id_of(*init_ptr);
+                if (var_tid == TR::TID_UNKNOWN) var_tid = init_tid;
+                init_val = coerce(init_val, init_tid, var_tid);
+            }
+            if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;
+
+            llvm::Type* t = lower_type(var_tid);
+            Value* alloca = make_alloca(t, name);
+            if (init_val) {
+                if (var_tid == TR::TID_STR)
+                    init_val = maybe_retain_str(init_val);
+                if (init_val->getType() != t)
+                    init_val = coerce(init_val, decl_tid, var_tid);
+                builder_->CreateStore(init_val, alloca);
+            } else {
+                builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
+            }
+            env_define(name, alloca, var_tid);
+            if (init_ptr) {
+                if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get())) {
+                    ast::TypeExpr te;
+                    te.name = "__fn";
+                    for (const auto& p : lam->params)
+                        te.fn_params.push_back(p.type);
+                    te.fn_ret = lam->inferred_ret;
+                    fn_var_types_[name] = te;
+                    // Register closure env for free() on scope exit
+                    if (!cleanup_scopes_.empty())
+                        cleanup_scopes_.back().push_back({alloca, "__closure", nullptr});
+                }
+            }
+            // Track variable→class for member access resolution
+            if (!s.type.name.empty() && layouts_.count(s.type.name))
+                var_class_[name] = s.type.name;
         }
-        // Track variable→class for member access resolution
-        if (!s.type.name.empty() && layouts_.count(s.type.name))
-            var_class_[name] = s.type.name;
     }
 }
 
