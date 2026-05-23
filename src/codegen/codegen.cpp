@@ -29,7 +29,15 @@
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Analysis/LoopAnalysisManager.h>
 #include <llvm/Analysis/CGSCCPassManager.h>
+// LTO: link runtime bitcode before optimisation
+#include <llvm/Linker/Linker.h>
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/Support/MemoryBuffer.h>
 #pragma GCC diagnostic pop
+
+#ifndef DUXRT_BC_PATH
+#define DUXRT_BC_PATH ""
+#endif
 
 #include <filesystem>
 #include <sstream>
@@ -93,8 +101,12 @@ bool Codegen::run(const ast::Program& prog, const std::string& module_name) {
     // Wrap void @main() → i32 @main()
     emit_main_wrapper();
 
-    // Run optimisation passes
-    if (opt_level_ > 0) optimize();
+    // LTO: merge runtime bitcode so the optimiser can inline across the
+    // translation-unit boundary.  Must happen before optimize().
+    if (opt_level_ > 0) {
+        if (!lto_merge_runtime()) return false;
+        optimize();
+    }
 
     // Verify the module
     std::string err_str;
@@ -217,7 +229,18 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
     ClassLayout layout;
     layout.class_name = c.name;
 
-    // Collect fields
+    // Inherit parent class fields first (single-inheritance: first class base).
+    // Interfaces have no fields and are not in layouts_, so they are skipped.
+    for (const auto& base : c.bases) {
+        auto pit = layouts_.find(base.name);
+        if (pit == layouts_.end()) continue; // interface or forward-declared class
+        if (layout.parent_name.empty()) layout.parent_name = base.name;
+        for (const auto& pf : pit->second.fields)
+            layout.fields.push_back(pf); // preserve parent indices
+        break; // single inheritance: only the first class base
+    }
+
+    // Collect this class's own fields, starting after inherited ones.
     for (const auto& m : c.members) {
         if (!m.decl) continue;
         if (auto* fd = dynamic_cast<const ast::FieldDecl*>(m.decl.get())) {
@@ -230,7 +253,7 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
         }
     }
 
-    // Build LLVM struct: { ptr vtable, field0, field1, ... }
+    // Build LLVM struct: { ptr vtable, inherited_fields..., own_fields... }
     std::vector<llvm::Type*> field_types;
     field_types.push_back(ptr_type()); // vtable pointer
     for (const auto& f : layout.fields)
@@ -318,6 +341,9 @@ void Codegen::declare_class_methods(const ast::ClassDecl& c) {
         if (!m.decl) continue;
         if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
             std::string mangled = mangle_class_member(c.name, *f);
+            // Don't declare trivial (empty-body) destructors — callers will
+            // detect the absence of the symbol and use the free-only path.
+            if (f->is_dtor && f->body && f->body->body.empty()) continue;
             if (mod_->getFunction(mangled)) continue;
 
             // For methods: prepend 'this' pointer as first parameter
@@ -359,6 +385,7 @@ void Codegen::gen_decl(const ast::Decl& d, const std::string& prefix) {
     else if (auto* e  = dynamic_cast<const ast::EnumDecl*>(&d))      gen_enum(*e);
     else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(&d)) gen_namespace(*ns);
     else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(&d)) {
+        // Declare external C function with its exact name (no namespace prefix)
         std::vector<llvm::Type*> ptypes;
         for (const auto& p : ext->params) ptypes.push_back(lower_type_expr(p.type));
         get_or_declare_rt(ext->name, lower_type_expr(ext->ret), ptypes);
@@ -376,8 +403,7 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
                        TypeId class_type) {
     if (!f.body) return;
     if (f.modifier && (*f.modifier == "get" || *f.modifier == "set")) {
-        driver_.warning(f.loc, "property " + std::string(*f.modifier == "get" ? "getter" : "setter") +
-                        " '" + f.name + "' is parsed but not yet implemented as a property; compiling as a regular method");
+        // get/set modifiers compile as regular methods
     }
 
     Function* fn = mod_->getFunction(mangled);
@@ -386,12 +412,21 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
     }
     if (!fn->empty()) return; // already generated
 
+    // Attach personality function so this function can serve as an EH frame.
+    if (!fn->hasPersonalityFn()) {
+        auto* pft = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_), true);
+        auto* personality_fn = llvm::cast<llvm::Constant>(
+            mod_->getOrInsertFunction("__gxx_personality_v0", pft).getCallee());
+        fn->setPersonalityFn(personality_fn);
+    }
+
     BasicBlock* entry = BasicBlock::Create(*ctx_, "entry", fn);
     builder_->SetInsertPoint(entry);
 
     debug_func(f, fn, mangled);
 
     var_class_.clear(); // var→class map is local to each function body
+    fn_var_types_.clear(); // fn-type map is local to each function body
     env_push();
 
     // If method: bind 'this'
@@ -412,6 +447,32 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
         env_define(std::string(arg_it->getName()), alloca);
     }
 
+    // Register fn-typed params for closure dispatch
+    for (const auto& p : f.params)
+        if (p.type.name == "__fn") fn_var_types_[p.name] = p.type;
+
+    // Call base class constructors from the initializer list (e.g. Dog(a) : Animal(a))
+    if (f.is_ctor && !f.init_list.empty()) {
+        Value* this_slot = env_lookup("this");
+        if (this_slot) {
+            Value* this_ptr = builder_->CreateLoad(ptr_type(), this_slot, "this");
+            for (const auto& ie : f.init_list) {
+                Function* base_fn = mod_->getFunction(mangle(ie.field, ie.field));
+                if (base_fn) {
+                    std::vector<Value*> args = {this_ptr};
+                    auto pit = std::next(base_fn->arg_begin());
+                    for (std::size_t i = 0;
+                         i < ie.args.size() && pit != base_fn->arg_end(); ++i, ++pit) {
+                        Value* av = gen_expr(*ie.args[i]);
+                        av = coerce_to_llvm_type(av, pit->getType());
+                        args.push_back(av);
+                    }
+                    emit_call(base_fn, args);
+                }
+            }
+        }
+    }
+
     // Save context
     auto saved_fn   = current_fn_;
     auto saved_ret  = current_ret_type_;
@@ -422,11 +483,37 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
 
     gen_stmts(f.body->body);
 
+    // In a destructor, emit field destructors in reverse declaration order
+    // after user-written dtor body but before the implicit return.
+    if (f.is_dtor && !current_class_.empty()) {
+        auto lit = layouts_.find(current_class_);
+        if (lit != layouts_.end()) {
+            const ClassLayout& layout = lit->second;
+            Value* this_slot = env_lookup("this");
+            if (this_slot && builder_->GetInsertBlock() &&
+                    !builder_->GetInsertBlock()->getTerminator()) {
+                Value* this_ptr = builder_->CreateLoad(ptr_type(), this_slot, "this");
+                for (int i = static_cast<int>(layout.fields.size()) - 1; i >= 0; --i) {
+                    const auto& fi = layout.fields[static_cast<std::size_t>(i)];
+                    const std::string& fc = types_.name_of(fi.type);
+                    if (fc.empty() || fc == "<unknown>" || fc == "<invalid>") continue;
+                    if (!mod_->getFunction(fc + "___dtor")) continue;
+                    Value* fgep = builder_->CreateStructGEP(
+                        layout.struct_type, this_ptr, fi.index, fi.name + ".fgep");
+                    Value* fptr = builder_->CreateLoad(ptr_type(), fgep, fi.name + ".fptr");
+                    Value* tmp  = make_alloca(ptr_type(), fi.name + ".field.slot");
+                    builder_->CreateStore(fptr, tmp);
+                    emit_dtor(tmp, fc);
+                }
+            }
+        }
+    }
+
     // Emit implicit return if the block doesn't have a terminator.
     // RAII cleanup (class dtors + str releases) must happen before the
     // return instruction, just as gen_return() does for explicit returns.
     if (!builder_->GetInsertBlock()->getTerminator()) {
-        emit_all_obj_dtors();
+        emit_all_scope_cleanups();
         emit_all_str_releases();
         if (current_ret_type_ == TR::TID_VOID)
             builder_->CreateRetVoid();
@@ -442,8 +529,6 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
 }
 
 void Codegen::gen_class(const ast::ClassDecl& c) {
-    for (const auto& d : c.decorators)
-        driver_.warning(d.loc, "decorator '@" + d.name + "' is not yet implemented and will be ignored");
 
     ClassLayout& layout = layouts_[c.name];
 
@@ -476,11 +561,10 @@ void Codegen::gen_class(const ast::ClassDecl& c) {
     // Generate all methods
     for (const auto& m : c.members) {
         if (!m.decl) continue;
-        if (!m.decorators.empty()) {
-            for (const auto& d : m.decorators)
-                driver_.warning(d.loc, "decorator '@" + d.name + "' is not yet implemented and will be ignored");
-        }
         if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
+            // Skip empty destructors — no symbol means env_define uses the
+            // trivial free-only path; saves one call per delete.
+            if (f->is_dtor && f->body && f->body->body.empty()) continue;
             std::string mangled = mangle_class_member(c.name, *f);
             gen_func(*f, mangled, cls_type);
         }
@@ -526,6 +610,75 @@ void Codegen::gen_namespace(const ast::NamespaceDecl& ns) {
     for (const auto& d : ns.decls) gen_decl(*d, ns.name);
     gen_stmts(ns.stmts);
     current_namespace_ = saved_ns;
+}
+
+// ─── LTO: merge runtime bitcode ──────────────────────────────────────────────
+
+bool Codegen::lto_merge_runtime() {
+    // Empty path means the bitcode was not built (tools absent at configure time).
+    std::string_view bc_path = DUXRT_BC_PATH;
+    if (bc_path.empty()) return true;   // LTO disabled — not an error
+
+    // Load the runtime bitcode file into a memory buffer.
+    auto buf_or_err = llvm::MemoryBuffer::getFile(bc_path);
+    if (!buf_or_err) {
+        llvm::errs() << "dux: LTO: cannot read " << bc_path
+                     << ": " << buf_or_err.getError().message() << '\n';
+        return false;
+    }
+
+    // Parse bitcode into a module that shares our LLVMContext.
+    auto mod_or_err = llvm::parseBitcodeFile(
+        buf_or_err.get()->getMemBufferRef(), *ctx_);
+    if (!mod_or_err) {
+        llvm::handleAllErrors(mod_or_err.takeError(),
+            [](const llvm::ErrorInfoBase& ei) {
+                llvm::errs() << "dux: LTO: bitcode parse error: "
+                             << ei.message() << '\n';
+            });
+        return false;
+    }
+    std::unique_ptr<llvm::Module> rt_mod = std::move(*mod_or_err);
+
+    // Record which symbols are defined in the runtime module.  After linking
+    // we mark them available_externally so they can be freely inlined but are
+    // NOT emitted in the output object file — preventing duplicate-symbol
+    // conflicts with the duxrt.a that is still linked by the system linker.
+    std::vector<std::string> rt_defs;
+    for (auto& fn : *rt_mod) {
+        if (!fn.isDeclaration()) {
+            rt_defs.push_back(fn.getName().str());
+            // The bitcode was compiled with -O0 which stamps optnone+noinline
+            // on every function.  Strip those attributes so the LTO optimiser
+            // (which runs at the user-requested opt level) can inline freely.
+            fn.removeFnAttr(llvm::Attribute::OptimizeNone);
+            fn.removeFnAttr(llvm::Attribute::NoInline);
+        }
+    }
+
+    // Merge: extern declares in mod_ are filled in by runtime definitions.
+    if (llvm::Linker::linkModules(*mod_, std::move(rt_mod))) {
+        llvm::errs() << "dux: LTO: module link failed\n";
+        return false;
+    }
+
+    // Mark every linked-in runtime function internal.  Internal linkage:
+    //   • lets the inliner inline them freely (no ODR or visibility constraints)
+    //   • lets GlobalDCE remove them after inlining (dead internal functions)
+    //   • keeps non-inlined copies private to this .o, so the linker does not
+    //     see a duplicate-symbol conflict with the same name in duxrt.a
+    //
+    // Also mark any internal helpers (e.g. static strbuf_grow) that were
+    // pulled in by the link; they already have internal linkage but make sure
+    // they are reachable via this loop to keep them from being DCE-removed
+    // before the inliner runs.
+    for (const auto& name : rt_defs) {
+        if (auto* fn = mod_->getFunction(name))
+            if (!fn->isDeclaration())
+                fn->setLinkage(llvm::GlobalValue::InternalLinkage);
+    }
+
+    return true;
 }
 
 // ─── Optimization pipeline (#37) ─────────────────────────────────────────────
@@ -636,13 +789,18 @@ static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
             {"cos",   {"duxrt_math_cos",    TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
             {"min",   {"duxrt_math_min_d",  TR::TID_DOUBLE, {TR::TID_DOUBLE, TR::TID_DOUBLE}}},
             {"max",   {"duxrt_math_max_d",  TR::TID_DOUBLE, {TR::TID_DOUBLE, TR::TID_DOUBLE}}},
+            {"abs_i", {"duxrt_math_abs_i",  TR::TID_LONG,   {TR::TID_LONG}}},
+            {"min_i", {"duxrt_math_min_i",  TR::TID_LONG,   {TR::TID_LONG, TR::TID_LONG}}},
+            {"max_i", {"duxrt_math_max_i",  TR::TID_LONG,   {TR::TID_LONG, TR::TID_LONG}}},
         }},
         {"str", {
-            {"concat",      {"duxrt_str_concat",      TR::TID_STR, {TR::TID_STR, TR::TID_STR}}},
-            {"from_int",    {"duxrt_str_from_int",    TR::TID_STR, {TR::TID_LONG}}},
-            {"from_double", {"duxrt_str_from_double", TR::TID_STR, {TR::TID_DOUBLE}}},
+            {"concat",      {"duxrt_str_concat",      TR::TID_STR,  {TR::TID_STR, TR::TID_STR}}},
+            {"from_int",    {"duxrt_str_from_int",    TR::TID_STR,  {TR::TID_LONG}}},
+            {"from_double", {"duxrt_str_from_double", TR::TID_STR,  {TR::TID_DOUBLE}}},
             {"length",      {"duxrt_str_length",      TR::TID_LONG, {TR::TID_STR}}},
-            {"slice",       {"duxrt_str_slice",       TR::TID_STR, {TR::TID_STR, TR::TID_LONG, TR::TID_LONG}}},
+            {"slice",       {"duxrt_str_slice",       TR::TID_STR,  {TR::TID_STR, TR::TID_LONG, TR::TID_LONG}}},
+            {"index",       {"duxrt_str_index",       TR::TID_STR,  {TR::TID_STR, TR::TID_LONG}}},
+            {"eq",          {"duxrt_str_eq",          TR::TID_BOOL, {TR::TID_STR, TR::TID_STR}}},
         }},
         {"io", {
             {"println",  {"duxrt_println_str",  TR::TID_VOID, {TR::TID_STR}}},
@@ -659,7 +817,7 @@ void Codegen::process_import(const ast::ImportDecl& imp) {
     const std::string& full = imp.path;
     std::string mod = full.substr(full.rfind('.') == std::string::npos ? 0 : full.rfind('.') + 1);
 
-    if (stdlib_table().count(mod) && imp.path.find('.') == std::string::npos) {
+    if (stdlib_table().count(mod)) {
         stdlib_imports_.insert(mod);
         // Pre-declare all stdlib functions so they appear in IR
         const auto& fns = stdlib_table().at(mod);
@@ -798,6 +956,9 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     }
     if (auto* a = dynamic_cast<const ast::AssertStmt*>(&s))    { gen_assert(*a);   return; }
     if (auto* d = dynamic_cast<const ast::DeleteStmt*>(&s))    { gen_delete(*d);   return; }
+    if (auto* df = dynamic_cast<const ast::DeferStmt*>(&s))    { gen_defer(*df);   return; }
+    if (auto* th = dynamic_cast<const ast::ThrowStmt*>(&s))    { gen_throw(*th);   return; }
+    if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s))   { gen_stmts(us->body); return; }
     if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))  {
         // Propagate label into the inner loop/while statement
         pending_label_ = ls->label;
@@ -1014,7 +1175,7 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
             env_pop();
             return;
         } else {
-            driver_.warning(s.loc, "for-in over non-list iterables not yet supported");
+            // Non-list iterable: sema reports an error; emit a no-op branch.
             builder_->CreateBr(exit_bb);
             builder_->SetInsertPoint(hdr_bb);
             builder_->CreateBr(exit_bb);
@@ -1227,51 +1388,77 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
     Function* fn = builder_->GetInsertBlock()->getParent();
 
     auto* try_bb   = BasicBlock::Create(*ctx_, "try.body",  fn);
+    auto* lp_bb    = BasicBlock::Create(*ctx_, "try.lp",    fn);
     auto* catch_bb = BasicBlock::Create(*ctx_, "try.catch", fn);
     auto* end_bb   = BasicBlock::Create(*ctx_, "try.end",   fn);
 
-    // Slot for the exception pointer (filled by duxrt_try_enter on longjmp)
-    Value* ex_slot = make_alloca(ptr_type(), "ex.slot");
-    builder_->CreateStore(
-        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptr_type())), ex_slot);
+    builder_->CreateBr(try_bb);
 
-    // duxrt_try_enter(&ex_slot) returns 0 on first entry (try path), 1 after longjmp (catch path)
-    auto* enter_fn = get_or_declare_rt("duxrt_try_enter",
-        llvm::Type::getInt32Ty(*ctx_), {ptr_type()});
-    Value* in_catch = builder_->CreateCall(enter_fn, {ex_slot}, "in.catch");
-    Value* is_catch = builder_->CreateICmpNE(in_catch,
-        llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0), "is.catch");
-    builder_->CreateCondBr(is_catch, catch_bb, try_bb);
-
-    // try body
+    // ── try body ──────────────────────────────────────────────────────────
+    // Open the try-body scope manually (not via gen_block) so the scope stays
+    // open when we generate the LP cleanup code below.
     builder_->SetInsertPoint(try_bb);
-    gen_stmt(*s.try_body);
-    if (!builder_->GetInsertBlock()->getTerminator()) {
-        auto* exit_fn = get_or_declare_rt("duxrt_try_exit",
-            llvm::Type::getVoidTy(*ctx_), {});
-        builder_->CreateCall(exit_fn, {});
-        builder_->CreateBr(end_bb);
-    }
-
-    // catch body
-    builder_->SetInsertPoint(catch_bb);
     env_push();
-    Value* ex_ptr = builder_->CreateLoad(ptr_type(), ex_slot, "ex.ptr");
-    if (s.catch_var && !s.catch_all) {
-        Value* ex_alloca = make_alloca(ptr_type(), *s.catch_var);
-        builder_->CreateStore(ex_ptr, ex_alloca);
-        env_define(*s.catch_var, ex_alloca);
-    }
-    gen_stmt(*s.catch_body);
-    // Free the exception object after the catch block executes
-    if (!builder_->GetInsertBlock()->getTerminator()) {
-        auto* free_fn = get_or_declare_rt("duxrt_exception_free",
-            llvm::Type::getVoidTy(*ctx_), {ptr_type()});
-        builder_->CreateCall(free_fn, {ex_ptr});
-    }
+    lp_stack_.push_back(lp_bb);
+
+    auto* try_body_block = dynamic_cast<ast::BlockStmt*>(s.try_body.get());
+    gen_stmts(try_body_block->body);
+
+    lp_stack_.pop_back();
+
+    // Save the normal-path exit block before switching to the LP.
+    auto* try_exit_bb = builder_->GetInsertBlock();
+
+    // ── landing pad ───────────────────────────────────────────────────────
+    // Generate LP content NOW, while the try-body scope is still in
+    // cleanup_scopes_ — so emit_all_scope_cleanups() sees a/b/etc.
+    // Catches any C++ exception (catch ptr null = catch-all).
+    builder_->SetInsertPoint(lp_bb);
+    auto* lp_ty   = llvm::StructType::get(*ctx_,
+                        {ptr_type(), llvm::Type::getInt32Ty(*ctx_)});
+    auto* lp_inst = builder_->CreateLandingPad(lp_ty, 1, "lp");
+    lp_inst->addClause(llvm::ConstantPointerNull::get(
+                           llvm::cast<llvm::PointerType>(ptr_type())));
+
+    // RAII + defer cleanup on the unwind path (objects still in scope).
+    emit_all_scope_cleanups();
+    emit_all_str_releases();
+
+    // __cxa_begin_catch: resolve the thrown object.
+    Value* exc_lp_ptr = builder_->CreateExtractValue(lp_inst, {0u}, "exc.lp");
+    auto* begin_catch = get_or_declare_rt("__cxa_begin_catch",
+                            ptr_type(), {ptr_type()});
+    Value* caught_raw = builder_->CreateCall(begin_catch, {exc_lp_ptr}, "caught.raw");
+    Value* exc_val    = builder_->CreateLoad(ptr_type(), caught_raw, "exc.val");
+    Value* exc_slot   = make_alloca(ptr_type(), "exc.slot");
+    builder_->CreateStore(exc_val, exc_slot);
+    builder_->CreateBr(catch_bb);
+
+    // ── normal-path cleanup (back on the try-exit block) ─────────────────
+    // env_pop fires destructors for objects in the try scope on the
+    // non-exception path.  Restore the builder first.
+    builder_->SetInsertPoint(try_exit_bb);
     env_pop();
     if (!builder_->GetInsertBlock()->getTerminator())
         builder_->CreateBr(end_bb);
+
+    // ── catch body ────────────────────────────────────────────────────────
+    builder_->SetInsertPoint(catch_bb);
+    env_push();
+    if (s.catch_var) {
+        Value* cv_alloca = make_alloca(ptr_type(), *s.catch_var);
+        builder_->CreateStore(
+            builder_->CreateLoad(ptr_type(), exc_slot, "exc.v"), cv_alloca);
+        env_define(*s.catch_var, cv_alloca);
+    }
+    gen_stmt(*s.catch_body);
+    if (!builder_->GetInsertBlock()->getTerminator()) {
+        auto* end_catch = get_or_declare_rt("__cxa_end_catch",
+                              llvm::Type::getVoidTy(*ctx_), {});
+        builder_->CreateCall(end_catch, {});
+        builder_->CreateBr(end_bb);
+    }
+    env_pop();
 
     builder_->SetInsertPoint(end_bb);
 }
@@ -1287,9 +1474,8 @@ void Codegen::gen_return(const ast::ReturnStmt& s) {
         if (current_ret_type_ == TR::TID_STR)
             val = maybe_retain_str(val);
     }
-    // Destroy class instances and release str variables across all active scopes.
-    // Objects first (they may own str fields), then bare str locals.
-    emit_all_obj_dtors();
+    // Destroy class instances, run defers, and release str variables across all active scopes.
+    emit_all_scope_cleanups();
     emit_all_str_releases();
     if (val)
         builder_->CreateRet(val);
@@ -1307,7 +1493,8 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
         if (init_ptr) {
             init_val = gen_expr(*init_ptr);
             TypeId init_tid = type_id_of(*init_ptr);
-            if (var_tid == TR::TID_UNKNOWN) var_tid = init_tid;
+            bool is_lambda = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get()) != nullptr;
+            if (var_tid == TR::TID_UNKNOWN || is_lambda) var_tid = init_tid;
             init_val = coerce(init_val, init_tid, var_tid);
         }
         if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;
@@ -1324,6 +1511,19 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
             builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
         }
         env_define(name, alloca, var_tid);
+        if (init_ptr) {
+            if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get())) {
+                ast::TypeExpr te;
+                te.name = "__fn";
+                for (const auto& p : lam->params)
+                    te.fn_params.push_back(p.type);
+                te.fn_ret = lam->inferred_ret;
+                fn_var_types_[name] = te;
+                // Register closure env for free() on scope exit
+                if (!cleanup_scopes_.empty())
+                    cleanup_scopes_.back().push_back({alloca, "__closure", nullptr});
+            }
+        }
         // Track variable→class for member access resolution
         if (!s.type.name.empty() && layouts_.count(s.type.name))
             var_class_[name] = s.type.name;
@@ -1406,8 +1606,14 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
         return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_),
                                       static_cast<int32_t>(p->value), true);
 
+    if (auto* p = dynamic_cast<const ast::LongLitExpr*>(&e))
+        return llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), p->value, true);
+
     if (auto* p = dynamic_cast<const ast::FloatLitExpr*>(&e))
         return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*ctx_), p->value);
+
+    if (auto* p = dynamic_cast<const ast::RealLitExpr*>(&e))
+        return llvm::ConstantFP::get(llvm::Type::getFloatTy(*ctx_), p->value);
 
     if (auto* p = dynamic_cast<const ast::StringLitExpr*>(&e)) {
         return str_literal(p->value);
@@ -1439,6 +1645,7 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
     if (auto* p = dynamic_cast<const ast::NewExpr*>(&e))     return gen_new(*p);
     if (auto* p = dynamic_cast<const ast::ListExpr*>(&e))    return gen_list(*p);
     if (auto* p = dynamic_cast<const ast::DictExpr*>(&e))    return gen_dict(*p);
+    if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(&e)) return gen_lambda(*lam);
 
     return llvm::ConstantPointerNull::get(
         llvm::cast<llvm::PointerType>(ptr_type()));
@@ -1537,6 +1744,26 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
     TypeId lt = type_id_of(*e.left);
     TypeId rt = type_id_of(*e.right);
 
+    // Operator overloading: dispatch to class method if LHS is a user type
+    {
+        static const std::unordered_map<std::string, std::string> op_methods = {
+            {"+",  "operator__add"}, {"-",  "operator__sub"},
+            {"*",  "operator__mul"}, {"/",  "operator__div"},
+            {"==", "operator__eq"},  {"!=", "operator__ne"},
+            {"<",  "operator__lt"},  {"<=", "operator__le"},
+            {">",  "operator__gt"},  {">=", "operator__ge"},
+        };
+        auto it = op_methods.find(op);
+        if (it != op_methods.end()) {
+            std::string cls = resolve_class_name(*e.left, lt);
+            if (!cls.empty()) {
+                std::string sym = mangle(cls, it->second);
+                if (Function* fn = mod_->getFunction(sym))
+                    return emit_call(fn, {L, R});
+            }
+        }
+    }
+
     // Promote types — also fall back to checking the actual LLVM types for
     // cases where type_id is TID_UNKNOWN (e.g. stdlib member calls like math.sqrt).
     bool is_fp = (lt == TR::TID_DOUBLE || lt == TR::TID_REAL ||
@@ -1574,6 +1801,13 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
         else
             eq = builder_->CreateICmpNE(eq, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
         return eq;
+    }
+
+    // List + list via rt call
+    if (op == "+" && (lt == TR::TID_LIST || rt == TR::TID_LIST)) {
+        auto* concat_fn = get_or_declare_rt("duxrt_list_concat",
+            ptr_type(), {ptr_type(), ptr_type()});
+        return builder_->CreateCall(concat_fn, {L, R});
     }
 
     // Arithmetic
@@ -1697,6 +1931,36 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
             return builder_->CreateCall(fn, {arg});
         }
 
+        // Closure variable call — use fn_var_types_ (TypeId is from sema's registry)
+        if (fn_var_types_.count(name)) {
+            if (Value* closure_alloca = env_lookup(name)) {
+                const ast::TypeExpr& fn_te = fn_var_types_.at(name);
+                TypeId ret_id = types_.from_name(fn_te.fn_ret);
+                llvm::Type* ret_ty = (ret_id == TR::TID_VOID || ret_id < 0)
+                    ? llvm::Type::getVoidTy(*ctx_) : lower_type(ret_id);
+                std::vector<llvm::Type*> param_tys;
+                param_tys.push_back(ptr_type());
+                for (const auto& pt : fn_te.fn_params)
+                    param_tys.push_back(lower_type_expr(pt));
+                auto* fty = llvm::FunctionType::get(ret_ty, param_tys, false);
+                Value* closure_ptr = builder_->CreateLoad(ptr_type(), closure_alloca, name + ".clos");
+                std::vector<llvm::Type*> hdr_fields{ptr_type()};
+                auto* hdr_ty = llvm::StructType::get(*ctx_, hdr_fields);
+                Value* fp_gep = builder_->CreateStructGEP(hdr_ty, closure_ptr, 0, "closure.fp.gep");
+                Value* fp = builder_->CreateLoad(ptr_type(), fp_gep, "closure.fp");
+                std::vector<Value*> args;
+                args.push_back(closure_ptr);
+                for (size_t i = 0; i < e.args.size(); ++i) {
+                    Value* v = gen_expr(*e.args[i]);
+                    if (i < fn_te.fn_params.size())
+                        v = coerce_to_llvm_type(v, lower_type_expr(fn_te.fn_params[i]));
+                    args.push_back(v);
+                }
+                return builder_->CreateCall(fty, fp, args,
+                    ret_ty->isVoidTy() ? "" : "closure.ret");
+            }
+        }
+
         // Look up a declared function — also try current namespace prefix
         // so that intra-namespace calls (e.g. factorial calling itself when
         // compiled as mathutils__factorial) resolve correctly.
@@ -1715,7 +1979,7 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
                 v = coerce_to_llvm_type(v, (param_it++)->getType());
             args.push_back(v);
         }
-        return builder_->CreateCall(fn, args);
+        return emit_call(fn, args);
     }
 
     // Member call: obj.method(args)
@@ -1745,6 +2009,21 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
         cls_name = resolve_class_name(*mem->object, obj_tid);
         std::string mangled = mangle(cls_name, mem->member);
         Function* fn = mod_->getFunction(mangled);
+
+        // Walk the inheritance chain when the method is not defined in the
+        // declared class (inherited method dispatch).
+        if (!fn) {
+            std::string cur = cls_name;
+            while (!cur.empty()) {
+                auto lit = layouts_.find(cur);
+                if (lit == layouts_.end()) break;
+                cur = lit->second.parent_name;
+                if (cur.empty()) break;
+                fn = mod_->getFunction(mangle(cur, mem->member));
+                if (fn) break;
+            }
+        }
+
         if (fn) {
             std::vector<Value*> args = {obj};
             auto param_it = std::next(fn->arg_begin()); // skip 'this'
@@ -1754,7 +2033,7 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
                     v = coerce_to_llvm_type(v, (param_it++)->getType());
                 args.push_back(v);
             }
-            return builder_->CreateCall(fn, args);
+            return emit_call(fn, args);
         }
         // Fallback: return null
         return llvm::ConstantPointerNull::get(
@@ -1813,6 +2092,16 @@ Value* Codegen::gen_index(const ast::IndexExpr& e) {
     Value* obj = gen_expr(*e.object);
     Value* idx = gen_expr(*e.index);
     TypeId obj_tid = type_id_of(*e.object);
+
+    // Operator overloading: dispatch to operator__index for user types
+    {
+        std::string cls = resolve_class_name(*e.object, obj_tid);
+        if (!cls.empty()) {
+            std::string sym = mangle(cls, "operator__index");
+            if (Function* fn = mod_->getFunction(sym))
+                return emit_call(fn, {obj, idx});
+        }
+    }
 
     if (obj_tid == TR::TID_LIST) {
         auto* get_fn = get_or_declare_rt("duxrt_list_get",
@@ -1873,13 +2162,14 @@ Value* Codegen::gen_new(const ast::NewExpr& e) {
         }
     }
 
-    // Call constructor if present
+    // Call constructor if present (use invoke inside try blocks so constructor
+    // exceptions propagate to the surrounding landingpad).
     std::string ctor_name = mangle(cls_name, cls_name);
     Function* ctor_fn = mod_->getFunction(ctor_name);
     if (ctor_fn) {
         std::vector<Value*> args = {raw};
         for (const auto& a : e.args) args.push_back(gen_expr(*a));
-        builder_->CreateCall(ctor_fn, args);
+        emit_call(ctor_fn, args);
     }
 
     return raw;
@@ -1929,6 +2219,229 @@ Value* Codegen::gen_dict(const ast::DictExpr& e) {
         builder_->CreateCall(set_fn, {dict, kv, vv});
     }
     return dict;
+}
+
+// ─── Free-variable collection helpers for closures ───────────────────────────
+
+static void collect_fv_expr(const ast::Expr* e,
+                             std::unordered_set<std::string>& locals,
+                             std::vector<std::string>& result,
+                             std::unordered_set<std::string>& seen);
+
+static void collect_fv_stmt(const ast::Stmt* s,
+                             std::unordered_set<std::string>& locals,
+                             std::vector<std::string>& result,
+                             std::unordered_set<std::string>& seen) {
+    if (!s) return;
+    if (auto* b = dynamic_cast<const ast::BlockStmt*>(s)) {
+        std::unordered_set<std::string> inner = locals;
+        for (const auto& st : b->body) collect_fv_stmt(st.get(), inner, result, seen);
+    } else if (auto* es = dynamic_cast<const ast::ExprStmt*>(s)) {
+        collect_fv_expr(es->expr.get(), locals, result, seen);
+    } else if (auto* r = dynamic_cast<const ast::ReturnStmt*>(s)) {
+        if (r->value) collect_fv_expr(r->value->get(), locals, result, seen);
+    } else if (auto* v = dynamic_cast<const ast::VarDeclStmt*>(s)) {
+        for (const auto& [name, init] : v->decls) {
+            if (init) collect_fv_expr(init.get(), locals, result, seen);
+            locals.insert(name);
+        }
+    } else if (auto* i = dynamic_cast<const ast::IfStmt*>(s)) {
+        collect_fv_expr(i->cond.get(), locals, result, seen);
+        collect_fv_stmt(i->then_br.get(), locals, result, seen);
+        if (i->else_br) collect_fv_stmt(i->else_br.get(), locals, result, seen);
+    } else if (auto* w = dynamic_cast<const ast::WhileStmt*>(s)) {
+        collect_fv_expr(w->cond.get(), locals, result, seen);
+        collect_fv_stmt(w->body.get(), locals, result, seen);
+    }
+}
+
+static void collect_fv_expr(const ast::Expr* e,
+                             std::unordered_set<std::string>& locals,
+                             std::vector<std::string>& result,
+                             std::unordered_set<std::string>& seen) {
+    if (!e) return;
+    if (auto* id = dynamic_cast<const ast::IdentExpr*>(e)) {
+        if (!locals.count(id->name) && !seen.count(id->name)) {
+            result.push_back(id->name);
+            seen.insert(id->name);
+        }
+    } else if (auto* bin = dynamic_cast<const ast::BinaryExpr*>(e)) {
+        collect_fv_expr(bin->left.get(), locals, result, seen);
+        collect_fv_expr(bin->right.get(), locals, result, seen);
+    } else if (auto* un = dynamic_cast<const ast::UnaryExpr*>(e)) {
+        collect_fv_expr(un->operand.get(), locals, result, seen);
+    } else if (auto* call = dynamic_cast<const ast::CallExpr*>(e)) {
+        collect_fv_expr(call->callee.get(), locals, result, seen);
+        for (const auto& a : call->args) collect_fv_expr(a.get(), locals, result, seen);
+    } else if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e)) {
+        collect_fv_expr(mem->object.get(), locals, result, seen);
+    } else if (auto* idx = dynamic_cast<const ast::IndexExpr*>(e)) {
+        collect_fv_expr(idx->object.get(), locals, result, seen);
+        collect_fv_expr(idx->index.get(), locals, result, seen);
+    } else if (auto* a = dynamic_cast<const ast::AssignExpr*>(e)) {
+        collect_fv_expr(a->target.get(), locals, result, seen);
+        collect_fv_expr(a->value.get(), locals, result, seen);
+    } else if (auto* n = dynamic_cast<const ast::NewExpr*>(e)) {
+        for (const auto& arg : n->args) collect_fv_expr(arg.get(), locals, result, seen);
+    }
+}
+
+Value* Codegen::gen_lambda(const ast::LambdaExpr& e) {
+    // Collect captures: free vars in the body not in param list
+    std::unordered_set<std::string> param_set;
+    for (const auto& p : e.params) param_set.insert(p.name);
+    std::vector<std::string> free_vars;
+    std::unordered_set<std::string> seen_fv;
+    collect_fv_stmt(e.body.get(), param_set, free_vars, seen_fv);
+
+    // Filter to only actual outer-scope variables
+    std::vector<std::string> captures;
+    for (const std::string& v : free_vars)
+        if (env_lookup(v)) captures.push_back(v);
+    const_cast<ast::LambdaExpr&>(e).captures = captures;
+
+    // Closure struct type: {ptr fn_ptr, ptr cap0_ref, ...}
+    std::vector<llvm::Type*> env_fields;
+    env_fields.push_back(ptr_type());
+    for (size_t i = 0; i < captures.size(); ++i) env_fields.push_back(ptr_type());
+    llvm::StructType* closure_ty = llvm::StructType::get(*ctx_, env_fields);
+
+    // Determine return type by scanning body for return statements.
+    // We cannot use e.type_id here because it references sema's TypeRegistry,
+    // which is separate from the codegen TypeRegistry.
+    TypeId ret_tid = TR::TID_VOID;
+    if (auto* blk = dynamic_cast<const ast::BlockStmt*>(e.body.get())) {
+        for (const auto& s : blk->body) {
+            if (auto* rs = dynamic_cast<const ast::ReturnStmt*>(s.get())) {
+                if (rs->value) {
+                    TypeId rt = type_id_of(**rs->value);
+                    if (rt >= 0 && rt != TR::TID_VOID) { ret_tid = rt; break; }
+                }
+            }
+        }
+    }
+    if (ret_tid < 0) ret_tid = TR::TID_VOID;
+
+    // Build lambda function type: (ptr env, param_types...) -> ret
+    std::vector<llvm::Type*> lam_params;
+    lam_params.push_back(ptr_type());
+    for (const auto& p : e.params) lam_params.push_back(lower_type_expr(p.type));
+    llvm::Type* ret_llvm = lower_type(ret_tid);
+    auto* lam_fty = llvm::FunctionType::get(ret_llvm, lam_params, false);
+    std::string lam_name = "__lambda_" + std::to_string(lambda_counter_++);
+    auto* lam_fn = Function::Create(lam_fty, Function::InternalLinkage, lam_name, *mod_);
+
+    // Set personality function
+    Function* personality_fn = mod_->getFunction("__gxx_personality_v0");
+    if (!personality_fn) {
+        auto* pft = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_), true);
+        personality_fn = Function::Create(pft, Function::ExternalLinkage,
+                                          "__gxx_personality_v0", *mod_);
+    }
+    lam_fn->setPersonalityFn(personality_fn);
+
+    // Save outer codegen state
+    auto* outer_bb      = builder_->GetInsertBlock();
+    auto  outer_env     = env_;
+    auto  outer_str     = str_scopes_;
+    auto  outer_cleanup = cleanup_scopes_;
+    auto  outer_vcls    = var_class_;
+    std::string outer_class  = current_class_;
+    TypeId      outer_ret    = current_ret_type_;
+    auto        outer_lp     = lp_stack_;
+    llvm::Function* outer_fn = current_fn_;
+
+    // Set up lambda state
+    current_fn_       = lam_fn;
+    current_ret_type_ = ret_tid;
+    current_class_    = "";
+    lp_stack_.clear();
+    env_.clear(); str_scopes_.clear(); cleanup_scopes_.clear(); var_class_.clear();
+
+    auto* lam_entry = BasicBlock::Create(*ctx_, "entry", lam_fn);
+    builder_->SetInsertPoint(lam_entry);
+    env_push();
+
+    // Bind env arg and load captures
+    auto arg_it = lam_fn->arg_begin();
+    Value* env_arg = &*arg_it++;
+    env_arg->setName("env");
+
+    for (size_t i = 0; i < captures.size(); ++i) {
+        Value* fgep = builder_->CreateStructGEP(
+            closure_ty, env_arg, (unsigned)(i + 1), captures[i] + ".cap.gep");
+        Value* cap_alloca = builder_->CreateLoad(ptr_type(), fgep, captures[i] + ".cap");
+        env_.back()[captures[i]] = cap_alloca;
+        // Copy alloca_type if we can find the outer alloca
+        for (auto it = outer_env.rbegin(); it != outer_env.rend(); ++it) {
+            auto jt = it->find(captures[i]);
+            if (jt != it->end() && alloca_type_.count(jt->second)) {
+                alloca_type_[cap_alloca] = alloca_type_[jt->second];
+                break;
+            }
+        }
+    }
+
+    // Bind params
+    for (const auto& p : e.params) {
+        llvm::Type* pt = lower_type_expr(p.type);
+        Value* alloca = make_alloca(pt, p.name);
+        builder_->CreateStore(&*arg_it, alloca);
+        env_.back()[p.name] = alloca;
+        alloca_type_[alloca] = pt;
+        ++arg_it;
+    }
+
+    // Register fn-typed lambda params for closure dispatch
+    for (const auto& p : e.params)
+        if (p.type.name == "__fn") fn_var_types_[p.name] = p.type;
+
+    // Generate body
+    if (auto* blk = dynamic_cast<const ast::BlockStmt*>(e.body.get()))
+        gen_stmts(blk->body);
+
+    // Add terminator if needed
+    if (!builder_->GetInsertBlock()->getTerminator()) {
+        emit_all_scope_cleanups();
+        emit_all_str_releases();
+        if (ret_llvm->isVoidTy()) builder_->CreateRetVoid();
+        else builder_->CreateRet(llvm::Constant::getNullValue(ret_llvm));
+    }
+    // Pop lambda scope stacks (without emitting cleanup again)
+    if (!cleanup_scopes_.empty()) cleanup_scopes_.pop_back();
+    if (!str_scopes_.empty())     str_scopes_.pop_back();
+    if (!env_.empty())            env_.pop_back();
+
+    // Restore outer state
+    builder_->SetInsertPoint(outer_bb);
+    env_       = std::move(outer_env);
+    str_scopes_= std::move(outer_str);
+    cleanup_scopes_ = std::move(outer_cleanup);
+    var_class_ = std::move(outer_vcls);
+    current_class_    = outer_class;
+    current_ret_type_ = outer_ret;
+    lp_stack_  = std::move(outer_lp);
+    current_fn_       = outer_fn;
+
+    // Allocate closure struct on heap
+    llvm::DataLayout dl(mod_.get());
+    uint64_t sz = dl.getTypeAllocSize(closure_ty);
+    Value* sz_val = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), sz);
+    Value* raw = rt_malloc(sz_val);
+
+    // Store fn pointer at field 0
+    Value* fp_field = builder_->CreateStructGEP(closure_ty, raw, 0, "closure.fp.slot");
+    builder_->CreateStore(lam_fn, fp_field);
+
+    // Store capture pointers (ptr to each captured alloca)
+    for (size_t i = 0; i < captures.size(); ++i) {
+        Value* cap_field = builder_->CreateStructGEP(
+            closure_ty, raw, (unsigned)(i + 1), captures[i] + ".cap.slot");
+        Value* cap_alloca = env_lookup(captures[i]);
+        if (cap_alloca) builder_->CreateStore(cap_alloca, cap_field);
+    }
+
+    return raw;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -2083,22 +2596,21 @@ TypeId Codegen::type_id_of(const ast::Expr& e) const {
 void Codegen::env_push() {
     env_.emplace_back();
     str_scopes_.emplace_back();
-    obj_scopes_.emplace_back();
+    cleanup_scopes_.emplace_back();
 }
 
 void Codegen::env_pop() {
     auto* bb = builder_->GetInsertBlock();
     bool live = bb && !bb->getTerminator();
 
-    // Call dtors for class instances in LIFO order.
-    if (!obj_scopes_.empty()) {
+    // Run RAII dtors and defer blocks in LIFO order.
+    if (!cleanup_scopes_.empty()) {
         if (live) {
-            auto& scope = obj_scopes_.back();
+            auto& scope = cleanup_scopes_.back();
             for (int i = static_cast<int>(scope.size()) - 1; i >= 0; --i)
-                emit_dtor(scope[static_cast<std::size_t>(i)].alloca,
-                          scope[static_cast<std::size_t>(i)].class_name);
+                emit_scope_cleanup(scope[static_cast<std::size_t>(i)]);
         }
-        obj_scopes_.pop_back();
+        cleanup_scopes_.pop_back();
     }
 
     // Emit releases for str variables going out of scope.
@@ -2120,11 +2632,13 @@ void Codegen::env_define(const std::string& name, Value* alloca, TypeId tid) {
         str_scopes_.back().push_back(alloca);
         return;
     }
-    // Register class instances that have a destructor for automatic cleanup.
-    if (tid > TR::TID_NULL && !obj_scopes_.empty()) {
+    // Register class instances for RAII cleanup (dtor call if present, then free).
+    // Uses layouts_ as the condition so trivial-dtor classes (no ___dtor symbol)
+    // are still freed at scope exit via the free-only path in emit_dtor.
+    if (tid > TR::TID_NULL && !cleanup_scopes_.empty()) {
         const std::string& cls_name = types_.name_of(tid);
-        if (!cls_name.empty() && mod_->getFunction(cls_name + "___dtor"))
-            obj_scopes_.back().push_back({alloca, cls_name});
+        if (!cls_name.empty() && layouts_.count(cls_name))
+            cleanup_scopes_.back().push_back({alloca, cls_name, nullptr});
     }
 }
 
@@ -2132,42 +2646,141 @@ void Codegen::emit_dtor(Value* alloca, const std::string& class_name) {
     auto* bb = builder_->GetInsertBlock();
     if (!bb || bb->getTerminator()) return;
 
-    Value* obj_ptr = builder_->CreateLoad(ptr_type(), alloca, "dtor.obj");
+    auto* free_fn = get_or_declare_rt("free", llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+    Value* null_v = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type()));
 
-    // Null guard: skip if the pointer is already null (e.g. after explicit delete).
-    Function* fn      = bb->getParent();
-    auto* call_bb     = BasicBlock::Create(*ctx_, "dtor.call", fn);
-    auto* end_bb      = BasicBlock::Create(*ctx_, "dtor.end",  fn);
-    Value* null_v     = llvm::ConstantPointerNull::get(
-                            llvm::cast<llvm::PointerType>(ptr_type()));
-    Value* is_null    = builder_->CreateICmpEQ(obj_ptr, null_v, "dtor.isnull");
+    std::string dtor_sym = class_name + "___dtor";
+    Function* dtor_fn = mod_->getFunction(dtor_sym);
+
+    if (!dtor_fn) {
+        // Trivial dtor (empty body or none declared): null-guard + free only.
+        // The null-guard is kept so that explicit delete + RAII scope exit
+        // doesn't double-free (gen_delete stores null after free).
+        Value* obj_ptr = builder_->CreateLoad(ptr_type(), alloca, "dtor.obj");
+        Function* fn   = bb->getParent();
+        auto* call_bb  = BasicBlock::Create(*ctx_, "dtor.call", fn);
+        auto* end_bb   = BasicBlock::Create(*ctx_, "dtor.end",  fn);
+        Value* is_null = builder_->CreateICmpEQ(obj_ptr, null_v, "dtor.isnull");
+        builder_->CreateCondBr(is_null, end_bb, call_bb);
+        builder_->SetInsertPoint(call_bb);
+        builder_->CreateCall(free_fn, {obj_ptr});
+        builder_->CreateStore(null_v, alloca);
+        builder_->CreateBr(end_bb);
+        builder_->SetInsertPoint(end_bb);
+        return;
+    }
+
+    // Non-trivial dtor: null-guard + user dtor call + free.
+    Value* obj_ptr = builder_->CreateLoad(ptr_type(), alloca, "dtor.obj");
+    Function* fn   = bb->getParent();
+    auto* call_bb  = BasicBlock::Create(*ctx_, "dtor.call", fn);
+    auto* end_bb   = BasicBlock::Create(*ctx_, "dtor.end",  fn);
+    Value* is_null = builder_->CreateICmpEQ(obj_ptr, null_v, "dtor.isnull");
     builder_->CreateCondBr(is_null, end_bb, call_bb);
 
     builder_->SetInsertPoint(call_bb);
-    // Call the user-defined destructor if one was declared.
-    std::string dtor_sym = class_name + "___dtor";
-    if (Function* dtor_fn = mod_->getFunction(dtor_sym))
-        builder_->CreateCall(dtor_fn, {obj_ptr});
-    // Free the heap-allocated object.
-    auto* free_fn = get_or_declare_rt("free", llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+    builder_->CreateCall(dtor_fn, {obj_ptr});
     builder_->CreateCall(free_fn, {obj_ptr});
+    // Null out the slot so a second emit_dtor call is a no-op.
+    builder_->CreateStore(null_v, alloca);
     builder_->CreateBr(end_bb);
 
     builder_->SetInsertPoint(end_bb);
 }
 
-void Codegen::emit_all_obj_dtors() {
+void Codegen::emit_scope_cleanup(const ScopeCleanup& c) {
     auto* bb = builder_->GetInsertBlock();
     if (!bb || bb->getTerminator()) return;
-    for (int i = static_cast<int>(obj_scopes_.size()) - 1; i >= 0; --i) {
-        auto& scope = obj_scopes_[static_cast<std::size_t>(i)];
+    if (c.defer_body)
+        gen_stmts(*c.defer_body);
+    else
+        emit_dtor(c.alloca, c.class_name);
+}
+
+void Codegen::emit_all_scope_cleanups() {
+    auto* bb = builder_->GetInsertBlock();
+    if (!bb || bb->getTerminator()) return;
+    for (int i = static_cast<int>(cleanup_scopes_.size()) - 1; i >= 0; --i) {
+        auto& scope = cleanup_scopes_[static_cast<std::size_t>(i)];
         for (int j = static_cast<int>(scope.size()) - 1; j >= 0; --j)
-            emit_dtor(scope[static_cast<std::size_t>(j)].alloca,
-                      scope[static_cast<std::size_t>(j)].class_name);
+            emit_scope_cleanup(scope[static_cast<std::size_t>(j)]);
     }
 }
 
+void Codegen::gen_defer(const ast::DeferStmt& s) {
+    if (cleanup_scopes_.empty()) return;
+    // Register the defer block; it will be emitted in LIFO order at scope exit.
+    cleanup_scopes_.back().push_back({nullptr, {}, &s.body});
+}
+
+void Codegen::gen_throw(const ast::ThrowStmt& s) {
+    Value* exc = gen_expr(*s.expr);
+
+    // Allocate exception storage (sizeof(void*) = 8 bytes on LP64)
+    auto* alloc_exc = get_or_declare_rt("__cxa_allocate_exception",
+                          ptr_type(), {llvm::Type::getInt64Ty(*ctx_)});
+    Value* storage = builder_->CreateCall(alloc_exc,
+                         {llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_), 8)},
+                         "exc.storage");
+    builder_->CreateStore(exc, storage);
+
+    // _ZTIPv = typeinfo for void* from libstdc++; used as a valid non-null
+    // type_info for __cxa_throw.  Since landingpads use catch ptr null
+    // (catch-all), the type is never matched against.
+    llvm::GlobalVariable* tinfo_gv = llvm::cast<llvm::GlobalVariable>(
+        mod_->getOrInsertGlobal("_ZTIPv", ptr_type()));
+    tinfo_gv->setExternallyInitialized(true);
+
+    Function* cxa_throw = get_or_declare_rt("__cxa_throw",
+                              llvm::Type::getVoidTy(*ctx_),
+                              {ptr_type(), ptr_type(), ptr_type()});
+    cxa_throw->setDoesNotReturn();
+    llvm::Value* null_dest =
+        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptr_type()));
+    std::vector<Value*> throw_args = {storage, tinfo_gv, null_dest};
+
+    if (!lp_stack_.empty()) {
+        // Inside a try block: use invoke so the EH table covers this site.
+        // The "normal" successor is unreachable because __cxa_throw never returns.
+        Function* fn = builder_->GetInsertBlock()->getParent();
+        auto* unreach_bb = BasicBlock::Create(*ctx_, "throw.cont", fn);
+        builder_->CreateInvoke(cxa_throw, unreach_bb, lp_stack_.back(), throw_args);
+        builder_->SetInsertPoint(unreach_bb);
+    } else {
+        builder_->CreateCall(cxa_throw, throw_args);
+    }
+    builder_->CreateUnreachable();
+}
+
+// Emit a call or invoke depending on whether we're inside a try block.
+Value* Codegen::emit_call(llvm::FunctionCallee callee,
+                          llvm::ArrayRef<Value*> args,
+                          const std::string& name) {
+    if (lp_stack_.empty())
+        return builder_->CreateCall(callee, args, name);
+
+    // Inside a try block: emit invoke so exceptions unwind to the landing pad.
+    Function* fn = builder_->GetInsertBlock()->getParent();
+    auto* cont_bb = BasicBlock::Create(*ctx_, "invoke.cont", fn);
+    auto* inst = builder_->CreateInvoke(callee, cont_bb, lp_stack_.back(), args, name);
+    builder_->SetInsertPoint(cont_bb);
+    return inst;
+}
+
 Value* Codegen::make_alloca(llvm::Type* t, const std::string& name) {
+    // Always create allocas in the function entry block so they dominate all
+    // uses — including landing pad blocks that may be unreachable via invoke
+    // continuations.
+    llvm::BasicBlock* cur = builder_->GetInsertBlock();
+    Function* fn = cur ? cur->getParent() : nullptr;
+    if (fn && !fn->empty()) {
+        llvm::BasicBlock& entry = fn->getEntryBlock();
+        llvm::IRBuilder<> eb(&entry, entry.begin());
+        Value* a = eb.CreateAlloca(t, nullptr, name);
+        alloca_type_[a] = t;
+        return a;
+    }
     Value* a = builder_->CreateAlloca(t, nullptr, name);
     alloca_type_[a] = t;
     return a;
@@ -2272,7 +2885,17 @@ Value* Codegen::rt_println(Value* v, TypeId t) {
         else if (v->getType()->isFloatingPointTy()) t = TR::TID_DOUBLE;
         else t = TR::TID_STR;
     }
-    if (t == TR::TID_INT || t == TR::TID_LONG || t == TR::TID_BOOL) {
+    if (t == TR::TID_BOOL) {
+        // Print "true" or "false".  CreateSExt on i1 would give -1 for true.
+        llvm::Type* i1 = llvm::Type::getInt1Ty(*ctx_);
+        Value* cond = (v->getType() == i1)
+            ? v : builder_->CreateTrunc(v, i1);
+        Value* msg = builder_->CreateSelect(cond, str_literal("true"), str_literal("false"));
+        auto* sfn = get_or_declare_rt("duxrt_println_str",
+            llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+        return builder_->CreateCall(sfn, {msg});
+    }
+    if (t == TR::TID_INT || t == TR::TID_LONG) {
         auto* fn = get_or_declare_rt("duxrt_println_int",
             llvm::Type::getVoidTy(*ctx_), {llvm::Type::getInt64Ty(*ctx_)});
         Value* v64 = v->getType() == llvm::Type::getInt64Ty(*ctx_)

@@ -1,0 +1,43 @@
+extern "C" ptr duxrt_list_new()
+extern "C" void duxrt_list_push(ptr l, ptr val)
+extern "C" ptr duxrt_list_get(ptr l, long idx)
+extern "C" long duxrt_list_len(ptr l)
+extern "C" void duxrt_list_free(ptr l)
+
+class List<T>(object) {
+    public:
+    list _items
+    long _len
+
+    List() {
+        this._len = 0l
+        this._items = []
+    }
+
+    void push(T item) {
+        unsafe {
+            duxrt_list_push(this._items, item)
+        }
+        this._len = this._len + 1l
+    }
+
+    T at(long i) {
+        return this._items[i]
+    }
+
+    long len() {
+        return this._len
+    }
+
+    ~List() {
+        long i = 0l
+        while i < this._len {
+            T item = this._items[i]
+            delete item
+            i = i + 1l
+        }
+        unsafe {
+            duxrt_list_free(this._items)
+        }
+    }
+}

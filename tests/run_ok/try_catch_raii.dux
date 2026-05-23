@@ -1,0 +1,24 @@
+class Logger {
+    str tag
+    Logger(str t) {
+        this.tag = t
+    }
+    ~Logger() {
+        println("dtor:" + this.tag)
+    }
+}
+
+int main() {
+    try {
+        Logger a = new Logger("a")
+        defer {
+            println("defer:a")
+        }
+        Logger b = new Logger("b")
+        throw new Logger("exc")
+    } catch ... {
+        println("caught")
+    }
+    println("done")
+    return 0
+}

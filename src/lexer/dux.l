@@ -125,6 +125,10 @@ ALNUM   [a-zA-Z0-9_]
 "get"        { need_semi = true;  return yy::parser::make_KW_GET(loc);       }
 "set"        { need_semi = true;  return yy::parser::make_KW_SET(loc);       }
 "assert"     { need_semi = false; return yy::parser::make_KW_ASSERT(loc);    }
+"fn"         { need_semi = false; return yy::parser::make_KW_FN(loc);        }
+"auto"       { need_semi = false; return yy::parser::make_KW_AUTO(loc);      }
+"defer"      { need_semi = false; return yy::parser::make_KW_DEFER(loc);     }
+"throw"      { need_semi = false; return yy::parser::make_KW_THROW(loc);     }
 "unsafe"     { need_semi = false; return yy::parser::make_KW_UNSAFE(loc);    }
 "extern"     { need_semi = false; return yy::parser::make_KW_EXTERN(loc);    }
 "and"        { need_semi = false; return yy::parser::make_KW_AND(loc);       }
@@ -139,19 +143,32 @@ ALNUM   [a-zA-Z0-9_]
 "long"       { need_semi = false; return yy::parser::make_KW_LONG(loc);   }
 "real"       { need_semi = false; return yy::parser::make_KW_REAL(loc);   }
 "double"     { need_semi = false; return yy::parser::make_KW_DOUBLE(loc); }
-"str"        { need_semi = false; return yy::parser::make_KW_STR(loc);    }
+"str"        { need_semi = true;  return yy::parser::make_KW_STR(loc);    }
 "bool"       { need_semi = false; return yy::parser::make_KW_BOOL(loc);   }
-"list"       { need_semi = false; return yy::parser::make_KW_LIST(loc);   }
-"dict"       { need_semi = false; return yy::parser::make_KW_DICT(loc);   }
+"list"       { need_semi = true;  return yy::parser::make_KW_LIST(loc);   }
+"dict"       { need_semi = true;  return yy::parser::make_KW_DICT(loc);   }
 "tuple"      { need_semi = false; return yy::parser::make_KW_TUPLE(loc);  }
 "object"     { need_semi = false; return yy::parser::make_KW_OBJECT(loc); }
 "ptr"        { need_semi = false; return yy::parser::make_KW_PTR(loc);    }
 
+{DIGIT}+"."{DIGIT}*"f"|"."{DIGIT}+"f"  {
+    need_semi = true;
+    std::string s(yytext); s.pop_back();
+    return yy::parser::make_REAL_LIT(std::stod(s), loc);
+}
+{DIGIT}+"."{DIGIT}*"d"|"."{DIGIT}+"d"  {
+    need_semi = true;
+    std::string s(yytext); s.pop_back();
+    return yy::parser::make_FLOAT_LIT(std::stod(s), loc);
+}
 {DIGIT}+"."{DIGIT}+|"."{DIGIT}+  {
     need_semi = true;
     return yy::parser::make_FLOAT_LIT(std::stod(yytext), loc);
 }
-
+{DIGIT}+"i"  { need_semi = true; return yy::parser::make_INT_LIT(std::stoll(yytext), loc); }
+{DIGIT}+"l"  { need_semi = true; return yy::parser::make_LONG_LIT(std::stoll(yytext), loc); }
+{DIGIT}+"d"  { need_semi = true; return yy::parser::make_FLOAT_LIT(static_cast<double>(std::stoll(yytext)), loc); }
+{DIGIT}+"f"  { need_semi = true; return yy::parser::make_REAL_LIT(static_cast<double>(std::stoll(yytext)), loc); }
 {DIGIT}+  {
     need_semi = true;
     return yy::parser::make_INT_LIT(std::stoll(yytext), loc);

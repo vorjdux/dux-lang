@@ -1,6 +1,7 @@
 #include "sema/sema.hpp"
 #include "driver/driver.hpp"
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace dux::sema {
@@ -64,8 +65,24 @@ void Sema::warn(const ast::SourceLoc& loc, const std::string& msg) {
     driver_.warning(loc, msg);
 }
 
-TypeId Sema::type_from_te(const ast::TypeExpr& te) const {
+TypeId Sema::type_from_te(const ast::TypeExpr& te) {
     if (te.name == "ptr") return TR::TID_OBJECT;
+    if (te.name == "__fn") {
+        std::string sig = "__fn(";
+        for (size_t i = 0; i < te.fn_params.size(); ++i) {
+            if (i > 0) sig += ",";
+            sig += te.fn_params[i].name;
+        }
+        sig += ")->" + te.fn_ret;
+        TypeId id = types_.intern(sig, TypeKind::Function);
+        auto& info = types_.info(id);
+        if (info.return_type < 0) {
+            info.return_type = types_.from_name(te.fn_ret);
+            for (const auto& p : te.fn_params)
+                info.param_types.push_back(types_.from_name(p.name));
+        }
+        return id;
+    }
     TypeId id = types_.from_type_expr(te);
     return id == TR::TID_UNKNOWN ? TR::TID_UNKNOWN : id;
 }
@@ -174,16 +191,22 @@ void Sema::hoist_extern(const ast::ExternDecl& e) {
     s.loc         = e.loc;
     for (const auto& p : e.params)
         s.params.emplace_back(p.name, type_from_te(p.type));
-    scopes_.define(s.name, s);
+    scopes_.define(s.name, s); // extern declarations may overlap; silently allow redecl
 }
 
 void Sema::hoist_class(const ast::ClassDecl& c) {
     TypeId id = types_.intern(c.name, TypeKind::Class);
-    // Wire up parent
+    // Wire up parent (first base) and register all interface bases
     if (!c.bases.empty()) {
         TypeId parent = types_.from_name(c.bases[0].name);
         if (parent == TR::TID_UNKNOWN) parent = TR::TID_OBJECT;
         types_.set_parent(id, parent);
+        for (const auto& base : c.bases) {
+            TypeId base_id = types_.from_name(base.name);
+            if (base_id == TR::TID_UNKNOWN) continue;
+            if (types_.info(base_id).kind == TypeKind::Interface)
+                types_.add_interface(id, base_id);
+        }
     }
     Symbol s;
     s.name = c.name;
@@ -239,7 +262,7 @@ void Sema::check_decl(const ast::Decl& d) {
     else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(&d)) check_namespace(*ns);
     else if (auto* im = dynamic_cast<const ast::ImportDecl*>(&d))    check_import(*im);
     // EnumDecl: already fully processed in hoist_enum (pass 1)
-    // ExternDecl: already hoisted in pass 1; nothing to check in pass 2
+    // ExternDecl: already hoisted, nothing further to check
 }
 
 void Sema::check_func(const ast::FunctionDecl& f, TypeId /*class_type*/) {
@@ -408,14 +431,17 @@ void Sema::check_import(const ast::ImportDecl& imp) {
     std::string last  = imp.path.substr(
         imp.path.rfind('.') == std::string::npos ? 0 : imp.path.rfind('.') + 1);
 
-    if (kStdlib.count(last) && imp.path.find('.') == std::string::npos) {
-        // Stdlib: register the module name so member-call resolution works.
-        if (!first.empty() && !scopes_.lookup(first)) {
+    // Match stdlib by the last path component so both "math" and "dux.math" work.
+    if (kStdlib.count(last)) {
+        // Register the accessor name (alias if given, else last component) as a
+        // namespace symbol so that member-call sema resolution doesn't error out.
+        const std::string ns_name = imp.alias.empty() ? last : imp.alias;
+        if (!scopes_.lookup(ns_name)) {
             Symbol s;
-            s.name = first;
+            s.name = ns_name;
             s.kind = SymKind::Namespace;
             s.type = TR::TID_OBJECT;
-            scopes_.define(first, s);
+            scopes_.define(ns_name, s);
         }
     }
     // User file imports: the import resolver already injected a NamespaceDecl
@@ -453,8 +479,9 @@ void Sema::check_stmt(const ast::Stmt& s) {
     }
     if (auto* a  = dynamic_cast<const ast::AssertStmt*>(&s))    { check_assert(*a);   return; }
     if (auto* d  = dynamic_cast<const ast::DeleteStmt*>(&s))    { check_delete(*d);   return; }
-    // LabeledStmt, etc. — visit the inner stmt
     if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))   { check_stmt(*ls->stmt); return; }
+    if (auto* ds = dynamic_cast<const ast::DeferStmt*>(&s))     { check_stmts(ds->body); return; }
+    if (auto* ts = dynamic_cast<const ast::ThrowStmt*>(&s))     { check_expr(*ts->expr); return; }
     if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s)) {
         bool prev = in_unsafe_;
         in_unsafe_ = true;
@@ -497,7 +524,8 @@ void Sema::check_do_while(const ast::DoWhileStmt& s) {
 
 void Sema::check_for_in(const ast::ForInStmt& s) {
     TypeId iter_t = check_expr(*s.iterable);
-    (void)iter_t; // accept any iterable for now
+    if (iter_t == TR::TID_DICT || iter_t == TR::TID_TUPLE || iter_t == TR::TID_STR)
+        err(s.iterable->loc, "for-in requires a list or range; got '" + types_.name_of(iter_t) + "'");
 
     scopes_.push();
     Symbol var;
@@ -604,6 +632,11 @@ void Sema::check_return(const ast::ReturnStmt& s) {
 }
 
 void Sema::check_var_decl(const ast::VarDeclStmt& s) {
+    if (s.type.name == "__fn") {
+        err(s.loc, "fn type cannot be used as a variable type; "
+                   "use: auto name = fn(params) -> type => ...");
+        return;
+    }
     TypeId decl_type = type_from_te(s.type);
     bool   is_const  = s.is_const;
 
@@ -617,8 +650,9 @@ void Sema::check_var_decl(const ast::VarDeclStmt& s) {
 
         if (init_ptr) {
             TypeId init_t = check_expr(*init_ptr);
-            if (var_type == TR::TID_UNKNOWN)
-                var_type = init_t;  // type inference
+            bool is_lambda = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get()) != nullptr;
+            if (var_type == TR::TID_UNKNOWN || is_lambda)
+                var_type = init_t;  // lambda: actual type is fn(...)->R, not the declared scalar
             else
                 require_assignable(init_t, var_type, init_ptr->loc,
                                    "variable '" + name + "' initialiser");
@@ -654,8 +688,12 @@ TypeId Sema::check_expr(const ast::Expr& e) {
     // Each branch uses a distinct name to avoid -Wshadow in the else-if chain.
     if (dynamic_cast<const ast::IntLitExpr*>(&e)) {
         result = TR::TID_INT;
+    } else if (dynamic_cast<const ast::LongLitExpr*>(&e)) {
+        result = TR::TID_LONG;
     } else if (dynamic_cast<const ast::FloatLitExpr*>(&e)) {
         result = TR::TID_DOUBLE;
+    } else if (dynamic_cast<const ast::RealLitExpr*>(&e)) {
+        result = TR::TID_REAL;
     } else if (dynamic_cast<const ast::StringLitExpr*>(&e)) {
         result = TR::TID_STR;
     } else if (dynamic_cast<const ast::BoolLitExpr*>(&e)) {
@@ -692,6 +730,8 @@ TypeId Sema::check_expr(const ast::Expr& e) {
         result = check_list(*lst_e);
     } else if (auto* dct_e  = dynamic_cast<const ast::DictExpr*>(&e)) {
         result = check_dict(*dct_e);
+    } else if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(&e)) {
+        result = check_lambda(*lam);
     }
     // else: unknown Expr subtype — leave as TID_UNKNOWN
 
@@ -752,6 +792,41 @@ TypeId Sema::check_binary(const ast::BinaryExpr& e) {
     TypeId R = check_expr(*e.right);
     const std::string& op = e.op;
 
+    // Operator overloading: if LHS is a class with a matching operator method,
+    // return its declared return type and skip primitive type checking.
+    {
+        static const std::unordered_map<std::string, std::string> op_methods = {
+            {"+",  "operator__add"}, {"-",  "operator__sub"},
+            {"*",  "operator__mul"}, {"/",  "operator__div"},
+            {"==", "operator__eq"},  {"!=", "operator__ne"},
+            {"<",  "operator__lt"},  {"<=", "operator__le"},
+            {">",  "operator__gt"},  {">=", "operator__ge"},
+        };
+        auto it = op_methods.find(op);
+        if (it != op_methods.end()) {
+            std::string cls = types_.name_of(L);
+            if (cls.empty()) {
+                // Also check var_class via symbol lookup for named variables
+                if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.left.get())) {
+                    Symbol* sym = scopes_.lookup(id->name);
+                    if (sym) cls = types_.name_of(sym->type);
+                }
+            }
+            Symbol* cs = cls.empty() ? nullptr : scopes_.lookup(cls);
+            if (cs && cs->kind == SymKind::Class) {
+                auto* cd = dynamic_cast<const ast::ClassDecl*>(cs->decl);
+                if (cd) {
+                    for (const auto& m : cd->members) {
+                        if (!m.decl) continue;
+                        auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get());
+                        if (f && f->name == it->second)
+                            return type_from_te(f->return_type);
+                    }
+                }
+            }
+        }
+    }
+
     // Arithmetic operators
     if (op == "+" || op == "-" || op == "*" || op == "/" || op == "%") {
         if (op == "+" && (L == TR::TID_STR || R == TR::TID_STR)) {
@@ -761,6 +836,14 @@ TypeId Sema::check_binary(const ast::BinaryExpr& e) {
             if (R != TR::TID_STR)
                 warn(e.right->loc, "'+' with str: right operand is '" + types_.name_of(R) + "'");
             return TR::TID_STR;
+        }
+        if (op == "+" && (L == TR::TID_LIST || R == TR::TID_LIST)) {
+            // List concatenation — both sides must be list
+            if (L != TR::TID_LIST)
+                warn(e.left->loc,  "'+' with list: left operand is '" + types_.name_of(L) + "'");
+            if (R != TR::TID_LIST)
+                warn(e.right->loc, "'+' with list: right operand is '" + types_.name_of(R) + "'");
+            return TR::TID_LIST;
         }
         require_numeric(L, e.left->loc,  "'" + op + "' left operand");
         require_numeric(R, e.right->loc, "'" + op + "' right operand");
@@ -833,7 +916,40 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
         }
         id->type_id = sym->type;
     } else {
-        // Member call or complex expression — check callee, skip signature check
+        // Member call: look up stdlib return types so expressions like
+        // math.sqrt(x) get annotated with TID_DOUBLE instead of TID_UNKNOWN.
+        static const std::unordered_map<std::string,
+               std::unordered_map<std::string, TypeId>> kStdlibRet = {
+            {"math", {
+                {"sqrt",  TR::TID_DOUBLE}, {"pow",  TR::TID_DOUBLE},
+                {"abs",   TR::TID_DOUBLE}, {"floor",TR::TID_DOUBLE},
+                {"ceil",  TR::TID_DOUBLE}, {"log",  TR::TID_DOUBLE},
+                {"log2",  TR::TID_DOUBLE}, {"sin",  TR::TID_DOUBLE},
+                {"cos",   TR::TID_DOUBLE}, {"tan",  TR::TID_DOUBLE},
+                {"min",   TR::TID_DOUBLE}, {"max",  TR::TID_DOUBLE},
+                {"abs_i", TR::TID_LONG},   {"min_i",TR::TID_LONG},
+                {"max_i", TR::TID_LONG},
+            }},
+            {"str",  {
+                {"concat",      TR::TID_STR},  {"from_int",    TR::TID_STR},
+                {"from_double", TR::TID_STR},  {"length",      TR::TID_LONG},
+                {"slice",       TR::TID_STR},  {"index",       TR::TID_STR},
+                {"eq",          TR::TID_BOOL},
+            }},
+            {"io",   {{"readline", TR::TID_STR}}},
+        };
+        if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e.callee.get())) {
+            if (auto* ns = dynamic_cast<const ast::IdentExpr*>(mem->object.get())) {
+                auto mod_it = kStdlibRet.find(ns->name);
+                if (mod_it != kStdlibRet.end()) {
+                    auto fn_it = mod_it->second.find(mem->member);
+                    if (fn_it != mod_it->second.end()) {
+                        for (const auto& a : e.args) check_expr(*a);
+                        return fn_it->second;
+                    }
+                }
+            }
+        }
         TypeId callee_t = check_expr(*e.callee);
         (void)callee_t;
         for (const auto& a : e.args) check_expr(*a);
@@ -868,6 +984,19 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
     }
 
     for (const auto& a : e.args) check_expr(*a);
+
+    // Closure call: callee has a function TypeId
+    if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.callee.get())) {
+        Symbol* cs = scopes_.lookup(id->name);
+        if (cs && (cs->kind == SymKind::Var || cs->kind == SymKind::Param)) {
+            TypeId callee_t = cs->type;
+            if (callee_t >= 0 && types_.info(callee_t).kind == TypeKind::Function) {
+                for (const auto& a : e.args) check_expr(*a);
+                return types_.info(callee_t).return_type;
+            }
+        }
+    }
+
     return TR::TID_UNKNOWN;
 }
 
@@ -893,11 +1022,13 @@ TypeId Sema::check_member(const ast::MemberExpr& e) {
 
     TypeId obj_t = check_expr(*e.object);
 
-    // Try to find the member in the class type info scope
-    if (obj_t != TR::TID_UNKNOWN && obj_t >= 0) {
-        // For now: if the object is a known class, allow any member access.
-        // Full field resolution would require per-class symbol tables (M3 work).
+    // If the object is 'this', look up the field in the current class scope.
+    // This allows IndexExpr on list/dict fields to pick the correct codegen path.
+    if (dynamic_cast<const ast::ThisExpr*>(e.object.get())) {
+        Symbol* sym = scopes_.lookup(e.member);
+        if (sym) return sym->type;
     }
+
     // Return unknown — type will be refined during codegen
     return TR::TID_UNKNOWN;
 }
@@ -905,6 +1036,30 @@ TypeId Sema::check_member(const ast::MemberExpr& e) {
 TypeId Sema::check_index(const ast::IndexExpr& e) {
     TypeId obj_t = check_expr(*e.object);
     TypeId idx_t = check_expr(*e.index);
+    (void)idx_t;
+
+    // Operator overloading: dispatch operator__index for user class types
+    {
+        std::string cls = types_.name_of(obj_t);
+        if (cls.empty()) {
+            if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.object.get())) {
+                Symbol* sym = scopes_.lookup(id->name);
+                if (sym) cls = types_.name_of(sym->type);
+            }
+        }
+        Symbol* cs = cls.empty() ? nullptr : scopes_.lookup(cls);
+        if (cs && cs->kind == SymKind::Class) {
+            auto* cd = dynamic_cast<const ast::ClassDecl*>(cs->decl);
+            if (cd) {
+                for (const auto& m : cd->members) {
+                    if (!m.decl) continue;
+                    auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get());
+                    if (f && f->name == "operator__index")
+                        return type_from_te(f->return_type);
+                }
+            }
+        }
+    }
 
     if (obj_t == TR::TID_LIST) {
         if (!types_.is_integral(idx_t) && idx_t != TR::TID_UNKNOWN)
@@ -941,6 +1096,53 @@ TypeId Sema::check_dict(const ast::DictExpr& e) {
         check_expr(*v);
     }
     return TR::TID_DICT;
+}
+
+TypeId Sema::check_lambda(const ast::LambdaExpr& e) {
+    scopes_.push();
+    for (const auto& p : e.params) {
+        TypeId pt = type_from_te(p.type);
+        Symbol sym;
+        sym.name = p.name; sym.kind = SymKind::Var; sym.type = pt; sym.loc = p.type.loc;
+        scopes_.define(p.name, sym);
+    }
+    TypeId saved_ret = current_return_type_;
+    current_return_type_ = TR::TID_UNKNOWN;
+    if (auto* b = dynamic_cast<const ast::BlockStmt*>(e.body.get()))
+        check_stmts(b->body);
+    // Infer return type from return statements
+    TypeId ret_tid = TR::TID_VOID;
+    if (auto* b = dynamic_cast<const ast::BlockStmt*>(e.body.get())) {
+        for (const auto& s : b->body) {
+            if (auto* r = dynamic_cast<const ast::ReturnStmt*>(s.get())) {
+                if (r->value && (*r->value)->type_id >= 0) {
+                    ret_tid = (*r->value)->type_id;
+                    break;
+                }
+            }
+        }
+    }
+    current_return_type_ = saved_ret;
+    scopes_.pop();
+    // Prefer the explicitly annotated return type over the inferred one
+    if (e.explicit_ret.has_value())
+        ret_tid = type_from_te(*e.explicit_ret);
+    std::string sig = "__fn(";
+    for (size_t i = 0; i < e.params.size(); ++i) {
+        if (i > 0) sig += ",";
+        sig += e.params[i].type.name;
+    }
+    sig += ")->" + types_.name_of(ret_tid);
+    TypeId fn_tid = types_.intern(sig, TypeKind::Function);
+    auto& info = types_.info(fn_tid);
+    info.return_type = ret_tid;
+    if (info.param_types.empty()) {
+        for (const auto& p : e.params)
+            info.param_types.push_back(type_from_te(p.type));
+    }
+    e.type_id = fn_tid;
+    const_cast<ast::LambdaExpr&>(e).inferred_ret = types_.name_of(ret_tid);
+    return fn_tid;
 }
 
 } // namespace dux::sema

@@ -54,3 +54,16 @@ void duxrt_list_free(DuxList* l) {
     free(l->data);
     free(l);
 }
+
+DuxList* duxrt_list_concat(DuxList* a, DuxList* b) {
+    DuxList* out = duxrt_list_new();
+    if (a) {
+        for (int64_t i = 0; i < a->len; i++)
+            duxrt_list_push(out, a->data[i]);
+    }
+    if (b) {
+        for (int64_t i = 0; i < b->len; i++)
+            duxrt_list_push(out, b->data[i]);
+    }
+    return out;
+}

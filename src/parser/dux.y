@@ -31,6 +31,9 @@ using namespace dux::ast;
 using PairList    = std::vector<std::pair<ExprPtr, ExprPtr>>;
 using VarItem     = std::pair<std::string, ExprPtr>;
 using VarItemList = std::vector<VarItem>;
+/* Generic type parameter: (param_name, bound_name). bound_name is empty if no bound. */
+using TypeParamEntry    = std::pair<std::string, std::string>;
+using TypeParamEntryList = std::vector<TypeParamEntry>;
 }
 
 /* Thread both driver and loc through parser and yylex */
@@ -64,7 +67,9 @@ static std::unique_ptr<T> mk(Args&&... a) {
 
 /* Literals */
 %token <long long>   INT_LIT    "integer literal"
+%token <long long>   LONG_LIT   "long literal"
 %token <double>      FLOAT_LIT  "float literal"
+%token <double>      REAL_LIT   "real literal"
 %token <std::string> STRING     "string literal"
 %token <std::string> IDENT      "identifier"
 %token <bool>        BOOL_LIT   "bool literal"
@@ -80,7 +85,9 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_TRY KW_CATCH KW_IN
 %token KW_CONST KW_STATIC
 %token KW_GET KW_SET
-%token KW_ASSERT
+%token KW_ASSERT KW_DEFER KW_THROW
+%token KW_FN "fn"
+%token KW_AUTO "auto"
 %token KW_AND KW_OR KW_NOT
 %token KW_UNSAFE KW_EXTERN
 
@@ -112,7 +119,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <DeclPtr>                          top_decl decl extern_decl
 /* Declarations */
 %type <DeclPtr>  namespace_decl import_decl class_decl interface_decl enum_decl
-%type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl
+%type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl extern_decl
 /* Enum */
 %type <std::vector<EnumVariant>>  enum_variants
 %type <EnumVariant>               enum_variant
@@ -140,6 +147,8 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <Param>                            param
 /* Types */
 %type <TypeExpr>                         type_expr
+%type <std::vector<TypeExpr>>            fn_type_params fn_type_params_ne type_arg_list_ne
+%type <TypeParamEntryList>               opt_type_params type_params_ne
 /* Access */
 %type <AccessMod>                        access_mod
 %type <std::string>                      dotted_name
@@ -149,7 +158,8 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <StmtPtr>  stmt simple_stmt
 %type <StmtPtr>  if_stmt while_stmt do_while_stmt for_stmt
 %type <StmtPtr>  switch_stmt match_stmt try_stmt return_stmt break_stmt
-%type <StmtPtr>  continue_stmt assert_stmt delete_stmt unsafe_stmt
+%type <StmtPtr>  continue_stmt assert_stmt delete_stmt defer_stmt throw_stmt unsafe_stmt
+%type <ExprPtr>  defer_expr defer_primary
 %type <std::unique_ptr<BlockStmt>>       block
 %type <std::vector<SwitchCase>>          switch_cases
 %type <SwitchCase>                       switch_case
@@ -263,6 +273,9 @@ namespace_body
 
 dotted_name
     : IDENT                     { $$ = $1; }
+    | KW_STR                    { $$ = "str"; }
+    | KW_LIST                   { $$ = "list"; }
+    | KW_DICT                   { $$ = "dict"; }
     | dotted_name DOT IDENT     { $$ = $1 + '.' + $3; }
     ;
 
@@ -328,18 +341,38 @@ ident_list
     ;
 
 /* =====================================================================
+   Extern declaration
+   ===================================================================== */
+
+extern_decl
+    : KW_EXTERN STRING type_expr IDENT LPAREN param_list RPAREN SEMI
+        {
+            auto e    = mk<ExternDecl>(); e->loc = sl(@$, driver);
+            e->abi    = $2;
+            e->ret    = $3;
+            e->name   = $4;
+            e->params = std::move($6);
+            $$ = std::move(e);
+        }
+    ;
+
+/* =====================================================================
    Class
    ===================================================================== */
 
 class_decl
-    : decorators KW_CLASS IDENT opt_base_list class_body_or_semi
+    : decorators KW_CLASS IDENT opt_type_params opt_base_list class_body_or_semi
         {
-            auto n        = mk<ClassDecl>();
-            n->loc        = sl(@$, driver);
-            n->decorators = std::move($1);
-            n->name       = $3;
-            n->bases      = std::move($4);
-            n->members    = std::move($5);
+            auto n           = mk<ClassDecl>();
+            n->loc           = sl(@$, driver);
+            n->decorators    = std::move($1);
+            n->name          = $3;
+            for (const auto& [pname, bname] : $4) {
+                n->type_params.push_back(pname);
+                if (!bname.empty()) n->type_bounds.push_back(TypeBound{pname, bname});
+            }
+            n->bases         = std::move($5);
+            n->members       = std::move($6);
             $$ = std::move(n);
         }
     ;
@@ -517,17 +550,33 @@ enum_payload
    ===================================================================== */
 
 func_decl
-    : type_expr IDENT LPAREN param_list RPAREN opt_func_modifier block
+    : type_expr IDENT opt_type_params LPAREN param_list RPAREN opt_func_modifier block
         {
             auto f          = mk<FunctionDecl>();
             f->loc          = sl(@$, driver);
             f->return_type  = $1;
             f->name         = $2;
-            f->params       = std::move($4);
-            f->modifier     = $6;
-            f->body         = std::move(*$7);
+            for (const auto& [pname, bname] : $3) {
+                f->type_params.push_back(pname);
+                if (!bname.empty()) f->type_bounds.push_back(TypeBound{pname, bname});
+            }
+            f->params       = std::move($5);
+            f->modifier     = $7;
+            f->body         = std::move(*$8);
             $$ = std::move(f);
         }
+    ;
+
+opt_type_params
+    : %empty                        { $$ = TypeParamEntryList{}; }
+    | LT type_params_ne GT          { $$ = std::move($2); }
+    ;
+
+type_params_ne
+    : IDENT                               { $$.push_back({$1, ""}); }
+    | IDENT COLON IDENT                   { $$.push_back({$1, $3}); }
+    | type_params_ne COMMA IDENT          { $1.push_back({$3, ""}); $$ = std::move($1); }
+    | type_params_ne COMMA IDENT COLON IDENT { $1.push_back({$3, $5}); $$ = std::move($1); }
     ;
 
 opt_func_modifier
@@ -649,6 +698,18 @@ param_list_ne
 
 param : type_expr IDENT { $$ = Param{$1, $2}; } ;
 
+fn_type_params
+    : %empty                              { $$ = std::vector<TypeExpr>{}; }
+    | fn_type_params_ne                   { $$ = std::move($1); }
+    ;
+
+fn_type_params_ne
+    : type_expr
+        { $$ = std::vector<TypeExpr>{}; $$.push_back(std::move($1)); }
+    | fn_type_params_ne COMMA type_expr
+        { $1.push_back(std::move($3)); $$ = std::move($1); }
+    ;
+
 /* =====================================================================
    Access modifier
    ===================================================================== */
@@ -678,6 +739,17 @@ type_expr
     | KW_PTR     { $$.name = "ptr";    $$.is_const = false; }
     | KW_CONST type_expr  { $$ = $2; $$.is_const = true; }
     | IDENT      { $$.name = $1;      $$.is_const = false; }
+    | IDENT LT type_arg_list_ne GT
+        { $$.name = $1; $$.is_const = false; $$.type_args = std::move($3); }
+    | KW_FN LPAREN fn_type_params RPAREN ARROW type_expr
+        { $$.name = "__fn"; $$.is_const = false; $$.fn_params = std::move($3); $$.fn_ret = $6.name; }
+    ;
+
+type_arg_list_ne
+    : type_expr
+        { $$ = std::vector<TypeExpr>{}; $$.push_back(std::move($1)); }
+    | type_arg_list_ne COMMA type_expr
+        { $1.push_back(std::move($3)); $$ = std::move($1); }
     ;
 
 /* =====================================================================
@@ -704,6 +776,9 @@ stmt
     | continue_stmt       { $$ = std::move($1); }
     | assert_stmt         { $$ = std::move($1); }
     | delete_stmt         { $$ = std::move($1); }
+    | defer_stmt          { $$ = std::move($1); }
+    | throw_stmt          { $$ = std::move($1); }
+    | unsafe_stmt         { $$ = std::move($1); }
     | var_decl_stmt       { $$ = std::move($1); }
     | simple_stmt SEMI    { $$ = std::move($1); }
     | unsafe_stmt         { $$ = std::move($1); }
@@ -942,6 +1017,54 @@ delete_stmt
         { auto s = mk<DeleteStmt>(); s->loc = sl(@$, driver); s->expr = std::move($2); $$ = std::move(s); }
     ;
 
+/* -- Defer ------------------------------------------------------------- */
+defer_stmt
+    : KW_DEFER LBRACE stmt_list RBRACE
+        {
+            auto s = mk<DeferStmt>(); s->loc = sl(@$, driver);
+            s->body = std::move($3);
+            $$ = std::move(s);
+        }
+    | KW_DEFER defer_expr SEMI
+        {
+            auto s  = mk<DeferStmt>(); s->loc = sl(@$, driver);
+            auto es = mk<ExprStmt>();  es->loc = sl(@$, driver);
+            es->expr = std::move($2);
+            s->body.push_back(std::move(es));
+            $$ = std::move(s);
+        }
+    ;
+
+/* defer_expr is like postfix_expr but must not start with '{' to avoid
+   a grammar conflict with the block form 'defer { stmt_list }'. */
+defer_expr
+    : defer_primary
+        { $$ = std::move($1); }
+    | defer_expr DOT IDENT
+        { auto e = mk<MemberExpr>(); e->loc = sl(@$, driver); e->object = std::move($1); e->member = $3; $$ = std::move(e); }
+    | defer_expr LPAREN arg_list RPAREN
+        { auto e = mk<CallExpr>(); e->loc = sl(@$, driver); e->callee = std::move($1); e->args = std::move($3); $$ = std::move(e); }
+    | defer_expr LBRACKET expr RBRACKET
+        { auto e = mk<IndexExpr>(); e->loc = sl(@$, driver); e->object = std::move($1); e->index = std::move($3); $$ = std::move(e); }
+    ;
+
+defer_primary
+    : IDENT          { auto e = mk<IdentExpr>();  e->loc = sl(@$, driver); e->name = $1; $$ = std::move(e); }
+    | KW_THIS        { auto e = mk<ThisExpr>();   e->loc = sl(@$, driver); $$ = std::move(e); }
+    | KW_SUPER       { auto e = mk<SuperExpr>();  e->loc = sl(@$, driver); $$ = std::move(e); }
+    | LPAREN expr RPAREN  { $$ = std::move($2); }
+    ;
+
+/* -- Throw ------------------------------------------------------------- */
+throw_stmt
+    : KW_THROW expr SEMI
+        {
+            auto s = mk<ThrowStmt>(); s->loc = sl(@$, driver);
+            s->expr = std::move($2);
+            $$ = std::move(s);
+        }
+    ;
+
 /* -- Unsafe block ------------------------------------------------------ */
 unsafe_stmt
     : KW_UNSAFE block
@@ -952,25 +1075,19 @@ unsafe_stmt
         }
     ;
 
-/* -- Extern declaration ------------------------------------------------ */
-extern_decl
-    : KW_EXTERN STRING type_expr IDENT LPAREN param_list RPAREN SEMI
-        {
-            auto e    = mk<ExternDecl>(); e->loc = sl(@$, driver);
-            e->abi    = $2;
-            e->ret    = $3;
-            e->name   = $4;
-            e->params = std::move($6);
-            $$ = std::move(e);
-        }
-    ;
-
 /* -- Variable declaration ---------------------------------------------- */
 var_decl_stmt
     : type_expr var_decl_items SEMI
         {
             auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
             v->type = $1; v->is_const = $1.is_const; v->decls = std::move($2);
+            $$ = std::move(v);
+        }
+    | KW_AUTO IDENT ASSIGN expr SEMI
+        {
+            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
+            v->type.name = "__auto";
+            v->decls.emplace_back($2, std::move($4));
             $$ = std::move(v);
         }
     ;
@@ -1086,8 +1203,12 @@ postfix_expr
 primary_expr
     : INT_LIT
         { auto e = mk<IntLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
+    | LONG_LIT
+        { auto e = mk<LongLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
     | FLOAT_LIT
         { auto e = mk<FloatLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
+    | REAL_LIT
+        { auto e = mk<RealLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
     | STRING
         { auto e = mk<StringLitExpr>(); e->loc = sl(@$, driver); e->value = $1; $$ = std::move(e); }
     | BOOL_LIT
@@ -1096,6 +1217,8 @@ primary_expr
         { auto e = mk<NullLitExpr>(); e->loc = sl(@$, driver); $$ = std::move(e); }
     | IDENT
         { auto e = mk<IdentExpr>(); e->loc = sl(@$, driver); e->name = $1; $$ = std::move(e); }
+    | KW_STR
+        { auto e = mk<IdentExpr>(); e->loc = sl(@$, driver); e->name = "str"; $$ = std::move(e); }
     | KW_THIS
         { auto e = mk<ThisExpr>(); e->loc = sl(@$, driver); $$ = std::move(e); }
     | KW_SUPER
@@ -1105,6 +1228,42 @@ primary_expr
         { auto e = mk<NewExpr>(); e->loc = sl(@$, driver); e->type = $2; e->args = std::move($4); $$ = std::move(e); }
     | list_lit  { $$ = std::move($1); }
     | dict_lit  { $$ = std::move($1); }
+    | KW_FN LPAREN param_list RPAREN FAT_ARROW expr
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            auto ret = mk<ReturnStmt>(); ret->loc = sl(@$, driver);
+            ret->value = std::move($6);
+            auto blk = mk<BlockStmt>(); blk->body.push_back(std::move(ret));
+            e->body = std::move(blk);
+            $$ = std::move(e);
+        }
+    | KW_FN LPAREN param_list RPAREN block
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            e->body = std::unique_ptr<Stmt>(std::move($5));
+            $$ = std::move(e);
+        }
+    | KW_FN LPAREN param_list RPAREN ARROW type_expr block
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            e->explicit_ret = std::move($6);
+            e->body = std::unique_ptr<Stmt>(std::move($7));
+            $$ = std::move(e);
+        }
+    | KW_FN LPAREN param_list RPAREN ARROW type_expr FAT_ARROW expr
+        {
+            auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
+            e->params = std::move($3);
+            e->explicit_ret = std::move($6);
+            auto ret = mk<ReturnStmt>(); ret->loc = sl(@$, driver);
+            ret->value = std::move($8);
+            auto blk = mk<BlockStmt>(); blk->body.push_back(std::move(ret));
+            e->body = std::move(blk);
+            $$ = std::move(e);
+        }
     ;
 
 /* -- List / dict literals ---------------------------------------------- */

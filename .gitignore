@@ -34,7 +34,10 @@ Testing/
 *.x86_64
 *.hex
 
-# Debug files
+# Debug / profiling artifacts
+callgrind.out.*
+core
+vgcore.*
 *.dSYM/
 *.o
 *.lo

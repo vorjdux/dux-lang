@@ -1,0 +1,23 @@
+int apply(fn(int) -> int f, int x) {
+    return f(x)
+}
+
+int main() {
+    auto add = fn(int a, int b) -> int => a + b
+    println(add(3, 4))
+
+    auto printer = fn(str prefix) -> void {
+        str msg = prefix + ": hello"
+        println(msg)
+    }
+    printer("greet")
+
+    int base = 10
+    auto addBase = fn(int x) -> int => x + base
+    println(addBase(5))
+
+    auto double_ = fn(int n) -> int => n * 2
+    println(apply(double_, 7))
+
+    return 0
+}

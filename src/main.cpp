@@ -11,6 +11,7 @@
 
 #include "ast/printer.hpp"
 #include "driver/driver.hpp"
+#include "sema/generics.hpp"
 #include "sema/sema.hpp"
 #include "codegen/codegen.hpp"
 
@@ -21,6 +22,9 @@
 // Paths baked in at build time by CMake
 #ifndef DUXRT_LIB_PATH
 #define DUXRT_LIB_PATH ""
+#endif
+#ifndef DUXRT_BC_PATH
+#define DUXRT_BC_PATH ""
 #endif
 #ifndef DUXRT_INCLUDE_DIR
 #define DUXRT_INCLUDE_DIR ""
@@ -114,6 +118,7 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
             obj_path.c_str(),
             DUXRT_LIB_PATH,
             "-lm",
+            "-lstdc++",  // C++ EH ABI (__gxx_personality_v0, __cxa_*)
             "-o", out_path.c_str(),
             nullptr
         };
@@ -206,6 +211,9 @@ int main(int argc, char** argv) {
         std::unordered_set<std::string> loaded;
         merge_stdlib_imports(driver.result.get(), loaded);
     }
+
+    // Expand generic class/function instantiations before sema
+    dux::sema::expand_generics(*driver.result, driver);
 
     // Always run sema when codegen / compile is requested
     bool need_sema = opts.check || opts.emit_ir || opts.emit_obj || opts.compile;

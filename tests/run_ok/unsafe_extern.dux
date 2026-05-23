@@ -12,9 +12,11 @@ double my_sqrt(double x) {
 int main() {
     double r = my_sqrt(9.0)
     println(r)
+
     ptr raw = null
     unsafe {
         raw = null
     }
+
     return 0
 }

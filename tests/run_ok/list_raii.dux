@@ -1,0 +1,20 @@
+import list
+
+class Item(object) {
+    public:
+    str label
+    Item(str s) {
+        this.label = s
+    }
+    ~Item() {
+        println("free:" + this.label)
+    }
+}
+
+int main() {
+    List<Item> items = new List<Item>()
+    items.push(new Item("x"))
+    items.push(new Item("y"))
+    println("pushed")
+    return 0
+}

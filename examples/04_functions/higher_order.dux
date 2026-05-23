@@ -1,15 +1,15 @@
-# Functions that take other functions as arguments via function calls,
-# or that build results using helper functions.
+# Higher-order functions and first-class lambdas.
 
-int apply_twice(int n) {
-    return n * 2
+# A function that accepts another function as an argument.
+int apply(fn(int) -> int f, int x) {
+    return f(x)
 }
 
-int apply_thrice(int n) {
-    return n * 3
+int apply2(fn(int, int) -> int f, int a, int b) {
+    return f(a, b)
 }
 
-int compose(int x, int times) {
+int compose_n(int x, int times) {
     int result = x
     for int i in range(times) {
         result = result * 2
@@ -25,35 +25,62 @@ int sum_range(int lo, int hi) {
     return total
 }
 
-int product_range(int lo, int hi) {
-    int total = 1
-    for int i in lo..=hi {
-        total = total * i
-    }
-    return total
-}
+int main() {
+    # ── Named lambda — Style A (auto + return type inside lambda) ─────────────
 
-str map_to_str(int val) {
-    if (val < 0) {
-        return "neg"
-    }
-    if (val == 0) {
-        return "zero"
-    }
-    return "pos"
-}
+    auto double_ = fn(int n) -> int => n * 2
+    auto square  = fn(int n) -> int => n * n
+    auto negate  = fn(int n) -> int => 0 - n
 
-void main() {
-    println(apply_twice(5))    # 10
-    println(apply_thrice(5))   # 15
-    println(compose(1, 8))     # 256  (1 * 2^8)
+    println(apply(double_, 5))   # 10
+    println(apply(square, 4))    # 16
+    println(apply(negate, 7))    # -7
 
-    println(sum_range(1, 10))     # 55
-    println(product_range(1, 6))  # 720  (6!)
+    # ── Named lambda — Style B (return type as variable prefix) ───────────────
 
-    # Map concept — applying a transform to each value
-    for int i in -2..=2 {
-        println(map_to_str(i))
+    int triple = fn(int n) => n * 3
+    int cube   = fn(int n) => n * n * n
+
+    println(apply(triple, 4))    # 12
+    println(apply(cube, 3))      # 27
+
+    # ── Two-argument lambda ───────────────────────────────────────────────────
+
+    auto add = fn(int x, int y) -> int => x + y
+    int  mul = fn(int x, int y) => x * y
+
+    println(apply2(add, 3, 4))   # 7
+    println(apply2(mul, 3, 4))   # 12
+
+    # ── Block-body lambda ─────────────────────────────────────────────────────
+
+    auto abs_ = fn(int n) -> int {
+        if (n < 0) {
+            return 0 - n
+        }
+        return n
     }
-    # neg, neg, zero, pos, pos
+
+    println(apply(abs_, 0 - 9))  # 9
+    println(apply(abs_,  9))     # 9
+
+    # ── Closure — captures enclosing variable by value ────────────────────────
+
+    int offset = 100
+    auto addOffset  = fn(int n) -> int => n + offset
+    int  addOffset2 = fn(int n) => n + offset
+
+    println(addOffset(7))    # 107
+    println(addOffset2(7))   # 107
+
+    # ── Passing inline lambdas ────────────────────────────────────────────────
+
+    println(apply(fn(int n) -> int => n * n, 6))    # 36
+
+    # ── Classic helpers ───────────────────────────────────────────────────────
+
+    println(compose_n(1, 8))       # 256
+    println(sum_range(1, 10))      # 55
+
+    return 0
 }
