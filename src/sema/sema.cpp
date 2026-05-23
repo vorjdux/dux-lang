@@ -527,6 +527,11 @@ void Sema::check_var_decl(const ast::VarDeclStmt& s) {
     for (const auto& [name, init_ptr] : s.decls) {
         TypeId var_type = decl_type;
 
+        // const variables must have an initializer
+        if (is_const && !init_ptr) {
+            err(s.loc, "const variable '" + name + "' must have an initializer");
+        }
+
         if (init_ptr) {
             TypeId init_t = check_expr(*init_ptr);
             if (var_type == TR::TID_UNKNOWN)
@@ -630,6 +635,17 @@ TypeId Sema::check_assign(const ast::AssignExpr& e) {
             scopes_.define(name, sym);
             e.target->type_id = rhs;
             return rhs;
+        }
+    }
+
+    // Guard: reject any assignment (plain or compound) to a const variable
+    if (auto* id_target = dynamic_cast<const ast::IdentExpr*>(e.target.get())) {
+        if (Symbol* sym = scopes_.lookup(id_target->name)) {
+            if (sym->is_const) {
+                err(e.target->loc,
+                    "cannot assign to const variable '" + id_target->name + "'");
+                return sym->type;
+            }
         }
     }
 
