@@ -1,0 +1,11 @@
+int counter() {
+    static int n = 0
+    n += 1
+    return n
+}
+
+void main() {
+    println(counter())
+    println(counter())
+    println(counter())
+}

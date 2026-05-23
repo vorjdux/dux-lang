@@ -639,6 +639,10 @@ void Sema::check_var_decl(const ast::VarDeclStmt& s) {
     }
     TypeId decl_type = type_from_te(s.type);
     bool   is_const  = s.is_const;
+    bool   is_static = s.is_static;
+
+    // const variables must have an initializer
+    // (static vars without initializer get zero-initialization — that is valid)
 
     for (const auto& [name, init_ptr] : s.decls) {
         TypeId var_type = decl_type;
@@ -664,6 +668,7 @@ void Sema::check_var_decl(const ast::VarDeclStmt& s) {
         sym.type     = var_type;
         sym.is_const = is_const;
         sym.loc      = s.loc;
+        (void)is_static; // tracked in AST; codegen will handle it
         if (!scopes_.define(name, sym))
             err(s.loc, "variable '" + name + "' already declared in this scope");
     }
