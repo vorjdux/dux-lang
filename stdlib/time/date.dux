@@ -5,7 +5,10 @@ namespace date {
     extern "C" long duxrt_date_hour(long unix_ts) ;
     extern "C" long duxrt_date_minute(long unix_ts) ;
     extern "C" long duxrt_date_second(long unix_ts) ;
+    extern "C" long duxrt_date_weekday(long unix_ts) ;
+    extern "C" long duxrt_date_to_unix(long y, long mo, long d, long h, long mi, long s) ;
     extern "C" str  duxrt_date_format(long unix_ts, str fmt) ;
+    extern "C" str  duxrt_date_iso(long unix_ts) ;
 
     # Year from Unix timestamp.
     long year(long ts) {
@@ -61,11 +64,38 @@ namespace date {
         return r
     }
 
-    # Format a Unix timestamp using strftime format string.
-    str format(long ts, str fmt) {
+    # Day of week (0=Sunday .. 6=Saturday).
+    long weekday(long ts) {
+        long r = 0
+        unsafe {
+            r = duxrt_date_weekday(ts)
+        }
+        return r
+    }
+
+    # Convert calendar fields (UTC) to Unix timestamp.
+    long to_unix(long y, long mo, long d, long h, long mi, long s) {
+        long r = 0
+        unsafe {
+            r = duxrt_date_to_unix(y, mo, d, h, mi, s)
+        }
+        return r
+    }
+
+    # Format Unix timestamp with strftime format string.
+    str format(long unix_ts, str fmt) {
         str r = ""
         unsafe {
-            r = duxrt_date_format(ts, fmt)
+            r = duxrt_date_format(unix_ts, fmt)
+        }
+        return r
+    }
+
+    # ISO 8601 date string (YYYY-MM-DD).
+    str iso(long unix_ts) {
+        str r = ""
+        unsafe {
+            r = duxrt_date_iso(unix_ts)
         }
         return r
     }

@@ -126,3 +126,21 @@ int32_t duxrt_fs_copy(DuxStr* src, DuxStr* dst) {
     fclose(out);
     return ok ? 0 : -1;
 }
+
+/* ── mtime and errno helpers ───────────────────────────────────────────────── */
+
+static __thread int g_last_errno = 0;
+
+int64_t duxrt_fs_mtime(DuxStr* path) {
+    if (!path) { g_last_errno = EINVAL; return -1; }
+    struct stat st;
+    if (stat(duxrt_str_cstr(path), &st) != 0) {
+        g_last_errno = errno;
+        return -1;
+    }
+    return (int64_t)st.st_mtime;
+}
+
+int32_t duxrt_fs_last_errno(void) {
+    return (int32_t)g_last_errno;
+}

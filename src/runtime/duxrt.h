@@ -201,6 +201,8 @@ int32_t  duxrt_fs_exists(DuxStr* path);
 int32_t  duxrt_fs_is_dir(DuxStr* path);
 int32_t  duxrt_fs_is_file(DuxStr* path);
 int64_t  duxrt_fs_size(DuxStr* path);
+int64_t  duxrt_fs_mtime(DuxStr* path);
+int32_t  duxrt_fs_last_errno(void);
 int32_t  duxrt_fs_copy(DuxStr* src, DuxStr* dst);
 
 /* ── File I/O ────────────────────────────────────────────────────────────── */
@@ -213,11 +215,24 @@ int32_t  duxrt_file_remove(DuxStr* path);
 int32_t  duxrt_file_copy(DuxStr* src, DuxStr* dst);
 int64_t  duxrt_file_size(DuxStr* path);
 
+/* Handle-based file API */
+void*    duxrt_file_open_handle(DuxStr* path, DuxStr* mode);
+int32_t  duxrt_file_close_handle(void* f);
+DuxStr*  duxrt_file_read_all_handle(void* f);
+DuxStr*  duxrt_file_read_line_handle(void* f);
+int32_t  duxrt_file_write_handle(void* f, DuxStr* s);
+int32_t  duxrt_file_seek_handle(void* f, int64_t offset, int32_t whence);
+int64_t  duxrt_file_tell_handle(void* f);
+int32_t  duxrt_file_flush_handle(void* f);
+int32_t  duxrt_file_eof_handle(void* f);
+
 /* ── Time / Clock ────────────────────────────────────────────────────────── */
 int64_t  duxrt_clock_now_ns(void);
+int64_t  duxrt_clock_mono_ns(void);
 double   duxrt_clock_now(void);
 void     duxrt_clock_sleep_ms(int64_t ms);
 int64_t  duxrt_clock_unix(void);
+int64_t  duxrt_clock_unix_ms(void);
 DuxStr*  duxrt_clock_now_str(void);
 int64_t  duxrt_date_year(int64_t unix_ts);
 int64_t  duxrt_date_month(int64_t unix_ts);
@@ -225,6 +240,8 @@ int64_t  duxrt_date_day(int64_t unix_ts);
 int64_t  duxrt_date_hour(int64_t unix_ts);
 int64_t  duxrt_date_minute(int64_t unix_ts);
 int64_t  duxrt_date_second(int64_t unix_ts);
+int64_t  duxrt_date_weekday(int64_t unix_ts);
+int64_t  duxrt_date_to_unix(int64_t y, int64_t mo, int64_t d, int64_t h, int64_t mi, int64_t s);
 DuxStr*  duxrt_date_format(int64_t unix_ts, DuxStr* fmt);
 DuxStr*  duxrt_date_iso(int64_t unix_ts);
 
@@ -232,6 +249,8 @@ DuxStr*  duxrt_date_iso(int64_t unix_ts);
 void     duxrt_sys_init(int argc, char** argv);
 void     duxrt_sys_exit(int64_t code);
 DuxStr*  duxrt_env_fetch(DuxStr* name);
+DuxStr*  duxrt_env_get(DuxStr* name);
+DuxList* duxrt_env_all(void);
 int32_t  duxrt_env_has(DuxStr* name);
 int32_t  duxrt_env_store(DuxStr* name, DuxStr* val);
 int32_t  duxrt_env_remove(DuxStr* name);

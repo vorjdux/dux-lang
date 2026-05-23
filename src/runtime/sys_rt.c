@@ -78,3 +78,23 @@ DuxStr* duxrt_sys_hostname(void) {
     if (gethostname(buf, sizeof(buf)) != 0) return duxrt_str_new("", 0);
     return duxrt_str_new(buf, (int64_t)strlen(buf));
 }
+
+/* duxrt_env_get: returns "" if variable is not set (same as fetch) */
+DuxStr* duxrt_env_get(DuxStr* name) {
+    if (!name) return duxrt_str_new("", 0);
+    const char* val = getenv(duxrt_str_cstr(name));
+    if (!val) return duxrt_str_new("", 0);
+    return duxrt_str_new(val, (int64_t)strlen(val));
+}
+
+/* duxrt_env_all: returns list of "KEY=VALUE" strings */
+DuxList* duxrt_env_all(void) {
+    extern char** environ;
+    DuxList* list = duxrt_list_new();
+    if (!environ) return list;
+    for (char** ep = environ; *ep; ep++) {
+        const char* entry = *ep;
+        duxrt_list_push(list, duxrt_str_new(entry, (int64_t)strlen(entry)));
+    }
+    return list;
+}

@@ -7,6 +7,17 @@ namespace file {
     extern "C" int  duxrt_file_remove(str path) ;
     extern "C" int  duxrt_file_copy(str src, str dst) ;
 
+    # Handle-based File class externs
+    extern "C" ptr  duxrt_file_open_handle(str path, str mode) ;
+    extern "C" int  duxrt_file_close_handle(ptr f) ;
+    extern "C" str  duxrt_file_read_all_handle(ptr f) ;
+    extern "C" str  duxrt_file_read_line_handle(ptr f) ;
+    extern "C" int  duxrt_file_write_handle(ptr f, str s) ;
+    extern "C" int  duxrt_file_seek_handle(ptr f, long offset, int whence) ;
+    extern "C" long duxrt_file_tell_handle(ptr f) ;
+    extern "C" int  duxrt_file_flush_handle(ptr f) ;
+    extern "C" int  duxrt_file_eof_handle(ptr f) ;
+
     # Read entire file as a string.
     str read(str path) {
         str result = ""
@@ -68,5 +79,101 @@ namespace file {
             r = duxrt_file_copy(src, dst)
         }
         return r == 0
+    }
+
+    # Handle-based File class for incremental read/write/seek.
+    # Construct with: File f = new File(path, mode)
+    # Modes: "r" read, "w" write, "a" append, "r+" read+write
+    # Seek whence: 0=SEEK_SET, 1=SEEK_CUR, 2=SEEK_END
+    class File {
+        ptr  _handle
+        bool _open
+
+        File(str path, str mode) {
+            ptr h = null
+            unsafe {
+                h = duxrt_file_open_handle(path, mode)
+            }
+            this._handle = h
+            if h != null {
+                this._open = true
+            } else {
+                this._open = false
+            }
+        }
+
+        bool is_open() {
+            return this._open
+        }
+
+        str read_all() {
+            str result = ""
+            unsafe {
+                result = duxrt_file_read_all_handle(this._handle)
+            }
+            return result
+        }
+
+        str read_line() {
+            str line = ""
+            unsafe {
+                line = duxrt_file_read_line_handle(this._handle)
+            }
+            return line
+        }
+
+        bool eof() {
+            int r = 0
+            unsafe {
+                r = duxrt_file_eof_handle(this._handle)
+            }
+            return r != 0
+        }
+
+        bool write(str s) {
+            int r = 0
+            unsafe {
+                r = duxrt_file_write_handle(this._handle, s)
+            }
+            return r == 0
+        }
+
+        bool writeln(str s) {
+            return this.write(s + "\n")
+        }
+
+        void seek(long offset, int whence) {
+            unsafe {
+                duxrt_file_seek_handle(this._handle, offset, whence)
+            }
+        }
+
+        long tell() {
+            long pos = 0
+            unsafe {
+                pos = duxrt_file_tell_handle(this._handle)
+            }
+            return pos
+        }
+
+        void flush() {
+            unsafe {
+                duxrt_file_flush_handle(this._handle)
+            }
+        }
+
+        void close() {
+            if this._open {
+                unsafe {
+                    duxrt_file_close_handle(this._handle)
+                }
+                this._open = false
+                this._handle = null
+            }
+        }
+
+        ~File() {
+            this.close()
+        }
     }
 }
