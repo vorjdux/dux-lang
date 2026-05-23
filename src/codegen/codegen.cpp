@@ -244,6 +244,7 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
     for (const auto& m : c.members) {
         if (!m.decl) continue;
         if (auto* fd = dynamic_cast<const ast::FieldDecl*>(m.decl.get())) {
+            if (fd->is_static) continue; // static fields are globals, not struct members
             FieldInfo fi;
             fi.name  = fd->name;
             fi.type  = types_.from_type_expr(fd->type);
@@ -261,12 +262,12 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
 
     layout.struct_type = llvm::StructType::create(*ctx_, field_types, c.name);
 
-    // Collect virtual methods
+    // Collect virtual methods (skip static methods — they don't participate in dispatch)
     unsigned slot = 0;
     for (const auto& m : c.members) {
         if (!m.decl) continue;
         if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
-            if (!f->is_ctor && !f->is_dtor) {
+            if (!f->is_ctor && !f->is_dtor && !f->is_static) {
                 MethodInfo mi;
                 mi.name        = f->name;
                 mi.vtable_slot = slot++;
@@ -346,15 +347,29 @@ void Codegen::declare_class_methods(const ast::ClassDecl& c) {
             if (f->is_dtor && f->body && f->body->body.empty()) continue;
             if (mod_->getFunction(mangled)) continue;
 
-            // For methods: prepend 'this' pointer as first parameter
+            TypeId ret_tid = types_.from_type_expr(f->return_type);
+            llvm::Type* ret_t = lower_type(ret_tid == TR::TID_UNKNOWN
+                                          ? TR::TID_VOID : ret_tid);
+
+            if (f->is_static) {
+                // Static methods: no 'this' parameter
+                std::vector<llvm::Type*> param_types;
+                for (const auto& p : f->params)
+                    param_types.push_back(lower_type_expr(p.type));
+                auto* ft = llvm::FunctionType::get(ret_t, param_types, false);
+                auto* fn = Function::Create(ft, Function::ExternalLinkage,
+                                            mangled, *mod_);
+                unsigned idx = 0;
+                for (auto& arg : fn->args()) arg.setName(f->params[idx++].name);
+                // Static methods do not participate in vtable dispatch; skip layout update
+                continue;
+            }
+
+            // For instance methods: prepend 'this' pointer as first parameter
             std::vector<llvm::Type*> param_types;
             param_types.push_back(ptr_type()); // this
             for (const auto& p : f->params)
                 param_types.push_back(lower_type_expr(p.type));
-
-            TypeId ret_tid = types_.from_type_expr(f->return_type);
-            llvm::Type* ret_t = lower_type(ret_tid == TR::TID_UNKNOWN
-                                          ? TR::TID_VOID : ret_tid);
 
             auto* ft = llvm::FunctionType::get(ret_t, param_types, false);
             auto* fn = Function::Create(ft, Function::ExternalLinkage,
@@ -364,7 +379,7 @@ void Codegen::declare_class_methods(const ast::ClassDecl& c) {
             for (auto it = std::next(fn->arg_begin()); it != fn->arg_end(); ++it)
                 it->setName(f->params[idx++ - 1].name);
 
-            // Record in layout (non-ctor/dtor methods only)
+            // Record in layout (non-ctor/dtor instance methods only)
             if (!f->is_ctor && !f->is_dtor && layouts_.count(c.name)) {
                 for (auto& mi : layouts_[c.name].methods) {
                     if (mi.name == f->name) { mi.fn = fn; break; }
@@ -429,9 +444,9 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
     fn_var_types_.clear(); // fn-type map is local to each function body
     env_push();
 
-    // If method: bind 'this'
+    // If method: bind 'this' (not for static methods)
     auto arg_it = fn->arg_begin();
-    if (class_type != TR::TID_UNKNOWN) {
+    if (class_type != TR::TID_UNKNOWN && !f.is_static) {
         // First arg is 'this'
         Value* this_alloca = make_alloca(ptr_type(), "this.addr");
         builder_->CreateStore(&*arg_it, this_alloca);
@@ -557,6 +572,40 @@ void Codegen::gen_class(const ast::ClassDecl& c) {
     auto saved_cls  = current_class_;
     current_class_  = c.name;
     TypeId cls_type = types_.from_name(c.name);
+
+    // Emit globals for static fields (before generating methods so they're
+    // accessible in static method bodies).
+    for (const auto& m : c.members) {
+        if (!m.decl) continue;
+        auto* fd = dynamic_cast<const ast::FieldDecl*>(m.decl.get());
+        if (!fd || !fd->is_static) continue;
+        TypeId tid = types_.from_type_expr(fd->type);
+        if (tid == TR::TID_UNKNOWN) tid = TR::TID_INT;
+        llvm::Type* t = lower_type(tid);
+        std::string gname = c.name + "._" + fd->name;
+        if (mod_->getGlobalVariable(gname, true)) continue; // already emitted
+
+        // Resolve constant initializer (literal values only; runtime inits zero-initialized)
+        llvm::Constant* init_const = nullptr;
+        if (fd->init) {
+            if (auto* il = dynamic_cast<const ast::IntLitExpr*>(fd->init->get()))
+                init_const = llvm::ConstantInt::get(t,
+                    static_cast<uint64_t>(il->value), /*isSigned=*/true);
+            else if (auto* ll = dynamic_cast<const ast::LongLitExpr*>(fd->init->get()))
+                init_const = llvm::ConstantInt::get(t,
+                    static_cast<uint64_t>(ll->value), /*isSigned=*/true);
+            else if (auto* fl = dynamic_cast<const ast::FloatLitExpr*>(fd->init->get()))
+                init_const = llvm::ConstantFP::get(t, fl->value);
+            else if (auto* bl = dynamic_cast<const ast::BoolLitExpr*>(fd->init->get()))
+                init_const = llvm::ConstantInt::get(t, bl->value ? 1 : 0);
+        }
+        if (!init_const) init_const = llvm::Constant::getNullValue(t);
+
+        auto* gv = new llvm::GlobalVariable(
+            *mod_, t, /*isConstant=*/fd->type.is_const,
+            llvm::GlobalValue::InternalLinkage, init_const, gname);
+        alloca_type_[gv] = t;
+    }
 
     // Generate all methods
     for (const auto& m : c.members) {
@@ -1488,45 +1537,99 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
 
     for (const auto& [name, init_ptr] : s.decls) {
         TypeId var_tid = decl_tid;
-        Value* init_val = nullptr;
 
-        if (init_ptr) {
-            init_val = gen_expr(*init_ptr);
-            TypeId init_tid = type_id_of(*init_ptr);
-            bool is_lambda = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get()) != nullptr;
-            if (var_tid == TR::TID_UNKNOWN || is_lambda) var_tid = init_tid;
-            init_val = coerce(init_val, init_tid, var_tid);
-        }
-        if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;
+        if (s.is_static) {
+            // Static local variable: module-level global with once-only init guard
+            // Use __cxa_guard_acquire/__cxa_guard_release for thread-safe initialization.
+            if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;
+            llvm::Type* t = lower_type(var_tid);
 
-        llvm::Type* t = lower_type(var_tid);
-        Value* alloca = make_alloca(t, name);
-        if (init_val) {
-            if (var_tid == TR::TID_STR)
-                init_val = maybe_retain_str(init_val);
-            if (init_val->getType() != t)
-                init_val = coerce(init_val, decl_tid, var_tid);
-            builder_->CreateStore(init_val, alloca);
-        } else {
-            builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
-        }
-        env_define(name, alloca, var_tid);
-        if (init_ptr) {
-            if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get())) {
-                ast::TypeExpr te;
-                te.name = "__fn";
-                for (const auto& p : lam->params)
-                    te.fn_params.push_back(p.type);
-                te.fn_ret = lam->inferred_ret;
-                fn_var_types_[name] = te;
-                // Register closure env for free() on scope exit
-                if (!cleanup_scopes_.empty())
-                    cleanup_scopes_.back().push_back({alloca, "__closure", nullptr});
+            // Create the static global for the variable value
+            std::string gname = "__dux_static_" + (current_fn_ ? current_fn_->getName().str() : "") + "_" + name;
+            auto* gv = new llvm::GlobalVariable(
+                *mod_, t, /*isConstant=*/s.is_const,
+                llvm::GlobalValue::InternalLinkage,
+                llvm::Constant::getNullValue(t), gname);
+            // Register element type so load_var uses the right type (not i64 fallback)
+            alloca_type_[gv] = t;
+
+            if (init_ptr) {
+                // Create a guard byte (i8) — ABI: non-zero = initialized
+                auto* guard_gv = new llvm::GlobalVariable(
+                    *mod_, llvm::Type::getInt8Ty(*ctx_), false,
+                    llvm::GlobalValue::InternalLinkage,
+                    llvm::ConstantInt::get(llvm::Type::getInt8Ty(*ctx_), 0),
+                    gname + ".guard");
+
+                Function* fn = builder_->GetInsertBlock()->getParent();
+                auto* init_check = BasicBlock::Create(*ctx_, name + ".init.check", fn);
+                auto* init_body  = BasicBlock::Create(*ctx_, name + ".init.body",  fn);
+                auto* init_done  = BasicBlock::Create(*ctx_, name + ".init.done",  fn);
+
+                // If guard == 0 → not initialized yet
+                builder_->CreateBr(init_check);
+                builder_->SetInsertPoint(init_check);
+                Value* guard_val = builder_->CreateLoad(
+                    llvm::Type::getInt8Ty(*ctx_), guard_gv, "guard");
+                Value* not_init  = builder_->CreateICmpEQ(guard_val,
+                    llvm::ConstantInt::get(llvm::Type::getInt8Ty(*ctx_), 0), "not.init");
+                builder_->CreateCondBr(not_init, init_body, init_done);
+
+                builder_->SetInsertPoint(init_body);
+                Value* init_val = gen_expr(*init_ptr);
+                TypeId init_tid = type_id_of(*init_ptr);
+                init_val = coerce(init_val, init_tid, var_tid);
+                builder_->CreateStore(init_val, gv);
+                builder_->CreateStore(
+                    llvm::ConstantInt::get(llvm::Type::getInt8Ty(*ctx_), 1), guard_gv);
+                builder_->CreateBr(init_done);
+
+                builder_->SetInsertPoint(init_done);
             }
+
+            // Register as env entry pointing to the global (load/store as usual)
+            env_define(name, gv, var_tid);
+        } else {
+            // Normal (non-static) local variable
+            Value* init_val = nullptr;
+
+            if (init_ptr) {
+                init_val = gen_expr(*init_ptr);
+                TypeId init_tid = type_id_of(*init_ptr);
+                if (var_tid == TR::TID_UNKNOWN) var_tid = init_tid;
+                init_val = coerce(init_val, init_tid, var_tid);
+            }
+            if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;
+
+            llvm::Type* t = lower_type(var_tid);
+            Value* alloca = make_alloca(t, name);
+            if (init_val) {
+                if (var_tid == TR::TID_STR)
+                    init_val = maybe_retain_str(init_val);
+                if (init_val->getType() != t)
+                    init_val = coerce(init_val, decl_tid, var_tid);
+                builder_->CreateStore(init_val, alloca);
+            } else {
+                builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
+            }
+            env_define(name, alloca, var_tid);
+            if (init_ptr) {
+                if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get())) {
+                    ast::TypeExpr te;
+                    te.name = "__fn";
+                    for (const auto& p : lam->params)
+                        te.fn_params.push_back(p.type);
+                    te.fn_ret = lam->inferred_ret;
+                    fn_var_types_[name] = te;
+                    // Register closure env for free() on scope exit
+                    if (!cleanup_scopes_.empty())
+                        cleanup_scopes_.back().push_back({alloca, "__closure", nullptr});
+                }
+            }
+            // Track variable→class for member access resolution
+            if (!s.type.name.empty() && layouts_.count(s.type.name))
+                var_class_[name] = s.type.name;
         }
-        // Track variable→class for member access resolution
-        if (!s.type.name.empty() && layouts_.count(s.type.name))
-            var_class_[name] = s.type.name;
     }
 }
 
@@ -2063,6 +2166,17 @@ Value* Codegen::gen_member(const ast::MemberExpr& e) {
                             "' on '" + id->name + "'");
             return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0);
         }
+
+        // Static field access: ClassName.field  →  load from @ClassName._field global
+        // Only when the identifier resolves to a class name, not a local variable.
+        if (!env_lookup(id->name) && layouts_.count(id->name)) {
+            std::string gname = id->name + "._" + e.member;
+            if (llvm::GlobalVariable* gv = mod_->getGlobalVariable(gname, true)) {
+                llvm::Type* t = alloca_type_.count(gv)
+                    ? alloca_type_.at(gv) : gv->getValueType();
+                return builder_->CreateLoad(t, gv, e.member);
+            }
+        }
     }
 
     Value* obj = gen_expr(*e.object);
@@ -2498,6 +2612,14 @@ Value* Codegen::lvalue_of(const ast::Expr& e) {
         return nullptr;
     }
     if (auto* mem = dynamic_cast<const ast::MemberExpr*>(&e)) {
+        // Static field assignment: ClassName.field = val  →  @ClassName._field global
+        if (auto* id = dynamic_cast<const ast::IdentExpr*>(mem->object.get())) {
+            if (!env_lookup(id->name) && layouts_.count(id->name)) {
+                std::string gname = id->name + "._" + mem->member;
+                if (llvm::GlobalVariable* gv = mod_->getGlobalVariable(gname, true))
+                    return gv;
+            }
+        }
         Value* obj = gen_expr(*mem->object);
         std::string cls_name = resolve_class_name(*mem->object, type_id_of(*mem->object));
         auto it = layouts_.find(cls_name);

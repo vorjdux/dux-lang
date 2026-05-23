@@ -165,6 +165,7 @@ struct ExprStmt final : Stmt {
 struct VarDeclStmt final : Stmt {
     TypeExpr                                     type;
     bool                                         is_const{false};
+    bool                                         is_static{false};
     std::vector<std::pair<std::string, ExprPtr>> decls;
     void accept(Visitor& v) const override;
 };
@@ -345,6 +346,7 @@ struct FunctionDecl final : Decl {
     std::optional<BlockStmt>   body;
     bool                       is_ctor{false};
     bool                       is_dtor{false};
+    bool                       is_static{false};
     std::vector<InitEntry>     init_list;
     void accept(Visitor& v) const override;
 };
@@ -353,6 +355,7 @@ struct FieldDecl final : Decl {
     TypeExpr               type;
     std::string            name;
     std::optional<ExprPtr> init;
+    bool                   is_static{false};
     void accept(Visitor& v) const override;
 };
 

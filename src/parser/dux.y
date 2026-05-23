@@ -565,6 +565,30 @@ func_decl
             f->body         = std::move(*$8);
             $$ = std::move(f);
         }
+    | KW_STATIC type_expr IDENT LPAREN param_list RPAREN opt_func_modifier block
+        {
+            auto f          = mk<FunctionDecl>();
+            f->loc          = sl(@$, driver);
+            f->return_type  = $2;
+            f->name         = $3;
+            f->params       = std::move($5);
+            f->modifier     = $7;
+            f->body         = std::move(*$8);
+            f->is_static    = true;
+            $$ = std::move(f);
+        }
+    | KW_STATIC type_expr IDENT LPAREN param_list RPAREN opt_func_modifier block SEMI
+        {
+            auto f          = mk<FunctionDecl>();
+            f->loc          = sl(@$, driver);
+            f->return_type  = $2;
+            f->name         = $3;
+            f->params       = std::move($5);
+            f->modifier     = $7;
+            f->body         = std::move(*$8);
+            f->is_static    = true;
+            $$ = std::move(f);
+        }
     ;
 
 opt_type_params
@@ -649,6 +673,18 @@ field_decl
         {
             auto f  = mk<FieldDecl>(); f->loc = sl(@$, driver);
             f->type = $1; f->name = $2; f->init = std::move($4);
+            $$ = std::move(f);
+        }
+    | KW_STATIC type_expr IDENT SEMI
+        {
+            auto f  = mk<FieldDecl>(); f->loc = sl(@$, driver);
+            f->type = $2; f->name = $3; f->is_static = true;
+            $$ = std::move(f);
+        }
+    | KW_STATIC type_expr IDENT ASSIGN expr SEMI
+        {
+            auto f  = mk<FieldDecl>(); f->loc = sl(@$, driver);
+            f->type = $2; f->name = $3; f->init = std::move($5); f->is_static = true;
             $$ = std::move(f);
         }
     ;
@@ -1080,6 +1116,26 @@ var_decl_stmt
         {
             auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
             v->type = $1; v->is_const = $1.is_const; v->decls = std::move($2);
+            $$ = std::move(v);
+        }
+    | KW_STATIC type_expr var_decl_items SEMI
+        {
+            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
+            v->type = $2; v->is_static = true; v->decls = std::move($3);
+            $$ = std::move(v);
+        }
+    | KW_STATIC KW_CONST type_expr var_decl_items SEMI
+        {
+            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
+            v->type = $3; v->is_static = true; v->is_const = true;
+            v->decls = std::move($4);
+            $$ = std::move(v);
+        }
+    | KW_CONST KW_STATIC type_expr var_decl_items SEMI
+        {
+            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
+            v->type = $3; v->is_static = true; v->is_const = true;
+            v->decls = std::move($4);
             $$ = std::move(v);
         }
     | KW_AUTO IDENT ASSIGN expr SEMI

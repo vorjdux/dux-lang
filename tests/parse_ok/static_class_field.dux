@@ -1,0 +1,16 @@
+class Counter {
+    static int count = 0
+    static const int MAX = 100
+
+    static void reset() {
+        Counter.count = 0
+    }
+
+    static int value() {
+        return Counter.count
+    }
+}
+
+void main() {
+    Counter.reset()
+}
