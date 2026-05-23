@@ -70,6 +70,8 @@ add_library(duxrt STATIC
     src/runtime/socket_rt.c
     src/runtime/net_tls.c
     src/runtime/net_http.c
+    src/runtime/async_rt.c
+    src/runtime/achan_rt.c
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)

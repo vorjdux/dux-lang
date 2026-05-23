@@ -1,0 +1,67 @@
+import async.chan
+
+int main() {
+    AsyncChan ch = new AsyncChan(4)
+
+    # Starts empty and open
+    long n0 = ch.pending()
+    if n0 == 0 {
+        print("empty ok")
+    }
+    if !ch.is_closed() {
+        print("open ok")
+    }
+
+    # capacity reflects the constructor argument
+    long c = ch.capacity()
+    if c == 4 {
+        print("cap ok")
+    }
+
+    # try_recv on empty returns null
+    ptr r0 = ch.try_recv()
+    if r0 == null {
+        print("recv_empty ok")
+    }
+
+    # try_send returns true while there is space
+    bool s1 = ch.try_send(null)
+    if s1 {
+        print("send1 ok")
+    }
+    bool s2 = ch.try_send(null)
+    if s2 {
+        print("send2 ok")
+    }
+    long n1 = ch.pending()
+    if n1 == 2 {
+        print("pending2 ok")
+    }
+
+    # drain with try_recv
+    ptr d1 = ch.try_recv()
+    ptr d2 = ch.try_recv()
+    long n2 = ch.pending()
+    if n2 == 0 {
+        print("drained ok")
+    }
+
+    # fill to capacity — 5th send into a cap-4 buffer should fail
+    ch.try_send(null)
+    ch.try_send(null)
+    ch.try_send(null)
+    ch.try_send(null)
+    bool over = ch.try_send(null)
+    if !over {
+        print("full ok")
+    }
+
+    # close
+    ch.close()
+    if ch.is_closed() {
+        print("closed ok")
+    }
+
+    print("chan ok")
+    return 0
+}
