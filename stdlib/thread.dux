@@ -7,7 +7,7 @@ namespace thread {
     extern "C" void duxrt_thread_sleep_ms(long ms) ;
     extern "C" long duxrt_thread_id() ;
     extern "C" ptr  duxrt_thread_self() ;
-    extern "C" ptr  duxrt_thread_spawn(ptr fn, ptr arg) ;
+    extern "C" ptr  duxrt_thread_spawn(ptr func, ptr arg) ;
     extern "C" int  duxrt_thread_join(ptr t) ;
     extern "C" int  duxrt_thread_detach(ptr t) ;
 
@@ -30,7 +30,7 @@ namespace thread {
     extern "C" void duxrt_cond_free(ptr c) ;
 
     extern "C" ptr  duxrt_once_new() ;
-    extern "C" void duxrt_once_call(ptr o, ptr fn) ;
+    extern "C" void duxrt_once_call(ptr o, ptr func) ;
     extern "C" void duxrt_once_free(ptr o) ;
 
     # Sleep for ms milliseconds.
@@ -55,10 +55,10 @@ class Thread(object) {
     public:
     ptr _handle
 
-    # Spawn a thread running fn (a fn()->void function pointer).
-    Thread(ptr fn) {
+    # Spawn a thread running func (a fn()->void function pointer).
+    Thread(ptr func) {
         unsafe {
-            this._handle = duxrt_thread_spawn(fn, null)
+            this._handle = duxrt_thread_spawn(func, null)
         }
     }
 
@@ -225,9 +225,9 @@ class Once(object) {
         }
     }
 
-    void call(ptr fn) {
+    void call(ptr func) {
         unsafe {
-            duxrt_once_call(this._o, fn)
+            duxrt_once_call(this._o, func)
         }
     }
 
