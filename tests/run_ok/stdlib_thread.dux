@@ -1,17 +1,34 @@
-import thread.thread
-import thread.mutex
+import thread
 
 int main() {
+    Mutex m = new Mutex()
+    m.lock()
+    m.unlock()
+    bool ok = m.try_lock()
+    if ok {
+        print("trylock ok")
+        m.unlock()
+    }
+    print("mutex ok")
+
+    RWLock rw = new RWLock()
+    rw.read_lock()
+    rw.unlock()
+    rw.write_lock()
+    rw.unlock()
+    print("rwlock ok")
+
+    CondVar cv = new CondVar()
+    cv.signal()
+    cv.broadcast()
+    print("condvar ok")
+
     long id = thread.id()
     if id > 0 {
         print("thread id ok")
     }
     thread.sleep_ms(1)
     print("sleep ok")
-    ptr m = mutex.create()
-    mutex.lock(m)
-    mutex.unlock(m)
-    mutex.free(m)
-    print("mutex ok")
+
     return 0
 }

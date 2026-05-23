@@ -1,5 +1,6 @@
 /*
- * thread_rt.c — threading runtime for Dux stdlib thread.thread / thread.mutex
+ * thread_rt.c — threading runtime for Dux stdlib thread module
+ * Covers: Thread, Mutex, RWLock, CondVar, Once
  */
 #include "duxrt.h"
 #include <pthread.h>
@@ -88,4 +89,102 @@ void duxrt_mutex_free(void* m) {
     if (!m) return;
     pthread_mutex_destroy((pthread_mutex_t*)m);
     free(m);
+}
+
+/* Alias: issue #93 uses duxrt_mutex_new */
+void* duxrt_mutex_new(void) { return duxrt_mutex_create(); }
+
+/* ── Thread self ─────────────────────────────────────────────────────────── */
+
+void* duxrt_thread_self(void) {
+    pthread_t* t = (pthread_t*)malloc(sizeof(pthread_t));
+    if (!t) return NULL;
+    *t = pthread_self();
+    return t;
+}
+
+/* ── RWLock ──────────────────────────────────────────────────────────────── */
+
+void* duxrt_rwlock_new(void) {
+    pthread_rwlock_t* rw = (pthread_rwlock_t*)malloc(sizeof(pthread_rwlock_t));
+    if (!rw) return NULL;
+    pthread_rwlock_init(rw, NULL);
+    return rw;
+}
+
+void duxrt_rwlock_rlock(void* rw) {
+    if (rw) pthread_rwlock_rdlock((pthread_rwlock_t*)rw);
+}
+
+void duxrt_rwlock_wlock(void* rw) {
+    if (rw) pthread_rwlock_wrlock((pthread_rwlock_t*)rw);
+}
+
+void duxrt_rwlock_unlock(void* rw) {
+    if (rw) pthread_rwlock_unlock((pthread_rwlock_t*)rw);
+}
+
+void duxrt_rwlock_free(void* rw) {
+    if (!rw) return;
+    pthread_rwlock_destroy((pthread_rwlock_t*)rw);
+    free(rw);
+}
+
+/* ── CondVar ─────────────────────────────────────────────────────────────── */
+
+void* duxrt_cond_new(void) {
+    pthread_cond_t* c = (pthread_cond_t*)malloc(sizeof(pthread_cond_t));
+    if (!c) return NULL;
+    pthread_cond_init(c, NULL);
+    return c;
+}
+
+void duxrt_cond_wait(void* c, void* m) {
+    if (c && m)
+        pthread_cond_wait((pthread_cond_t*)c, (pthread_mutex_t*)m);
+}
+
+void duxrt_cond_signal(void* c) {
+    if (c) pthread_cond_signal((pthread_cond_t*)c);
+}
+
+void duxrt_cond_broadcast(void* c) {
+    if (c) pthread_cond_broadcast((pthread_cond_t*)c);
+}
+
+void duxrt_cond_free(void* c) {
+    if (!c) return;
+    pthread_cond_destroy((pthread_cond_t*)c);
+    free(c);
+}
+
+/* ── Once ────────────────────────────────────────────────────────────────── */
+
+typedef struct {
+    pthread_once_t once;
+    void (*fn)(void);
+} DuxOnce;
+
+/* pthread_once requires a static/global function — we store the fn ptr in TLS */
+static __thread void (*once_fn_)(void) = NULL;
+static void once_trampoline(void) { if (once_fn_) once_fn_(); }
+
+void* duxrt_once_new(void) {
+    DuxOnce* o = (DuxOnce*)malloc(sizeof(DuxOnce));
+    if (!o) return NULL;
+    pthread_once_t init = PTHREAD_ONCE_INIT;
+    o->once = init;
+    o->fn   = NULL;
+    return o;
+}
+
+void duxrt_once_call(void* handle, void* fn) {
+    DuxOnce* o = (DuxOnce*)handle;
+    if (!o || !fn) return;
+    once_fn_ = (void (*)(void))fn;
+    pthread_once(&o->once, once_trampoline);
+}
+
+void duxrt_once_free(void* handle) {
+    free(handle);
 }
