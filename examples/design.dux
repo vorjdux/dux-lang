@@ -61,7 +61,7 @@ namespace com.vorjdux.lang {
         public:
 
         int burn_year() {
-            int year = 2024
+            const int year = 2024
             return year - this._age
         }
 
@@ -82,7 +82,7 @@ namespace com.vorjdux.lang {
         }
 
         int burn_year() {
-            int _year = 2024
+            const int _year = 2024
             return _year - this._age
         }
 
