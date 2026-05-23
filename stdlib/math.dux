@@ -1,100 +1,168 @@
 # math — standard mathematics module
 # Usage: import math
+# Functions are accessible as math.sin(x), math.PI(), etc.
 
-# ── Constants ────────────────────────────────────────────────────────────────
-const double PI  = 3.14159265358979323846
-const double E   = 2.71828182845904523536
-const double TAU = 6.28318530717958647692   # 2 * PI
-const double INF = 1.0 / 0.0               # positive infinity
+namespace math {
 
-# ── Extern C runtime functions ────────────────────────────────────────────────
-extern "C" double duxrt_math_sqrt(double x)
-extern "C" double duxrt_math_sin(double x)
-extern "C" double duxrt_math_cos(double x)
-extern "C" double duxrt_math_tan(double x)
-extern "C" double duxrt_math_pow(double base, double exp)
-extern "C" double duxrt_math_floor(double x)
-extern "C" double duxrt_math_ceil(double x)
-extern "C" double duxrt_math_round(double x)
-extern "C" double duxrt_math_log(double x)
-extern "C" double duxrt_math_log2(double x)
-extern "C" double duxrt_math_log10(double x)
-extern "C" double duxrt_math_abs_d(double x)
-extern "C" double duxrt_math_min_d(double a, double b)
-extern "C" double duxrt_math_max_d(double a, double b)
-extern "C" long duxrt_math_abs_i(long x)
-extern "C" long duxrt_math_min_i(long a, long b)
-extern "C" long duxrt_math_max_i(long a, long b)
+    # ── C runtime bindings ────────────────────────────────────────────────────
+    extern "C" double duxrt_math_sqrt(double x) ;
+    extern "C" double duxrt_math_pow(double base, double exp) ;
+    extern "C" double duxrt_math_abs_d(double x) ;
+    extern "C" long   duxrt_math_abs_i(long x) ;
+    extern "C" double duxrt_math_min_d(double a, double b) ;
+    extern "C" double duxrt_math_max_d(double a, double b) ;
+    extern "C" long   duxrt_math_min_i(long a, long b) ;
+    extern "C" long   duxrt_math_max_i(long a, long b) ;
+    extern "C" double duxrt_math_sin(double x) ;
+    extern "C" double duxrt_math_cos(double x) ;
+    extern "C" double duxrt_math_tan(double x) ;
+    extern "C" double duxrt_math_asin(double x) ;
+    extern "C" double duxrt_math_acos(double x) ;
+    extern "C" double duxrt_math_atan(double x) ;
+    extern "C" double duxrt_math_atan2(double y, double x) ;
+    extern "C" double duxrt_math_exp(double x) ;
+    extern "C" double duxrt_math_exp2(double x) ;
+    extern "C" double duxrt_math_log(double x) ;
+    extern "C" double duxrt_math_log2(double x) ;
+    extern "C" double duxrt_math_log10(double x) ;
+    extern "C" double duxrt_math_floor(double x) ;
+    extern "C" double duxrt_math_ceil(double x) ;
+    extern "C" double duxrt_math_round(double x) ;
+    extern "C" double duxrt_math_trunc(double x) ;
+    extern "C" double duxrt_math_fmod(double x, double y) ;
+    extern "C" double duxrt_math_hypot(double x, double y) ;
+    extern "C" double duxrt_math_clamp_d(double v, double lo, double hi) ;
+    extern "C" long   duxrt_math_clamp_i(long v, long lo, long hi) ;
+    extern "C" int    duxrt_math_sign_d(double x) ;
+    extern "C" int    duxrt_math_sign_i(long x) ;
+    extern "C" int    duxrt_math_is_nan(double x) ;
+    extern "C" int    duxrt_math_is_inf(double x) ;
 
-# ── Trigonometry ─────────────────────────────────────────────────────────────
-double sin(double x) {
-    return duxrt_math_sin(x)
-}
+    # ── Constants ─────────────────────────────────────────────────────────────
+    double PI() {
+        return 3.14159265358979323846
+    }
+    double E() {
+        return 2.71828182845904523536
+    }
+    double TAU() {
+        return 6.28318530717958647692
+    }
+    double INF() {
+        return 1.0 / 0.0
+    }
 
-double cos(double x) {
-    return duxrt_math_cos(x)
-}
+    # ── Roots and powers ──────────────────────────────────────────────────────
+    double sqrt(double x) {
+        return duxrt_math_sqrt(x)
+    }
+    double pow(double base, double exp) {
+        return duxrt_math_pow(base, exp)
+    }
 
-double tan(double x) {
-    return duxrt_math_tan(x)
-}
+    # ── Trigonometry ──────────────────────────────────────────────────────────
+    double sin(double x) {
+        return duxrt_math_sin(x)
+    }
+    double cos(double x) {
+        return duxrt_math_cos(x)
+    }
+    double tan(double x) {
+        return duxrt_math_tan(x)
+    }
+    double asin(double x) {
+        return duxrt_math_asin(x)
+    }
+    double acos(double x) {
+        return duxrt_math_acos(x)
+    }
+    double atan(double x) {
+        return duxrt_math_atan(x)
+    }
+    double atan2(double y, double x) {
+        return duxrt_math_atan2(y, x)
+    }
 
-# ── Roots and powers ─────────────────────────────────────────────────────────
-double sqrt(double x) {
-    return duxrt_math_sqrt(x)
-}
+    # ── Exponential / logarithm ───────────────────────────────────────────────
+    double exp(double x) {
+        return duxrt_math_exp(x)
+    }
+    double exp2(double x) {
+        return duxrt_math_exp2(x)
+    }
+    double log(double x) {
+        return duxrt_math_log(x)
+    }
+    double log2(double x) {
+        return duxrt_math_log2(x)
+    }
+    double log10(double x) {
+        return duxrt_math_log10(x)
+    }
 
-double pow(double base, double exp) {
-    return duxrt_math_pow(base, exp)
-}
+    # ── Rounding ──────────────────────────────────────────────────────────────
+    double floor(double x) {
+        return duxrt_math_floor(x)
+    }
+    double ceil(double x) {
+        return duxrt_math_ceil(x)
+    }
+    double round(double x) {
+        return duxrt_math_round(x)
+    }
+    double trunc(double x) {
+        return duxrt_math_trunc(x)
+    }
 
-# ── Rounding ─────────────────────────────────────────────────────────────────
-double floor(double x) {
-    return duxrt_math_floor(x)
-}
+    # ── Absolute value and extrema ────────────────────────────────────────────
+    double abs(double x) {
+        return duxrt_math_abs_d(x)
+    }
+    double min(double a, double b) {
+        return duxrt_math_min_d(a, b)
+    }
+    double max(double a, double b) {
+        return duxrt_math_max_d(a, b)
+    }
+    long abs_i(long x) {
+        return duxrt_math_abs_i(x)
+    }
+    long min_i(long a, long b) {
+        return duxrt_math_min_i(a, b)
+    }
+    long max_i(long a, long b) {
+        return duxrt_math_max_i(a, b)
+    }
 
-double ceil(double x) {
-    return duxrt_math_ceil(x)
-}
+    # ── Floating-point utilities ──────────────────────────────────────────────
+    double fmod(double x, double y) {
+        return duxrt_math_fmod(x, y)
+    }
+    double hypot(double x, double y) {
+        return duxrt_math_hypot(x, y)
+    }
 
-double round(double x) {
-    return duxrt_math_round(x)
-}
+    # ── Clamp ─────────────────────────────────────────────────────────────────
+    double clamp(double v, double lo, double hi) {
+        return duxrt_math_clamp_d(v, lo, hi)
+    }
+    long clamp_i(long v, long lo, long hi) {
+        return duxrt_math_clamp_i(v, lo, hi)
+    }
 
-# ── Logarithms ───────────────────────────────────────────────────────────────
-double log(double x) {
-    return duxrt_math_log(x)
-}
+    # ── Sign ──────────────────────────────────────────────────────────────────
+    int sign(double x) {
+        return duxrt_math_sign_d(x)
+    }
+    int sign_i(long x) {
+        return duxrt_math_sign_i(x)
+    }
 
-double log2(double x) {
-    return duxrt_math_log2(x)
-}
-
-double log10(double x) {
-    return duxrt_math_log10(x)
-}
-
-# ── Absolute value and extrema ────────────────────────────────────────────────
-double abs(double x) {
-    return duxrt_math_abs_d(x)
-}
-
-double min(double a, double b) {
-    return duxrt_math_min_d(a, b)
-}
-
-double max(double a, double b) {
-    return duxrt_math_max_d(a, b)
-}
-
-long abs_i(long x) {
-    return duxrt_math_abs_i(x)
-}
-
-long min_i(long a, long b) {
-    return duxrt_math_min_i(a, b)
-}
-
-long max_i(long a, long b) {
-    return duxrt_math_max_i(a, b)
+    # ── Classification ────────────────────────────────────────────────────────
+    bool is_nan(double x) {
+        return duxrt_math_is_nan(x) != 0
+    }
+    bool is_inf(double x) {
+        return duxrt_math_is_inf(x) != 0
+    }
 }

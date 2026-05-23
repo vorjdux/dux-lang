@@ -1,3 +1,9 @@
+# data.json — JSON parse and serialize
+# Usage: import data.json
+#
+# Parses flat JSON objects ({...}) into a JsonValue handle.
+# Values are accessible as strings, integers, or doubles.
+
 namespace json {
     extern "C" ptr    duxrt_json_parse(str input) ;
     extern "C" str    duxrt_json_get_str(ptr handle, str key) ;
@@ -6,7 +12,7 @@ namespace json {
     extern "C" int    duxrt_json_has(ptr handle, str key) ;
     extern "C" str    duxrt_json_stringify(ptr handle) ;
 
-    # Parse a JSON string. Returns a handle (ptr) to the parsed value.
+    # Low-level namespace API (opaque ptr handle)
     ptr parse(str input) {
         ptr r = null
         unsafe {
@@ -14,8 +20,6 @@ namespace json {
         }
         return r
     }
-
-    # Get a string field from a JSON object.
     str get_str(ptr handle, str key) {
         str r = ""
         unsafe {
@@ -23,8 +27,6 @@ namespace json {
         }
         return r
     }
-
-    # Get an integer field from a JSON object.
     long get_int(ptr handle, str key) {
         long r = 0
         unsafe {
@@ -32,8 +34,6 @@ namespace json {
         }
         return r
     }
-
-    # Get a float field from a JSON object.
     double get_double(ptr handle, str key) {
         double r = 0.0
         unsafe {
@@ -41,8 +41,6 @@ namespace json {
         }
         return r
     }
-
-    # True if the JSON object has the given key.
     bool has(ptr handle, str key) {
         int r = 0
         unsafe {
@@ -50,8 +48,6 @@ namespace json {
         }
         return r != 0
     }
-
-    # Serialize a JSON value to string.
     str stringify(ptr handle) {
         str r = ""
         unsafe {
@@ -60,3 +56,68 @@ namespace json {
         return r
     }
 }
+
+# JsonValue — a parsed JSON object.
+# Create with: JsonValue v = parse("{\"key\":\"value\"}")
+class JsonValue {
+    ptr _h
+
+    JsonValue(ptr h) {
+        this._h = h
+    }
+
+    # True if the object contains key.
+    bool has(str key) {
+        int r = 0
+        unsafe {
+            r = duxrt_json_has(this._h, key)
+        }
+        return r != 0
+    }
+
+    # Return the value for key as a string (empty string if not present).
+    str get_str(str key) {
+        str r = ""
+        unsafe {
+            r = duxrt_json_get_str(this._h, key)
+        }
+        return r
+    }
+
+    # Alias: get(key) -> str
+    str get(str key) {
+        str r = ""
+        unsafe {
+            r = duxrt_json_get_str(this._h, key)
+        }
+        return r
+    }
+
+    # Return the value for key as a long integer (0 if not present).
+    long get_int(str key) {
+        long r = 0
+        unsafe {
+            r = duxrt_json_get_int(this._h, key)
+        }
+        return r
+    }
+
+    # Return the value for key as a double (0.0 if not present).
+    double get_double(str key) {
+        double r = 0.0
+        unsafe {
+            r = duxrt_json_get_double(this._h, key)
+        }
+        return r
+    }
+
+    # Serialize back to a JSON string.
+    str stringify() {
+        str r = ""
+        unsafe {
+            r = duxrt_json_stringify(this._h)
+        }
+        return r
+    }
+}
+
