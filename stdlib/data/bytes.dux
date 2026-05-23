@@ -1,0 +1,20 @@
+// data.bytes — mutable byte buffer
+//
+// Import with:
+//   import data.bytes
+//
+// Usage:
+//   let buf = bytes.create()               // empty buffer
+//   let buf2 = bytes.with_capacity(1024)   // pre-allocated buffer
+//   bytes.push(buf, 65)                    // append byte value (int)
+//   bytes.push_str(buf, "hello")           // append string bytes
+//   let b = bytes.at(buf, 0)              // get byte at index → int
+//   bytes.poke(buf, 0, 72)                // set byte at index
+//   let n = bytes.len(buf)                // buffer length → int
+//   let s = bytes.to_str(buf)             // convert to str
+//   let buf3 = bytes.from_str("hello")    // create from str
+//   let sub = bytes.slice(buf, 1, 4)      // slice [start, end)
+//   bytes.clear(buf)                      // reset length to 0
+//   bytes.fill(buf, 0, 16)               // append N zero bytes
+//
+// Note: 'new' is a reserved word; use 'bytes.create()' instead.

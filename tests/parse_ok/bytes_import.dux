@@ -1,0 +1,6 @@
+import data.bytes
+
+fn main() {
+    let buf = bytes.create()
+    bytes.push(buf, 65)
+}

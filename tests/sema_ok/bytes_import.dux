@@ -1,0 +1,15 @@
+import data.bytes
+
+fn main() {
+    let buf = bytes.create()
+    bytes.push(buf, 65)
+    bytes.push_str(buf, "hello")
+    let n = bytes.len(buf)
+    let b = bytes.at(buf, 0)
+    bytes.poke(buf, 0, 72)
+    let s = bytes.to_str(buf)
+    let buf2 = bytes.from_str("world")
+    let sub = bytes.slice(buf, 0, 3)
+    bytes.clear(buf)
+    bytes.fill(buf, 0, 4)
+}

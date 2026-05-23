@@ -181,6 +181,28 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── Byte buffer (data.bytes module) ────────────────────────────────────── */
+typedef struct DuxBytes {
+    int64_t  len;
+    int64_t  cap;
+    uint8_t* data;
+} DuxBytes;
+
+DuxBytes* duxrt_bytes_create(void);
+DuxBytes* duxrt_bytes_new(void);   /* alias for duxrt_bytes_create */
+DuxBytes* duxrt_bytes_with_capacity(int64_t cap);
+void      duxrt_bytes_free(DuxBytes* b);
+void      duxrt_bytes_push(DuxBytes* b, int64_t byte_val);
+void      duxrt_bytes_push_str(DuxBytes* b, DuxStr* s);
+int64_t   duxrt_bytes_at(DuxBytes* b, int64_t idx);
+void      duxrt_bytes_poke(DuxBytes* b, int64_t idx, int64_t val);
+int64_t   duxrt_bytes_len(DuxBytes* b);
+DuxStr*   duxrt_bytes_to_str(DuxBytes* b);
+DuxBytes* duxrt_bytes_from_str(DuxStr* s);
+DuxBytes* duxrt_bytes_slice(DuxBytes* b, int64_t start, int64_t end);
+void      duxrt_bytes_clear(DuxBytes* b);
+void      duxrt_bytes_fill(DuxBytes* b, int64_t val, int64_t count);
+
 /* ── System environment + args (sys.env / sys.args modules) ─────────────── */
 void     duxrt_sys_init(int argc, char** argv);
 DuxStr*  duxrt_env_fetch(DuxStr* name);

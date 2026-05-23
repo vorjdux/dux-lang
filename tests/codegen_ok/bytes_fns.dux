@@ -1,0 +1,9 @@
+import data.bytes
+
+fn main() {
+    let buf = bytes.create()
+    bytes.push(buf, 72)
+    bytes.push(buf, 105)
+    let s = bytes.to_str(buf)
+    let n = bytes.len(buf)
+}

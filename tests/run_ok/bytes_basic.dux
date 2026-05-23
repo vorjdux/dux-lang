@@ -1,0 +1,13 @@
+import data.bytes
+
+fn main() {
+    let buf = bytes.create()
+    bytes.push_str(buf, "Hello")
+    let n = bytes.len(buf)
+    println(n)
+    let s = bytes.to_str(buf)
+    println(s)
+    let buf2 = bytes.from_str("World")
+    let b = bytes.at(buf2, 0)
+    println(b)
+}
