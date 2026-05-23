@@ -1,0 +1,18 @@
+class Counter {
+    static int count = 0
+
+    static void increment() {
+        Counter.count += 1
+    }
+
+    static int value() {
+        return Counter.count
+    }
+}
+
+void main() {
+    Counter.increment()
+    Counter.increment()
+    Counter.increment()
+    println(Counter.value())
+}

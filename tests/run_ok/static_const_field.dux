@@ -1,0 +1,9 @@
+class Config {
+    static const int MAX_SIZE = 100
+    static const int VERSION = 2
+}
+
+void main() {
+    println(Config.MAX_SIZE)
+    println(Config.VERSION)
+}
