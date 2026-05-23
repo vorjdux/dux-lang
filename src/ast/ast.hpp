@@ -226,6 +226,7 @@ struct MatchPattern {
     Kind        kind{Kind::Wildcard};
     std::string enum_name;    // for EnumVariant: "Color"
     std::string variant_name; // for EnumVariant: "Red"
+    std::vector<std::string> bindings; // for EnumVariant payload: Result.Err(msg) => msg
     long long   int_value{0}; // for IntLit
     bool        bool_value{false}; // for BoolLit
     SourceLoc   loc;

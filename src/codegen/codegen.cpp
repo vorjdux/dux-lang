@@ -185,9 +185,13 @@ llvm::Type* Codegen::lower_type(TypeId tid) {
         case TR::TID_OBJECT: return ptr_type();
         case TR::TID_NULL:   return ptr_type();
         default:
-            // User-defined types: enums are i32, classes are heap-allocated ptr
-            if (tid >= 0 && types_.info(tid).kind == sema::TypeKind::Enum)
-                return llvm::Type::getInt32Ty(*ctx_);
+            // User-defined types: payload enums are ptr; simple enums are i32; classes are ptr
+            if (tid >= 0 && types_.info(tid).kind == sema::TypeKind::Enum) {
+                const auto& ti = types_.info(tid);
+                bool has_payload = std::any_of(ti.variants.begin(), ti.variants.end(),
+                    [](const sema::EnumVariantInfo& v){ return !v.payload.empty(); });
+                return has_payload ? ptr_type() : llvm::Type::getInt32Ty(*ctx_);
+            }
             return ptr_type(); // user-defined class types are heap-allocated
     }
 }
@@ -220,6 +224,9 @@ void Codegen::build_enum_type(const ast::EnumDecl& e) {
         sema::EnumVariantInfo vi;
         vi.name = v.name;
         vi.tag  = tag++;
+        // Copy payload type info so codegen knows arity and types of each variant
+        for (const auto& pt : v.payload)
+            vi.payload.push_back(types_.from_type_expr(pt));
         ti.variants.push_back(vi);
     }
     enum_types_[e.name] = id;
@@ -1416,14 +1423,93 @@ void Codegen::gen_switch(const ast::SwitchStmt& s) {
     builder_->SetInsertPoint(exit_bb);
 }
 
+// ─── Enum payload helpers ─────────────────────────────────────────────────────
+
+int Codegen::enum_max_payload_arity(const sema::TypeInfo& ti) const {
+    int max_arity = 0;
+    for (const auto& v : ti.variants)
+        max_arity = std::max(max_arity, (int)v.payload.size());
+    return max_arity;
+}
+
+llvm::Value* Codegen::box_to_ptr(llvm::Value* v) {
+    if (v->getType()->isPointerTy()) return v;
+    if (v->getType()->isIntegerTy()) {
+        Value* ext = builder_->CreateZExt(v, llvm::Type::getInt64Ty(*ctx_));
+        return builder_->CreateIntToPtr(ext, ptr_type());
+    }
+    if (v->getType()->isDoubleTy()) {
+        Value* bits = builder_->CreateBitCast(v, llvm::Type::getInt64Ty(*ctx_));
+        return builder_->CreateIntToPtr(bits, ptr_type());
+    }
+    // Fallback
+    return llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptr_type()));
+}
+
+llvm::Value* Codegen::unbox_from_ptr(llvm::Value* v, llvm::Type* target) {
+    if (target->isPointerTy()) return v;
+    if (target->isIntegerTy()) {
+        Value* i64 = builder_->CreatePtrToInt(v, llvm::Type::getInt64Ty(*ctx_));
+        return builder_->CreateTrunc(i64, target);
+    }
+    if (target->isDoubleTy()) {
+        Value* i64 = builder_->CreatePtrToInt(v, llvm::Type::getInt64Ty(*ctx_));
+        return builder_->CreateBitCast(i64, target);
+    }
+    return v;
+}
+
+// Allocate and fill a payload enum heap struct:
+//   Layout: [ i32 tag | padding | ptr field_0 | ptr field_1 | ... ]
+//   Total:  (1 + max_arity) * 8 bytes  (tag occupies first 4 bytes, 4 bytes padding)
+llvm::Value* Codegen::gen_enum_ctor(const sema::TypeInfo& ti,
+                                     const sema::EnumVariantInfo& vi,
+                                     const std::vector<ast::ExprPtr>& args) {
+    int max_arity = enum_max_payload_arity(ti);
+    int n_slots   = 1 + max_arity; // slot 0 = tag (i32 in first 4 bytes), slots 1..N = payload ptrs
+    Value* sz  = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_),
+                                         (int64_t)(n_slots * 8));
+    Value* mem = rt_malloc(sz);
+
+    // Store tag as i32 at byte offset 0
+    Value* tag_val = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_),
+                                             static_cast<uint64_t>(vi.tag));
+    builder_->CreateStore(tag_val, mem);
+
+    // Store each payload field (boxed to ptr-sized slot) at ptr-slot offsets 1..N
+    for (int i = 0; i < (int)args.size() && i < (int)vi.payload.size(); ++i) {
+        Value* val    = gen_expr(*args[i]);
+        Value* boxed  = box_to_ptr(val);
+        Value* slot   = builder_->CreateConstGEP1_64(ptr_type(), mem,
+                                                      (int64_t)(i + 1),
+                                                      vi.name + ".field" + std::to_string(i));
+        builder_->CreateStore(boxed, slot);
+    }
+
+    return mem; // ptr to the heap struct
+}
+
 void Codegen::gen_match(const ast::MatchStmt& s) {
     Function* fn = builder_->GetInsertBlock()->getParent();
-    Value* match_val = gen_expr(*s.expr);
+    Value* match_raw = gen_expr(*s.expr);
 
-    // Ensure match value is an integer (enums are i32)
-    if (!match_val->getType()->isIntegerTy()) {
-        match_val = builder_->CreateFPToSI(match_val,
-                                           llvm::Type::getInt32Ty(*ctx_));
+    // Determine if this is a payload enum (ptr) or simple enum / integer (i32).
+    // For payload enums the heap struct starts with an i32 tag at byte offset 0.
+    Value*  match_ptr = nullptr; // non-null for payload enums
+    Value*  match_val = nullptr; // i32 discriminant for the switch
+
+    if (match_raw->getType()->isPointerTy()) {
+        // Payload enum: load i32 tag from offset 0 of the heap struct
+        match_ptr = match_raw;
+        match_val = builder_->CreateLoad(llvm::Type::getInt32Ty(*ctx_),
+                                          match_ptr, "enum.tag");
+    } else if (match_raw->getType()->isIntegerTy()) {
+        match_val = match_raw;
+        if (!match_val->getType()->isIntegerTy(32))
+            match_val = builder_->CreateTrunc(match_val, llvm::Type::getInt32Ty(*ctx_));
+    } else {
+        // Float or other — coerce to i32 (fallback, not normally reached for enums)
+        match_val = builder_->CreateFPToSI(match_raw, llvm::Type::getInt32Ty(*ctx_));
     }
 
     auto* exit_bb = BasicBlock::Create(*ctx_, "match.end", fn);
@@ -1482,6 +1568,40 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
         sw->addCase(case_val, case_bb);
         builder_->SetInsertPoint(case_bb);
         env_push();
+
+        // Bind payload fields if this is a payload enum arm with bindings
+        if (match_ptr && !arm->pattern.bindings.empty()) {
+            // Find the variant info to get payload types
+            const sema::EnumVariantInfo* vi = nullptr;
+            auto it = enum_types_.find(arm->pattern.enum_name);
+            if (it != enum_types_.end()) {
+                const sema::TypeInfo& ti = types_.info(it->second);
+                for (const auto& v : ti.variants)
+                    if (v.name == arm->pattern.variant_name) { vi = &v; break; }
+            }
+
+            for (int i = 0; i < (int)arm->pattern.bindings.size(); ++i) {
+                const std::string& bname = arm->pattern.bindings[i];
+                // Load ptr from slot i+1
+                Value* slot = builder_->CreateConstGEP1_64(ptr_type(), match_ptr,
+                                                            (int64_t)(i + 1),
+                                                            bname + ".slot");
+                Value* field_ptr = builder_->CreateLoad(ptr_type(), slot, bname + ".raw");
+
+                // Determine target type for unboxing
+                llvm::Type* field_ty = ptr_type(); // default: ptr (str, object, etc.)
+                if (vi && i < (int)vi->payload.size()) {
+                    TypeId payload_tid = vi->payload[i];
+                    field_ty = lower_type(payload_tid);
+                }
+
+                Value* field_val  = unbox_from_ptr(field_ptr, field_ty);
+                Value* field_alloca = make_alloca(field_ty, bname);
+                builder_->CreateStore(field_val, field_alloca);
+                env_define(bname, field_alloca);
+            }
+        }
+
         gen_stmts(arm->body);
         env_pop();
         if (!builder_->GetInsertBlock()->getTerminator())
@@ -2219,6 +2339,23 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
                 }
                 return builder_->CreateCall(ns_fn, args);
             }
+
+            // Enum constructor: Result.Err("msg") — detected before class method lookup
+            if (auto* id2 = dynamic_cast<const ast::IdentExpr*>(mem->object.get())) {
+                auto enum_it = enum_types_.find(id2->name);
+                if (enum_it != enum_types_.end()) {
+                    TypeId enum_tid = enum_it->second;
+                    const sema::TypeInfo& ti = types_.info(enum_tid);
+                    bool is_payload_enum = std::any_of(ti.variants.begin(), ti.variants.end(),
+                        [](const sema::EnumVariantInfo& v){ return !v.payload.empty(); });
+                    if (is_payload_enum) {
+                        for (const auto& v : ti.variants) {
+                            if (v.name == mem->member)
+                                return gen_enum_ctor(ti, v, e.args);
+                        }
+                    }
+                }
+            }
         }
 
         Value* obj = gen_expr(*mem->object);
@@ -2267,20 +2404,52 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
 }
 
 Value* Codegen::gen_member(const ast::MemberExpr& e) {
-    // Enum variant access: Color.Red  →  i32 constant
+    // Enum variant access: Color.Red or Result.Ok (payload enum, no-payload variant)
     if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.object.get())) {
         auto enum_it = enum_types_.find(id->name);
         if (enum_it != enum_types_.end()) {
             TypeId enum_tid = enum_it->second;
             const sema::TypeInfo& ti = types_.info(enum_tid);
+            bool is_payload_enum = std::any_of(ti.variants.begin(), ti.variants.end(),
+                [](const sema::EnumVariantInfo& v){ return !v.payload.empty(); });
+
             for (const auto& v : ti.variants) {
-                if (v.name == e.member)
-                    return llvm::ConstantInt::get(
-                        llvm::Type::getInt32Ty(*ctx_),
-                        static_cast<uint64_t>(v.tag));
+                if (v.name != e.member) continue;
+
+                if (!is_payload_enum) {
+                    // Simple enum: return bare i32 discriminant (original behaviour)
+                    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_),
+                                                   static_cast<uint64_t>(v.tag));
+                }
+
+                if (!v.payload.empty()) {
+                    // Payload variant accessed without args — should be constructed
+                    // via a CallExpr (gen_call intercepts it). Reaching here means
+                    // the variant was used as a bare value, which is unusual.
+                    // Return null ptr as a safe fallback.
+                    driver_.warning(e.loc, "payload variant '" + v.name +
+                                    "' used without constructor args; use " +
+                                    id->name + "." + v.name + "(value)");
+                    return llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type()));
+                }
+
+                // No-payload variant in a payload enum: alloc heap struct with just the tag
+                int max_arity = enum_max_payload_arity(ti);
+                Value* sz  = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_),
+                                                     (int64_t)((1 + max_arity) * 8));
+                Value* mem = rt_malloc(sz);
+                Value* tag_val = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_),
+                                                         static_cast<uint64_t>(v.tag));
+                builder_->CreateStore(tag_val, mem);
+                return mem;
             }
+
             driver_.warning(e.loc, "unknown enum variant '" + e.member +
                             "' on '" + id->name + "'");
+            if (is_payload_enum)
+                return llvm::ConstantPointerNull::get(
+                    llvm::cast<llvm::PointerType>(ptr_type()));
             return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0);
         }
 

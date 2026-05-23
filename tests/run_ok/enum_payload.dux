@@ -1,0 +1,63 @@
+import result
+
+# Local enum with mixed variants (some with payload, some without)
+enum Shape {
+    Circle(int),
+    Rect(int),
+    Dot
+}
+
+int main() {
+    # Test 1: Result.Ok carries a value
+    object r1 = Result.Ok("hello")
+    match r1 {
+        Result.Ok(val) => {
+            print("ok:" + val)
+        }
+        Result.Err(msg) => {
+            print("unexpected err")
+        }
+    }
+
+    # Test 2: Result.Err carries an error string
+    object r2 = Result.Err("not found")
+    match r2 {
+        Result.Ok(val) => {
+            print("unexpected ok")
+        }
+        Result.Err(msg) => {
+            print("err:" + msg)
+        }
+    }
+
+    # Test 3: payload variant — circle
+    object s1 = Shape.Circle(42)
+    match s1 {
+        Shape.Circle(r) => {
+            print("circle")
+        }
+        Shape.Rect(w) => {
+            print("rect")
+        }
+        Shape.Dot => {
+            print("dot")
+        }
+    }
+
+    # Test 4: no-payload variant in a payload enum
+    object s2 = Shape.Dot
+    match s2 {
+        Shape.Circle(r) => {
+            print("circle")
+        }
+        Shape.Rect(w) => {
+            print("rect")
+        }
+        Shape.Dot => {
+            print("dot")
+        }
+    }
+
+    print("enum_payload ok")
+    return 0
+}
