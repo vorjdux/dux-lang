@@ -1,0 +1,17 @@
+import thread
+import mutex
+
+fn main() {
+    let tid = thread.id()
+    if tid > 0 {
+        println("has tid")
+    }
+    let m = mutex.create()
+    mutex.lock(m)
+    println("locked")
+    mutex.unlock(m)
+    println("unlocked")
+    mutex.free(m)
+    thread.sleep_ms(5)
+    println("slept")
+}

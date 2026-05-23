@@ -181,6 +181,22 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── Thread primitives (thread module) ──────────────────────────────────── */
+/* DuxThread and DuxMutex are opaque; all access via functions below. */
+typedef struct DuxThread DuxThread;
+typedef struct DuxMutex  DuxMutex;
+
+DuxThread* duxrt_thread_spawn(void (*fn)(void*), void* arg);
+void       duxrt_thread_join(DuxThread* t);
+void       duxrt_thread_detach(DuxThread* t);
+void       duxrt_thread_sleep_ms(int64_t ms);
+int64_t    duxrt_thread_id(void);
+
+DuxMutex*  duxrt_mutex_create(void);
+void       duxrt_mutex_lock(DuxMutex* mx);
+void       duxrt_mutex_unlock(DuxMutex* mx);
+void       duxrt_mutex_free(DuxMutex* mx);
+
 /* ── Random number generation (math.random module) ──────────────────────── */
 void    duxrt_random_seed(int64_t seed);
 double  duxrt_random(void);

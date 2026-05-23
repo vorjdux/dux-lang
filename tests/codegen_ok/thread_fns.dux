@@ -1,0 +1,10 @@
+import thread
+import mutex
+
+fn main() {
+    let tid = thread.id()
+    let m = mutex.create()
+    mutex.lock(m)
+    mutex.unlock(m)
+    mutex.free(m)
+}

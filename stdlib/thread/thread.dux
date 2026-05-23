@@ -1,0 +1,18 @@
+// thread — POSIX thread primitives
+//
+// Import with:
+//   import thread
+//   import mutex
+//
+// thread module:
+//   thread.sleep_ms(100)       // sleep current thread for N milliseconds
+//   let tid = thread.id()      // current thread ID (int)
+//
+// mutex module (basic mutual exclusion):
+//   let m = mutex.create()     // create a new mutex
+//   mutex.lock(m)              // acquire the mutex
+//   mutex.unlock(m)            // release the mutex
+//   mutex.free(m)              // destroy and deallocate
+//
+// Note: thread.spawn requires a function pointer; use the low-level
+// duxrt_thread_spawn() via unsafe extern for now.
