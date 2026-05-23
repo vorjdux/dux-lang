@@ -1,0 +1,23 @@
+import time.date
+import time.clock
+
+int main() {
+    long ts = clock.unix()
+    long yr = date.year(ts)
+    if yr > 2020 {
+        print("year ok")
+    }
+    long mo = date.month(ts)
+    if mo >= 1 {
+        if mo <= 12 {
+            print("month ok")
+        }
+    }
+    long day = date.day(ts)
+    if day >= 1 {
+        if day <= 31 {
+            print("day ok")
+        }
+    }
+    return 0
+}

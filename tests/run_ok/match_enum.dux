@@ -1,0 +1,24 @@
+enum Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+void main() {
+    int d = Direction.East
+    match d {
+        Direction.North => {
+            println("north")
+        }
+        Direction.South => {
+            println("south")
+        }
+        Direction.East => {
+            println("east")
+        }
+        _ => {
+            println("west")
+        }
+    }
+}

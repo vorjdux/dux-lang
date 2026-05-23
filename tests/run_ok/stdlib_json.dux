@@ -1,0 +1,21 @@
+import data.json
+
+int main() {
+    ptr j = json.parse("{\"name\": \"dux\", \"count\": 42}")
+    str name = json.get_str(j, "name")
+    print(name)
+    long count = json.get_int(j, "count")
+    if count == 42 {
+        print("int ok")
+    }
+    bool has_name = json.has(j, "name")
+    if has_name {
+        print("has ok")
+    }
+    bool no_foo = json.has(j, "foo")
+    if no_foo {
+        print("should not print")
+    }
+    print("json ok")
+    return 0
+}

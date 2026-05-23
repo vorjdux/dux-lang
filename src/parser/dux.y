@@ -75,12 +75,13 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token <bool>        BOOL_LIT   "bool literal"
 
 /* Keywords */
-%token KW_NAMESPACE KW_IMPORT KW_FROM KW_AS KW_CLASS KW_INTERFACE
+%token KW_NAMESPACE KW_IMPORT KW_FROM KW_AS KW_CLASS KW_INTERFACE KW_ENUM
 %token KW_PUBLIC KW_PRIVATE KW_PROTECTED
 %token KW_NEW KW_DELETE KW_THIS KW_SUPER KW_NULL
 %token KW_RETURN KW_BREAK KW_CONTINUE
 %token KW_IF KW_ELSE KW_FOR KW_WHILE KW_DO
 %token KW_SWITCH KW_CASE KW_DEFAULT
+%token KW_MATCH
 %token KW_TRY KW_CATCH KW_IN
 %token KW_CONST KW_STATIC
 %token KW_GET KW_SET
@@ -115,10 +116,14 @@ static std::unique_ptr<T> mk(Args&&... a) {
 
 /* Program */
 %type <DeclList>                         top_decl_list
-%type <DeclPtr>                          top_decl decl
+%type <DeclPtr>                          top_decl decl extern_decl
 /* Declarations */
-%type <DeclPtr>  namespace_decl import_decl class_decl interface_decl
-%type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl extern_decl
+%type <DeclPtr>  namespace_decl import_decl class_decl interface_decl enum_decl
+%type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl
+/* Enum */
+%type <std::vector<EnumVariant>>  enum_variants
+%type <EnumVariant>               enum_variant
+%type <std::vector<TypeExpr>>     enum_payload opt_enum_payload
 /* Namespace body accumulates into a temporary Program */
 %type <std::unique_ptr<Program>>         namespace_body
 /* Class / interface */
@@ -152,13 +157,17 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <StmtList>                         stmt_list block_body
 %type <StmtPtr>  stmt simple_stmt
 %type <StmtPtr>  if_stmt while_stmt do_while_stmt for_stmt
-%type <StmtPtr>  switch_stmt try_stmt return_stmt break_stmt
+%type <StmtPtr>  switch_stmt match_stmt try_stmt return_stmt break_stmt
 %type <StmtPtr>  continue_stmt assert_stmt delete_stmt defer_stmt throw_stmt unsafe_stmt
 %type <ExprPtr>  defer_expr defer_primary
 %type <std::unique_ptr<BlockStmt>>       block
 %type <std::vector<SwitchCase>>          switch_cases
 %type <SwitchCase>                       switch_case
 %type <std::optional<std::string>>       opt_label
+/* Match statement */
+%type <std::vector<MatchArm>>            match_arms
+%type <MatchArm>                         match_arm
+%type <MatchPattern>                     match_pattern
 /* Variable declarations */
 %type <StmtPtr>                          var_decl_stmt
 %type <VarItemList>                      var_decl_items
@@ -217,6 +226,7 @@ decl
     | import_decl     { $$ = std::move($1); }
     | class_decl      { $$ = std::move($1); }
     | interface_decl  { $$ = std::move($1); }
+    | enum_decl       { $$ = std::move($1); }
     | func_decl       { $$ = std::move($1); }
     | extern_decl     { $$ = std::move($1); }
     ;
@@ -483,6 +493,59 @@ interface_member
     ;
 
 /* =====================================================================
+   Enum
+   ===================================================================== */
+
+enum_decl
+    : KW_ENUM IDENT LBRACE enum_variants RBRACE
+        {
+            auto n        = mk<EnumDecl>();
+            n->loc        = sl(@$, driver);
+            n->name       = $2;
+            n->variants   = std::move($4);
+            $$ = std::move(n);
+        }
+    | KW_ENUM IDENT LBRACE enum_variants RBRACE SEMI
+        {
+            auto n        = mk<EnumDecl>();
+            n->loc        = sl(@$, driver);
+            n->name       = $2;
+            n->variants   = std::move($4);
+            $$ = std::move(n);
+        }
+    ;
+
+enum_variants
+    : %empty               { $$ = std::vector<EnumVariant>{}; }
+    | enum_variant         { $$.push_back(std::move($1)); }
+    | enum_variants COMMA enum_variant
+        { $1.push_back(std::move($3)); $$ = std::move($1); }
+    | enum_variants COMMA  { $$ = std::move($1); }  /* trailing comma */
+    | enum_variants SEMI   { $$ = std::move($1); }  /* absorb auto-semicolons */
+    ;
+
+enum_variant
+    : IDENT opt_enum_payload
+        {
+            EnumVariant v;
+            v.loc     = sl(@$, driver);
+            v.name    = $1;
+            v.payload = std::move($2);
+            $$ = std::move(v);
+        }
+    ;
+
+opt_enum_payload
+    : %empty                           { $$ = std::vector<TypeExpr>{}; }
+    | LPAREN enum_payload RPAREN       { $$ = std::move($2); }
+    ;
+
+enum_payload
+    : type_expr                        { $$.push_back(std::move($1)); }
+    | enum_payload COMMA type_expr     { $1.push_back(std::move($3)); $$ = std::move($1); }
+    ;
+
+/* =====================================================================
    Function / method
    ===================================================================== */
 
@@ -706,6 +769,7 @@ stmt
     | do_while_stmt       { $$ = std::move($1); }
     | for_stmt            { $$ = std::move($1); }
     | switch_stmt         { $$ = std::move($1); }
+    | match_stmt          { $$ = std::move($1); }
     | try_stmt            { $$ = std::move($1); }
     | return_stmt         { $$ = std::move($1); }
     | break_stmt          { $$ = std::move($1); }
@@ -826,6 +890,80 @@ switch_case
         { SwitchCase c; c.body = std::move($3); $$ = std::move(c); }
     ;
 
+/* -- Match statement --------------------------------------------------- */
+
+match_stmt
+    : KW_MATCH expr LBRACE match_arms RBRACE
+        {
+            auto s = mk<MatchStmt>(); s->loc = sl(@$, driver);
+            s->expr = std::move($2); s->arms = std::move($4);
+            $$ = std::move(s);
+        }
+    ;
+
+match_arms
+    : %empty              { $$ = std::vector<MatchArm>{}; }
+    | match_arms match_arm
+        { $1.push_back(std::move($2)); $$ = std::move($1); }
+    | match_arms SEMI     { $$ = std::move($1); }  /* absorb auto-semicolons */
+    ;
+
+match_arm
+    : match_pattern FAT_ARROW block
+        {
+            MatchArm arm; arm.loc = sl(@$, driver);
+            arm.pattern = std::move($1); arm.body = std::move($3->body);
+            $$ = std::move(arm);
+        }
+    | match_pattern FAT_ARROW block SEMI
+        {
+            MatchArm arm; arm.loc = sl(@$, driver);
+            arm.pattern = std::move($1); arm.body = std::move($3->body);
+            $$ = std::move(arm);
+        }
+    ;
+
+match_pattern
+    : IDENT DOT IDENT
+        {
+            /* EnumName.Variant */
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::EnumVariant;
+            p.enum_name    = $1;
+            p.variant_name = $3;
+            $$ = std::move(p);
+        }
+    | INT_LIT
+        {
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::IntLit;
+            p.int_value = $1;
+            $$ = std::move(p);
+        }
+    | KW_NULL
+        {
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::IntLit;
+            p.int_value = 0;
+            $$ = std::move(p);
+        }
+    | BOOL_LIT
+        {
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::BoolLit;
+            p.bool_value = $1;
+            $$ = std::move(p);
+        }
+    | IDENT
+        {
+            /* bare identifier: "_" is wildcard, any other name is also wildcard for now
+               (binding variables deferred to a future milestone) */
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::Wildcard;
+            $$ = std::move(p);
+        }
+    ;
+
 /* -- Try / catch ------------------------------------------------------- */
 try_stmt
     : KW_TRY block KW_CATCH ELLIPSIS block
@@ -926,7 +1064,7 @@ throw_stmt
         }
     ;
 
-/* -- Unsafe ------------------------------------------------------------ */
+/* -- Unsafe block ------------------------------------------------------ */
 unsafe_stmt
     : KW_UNSAFE block
         {

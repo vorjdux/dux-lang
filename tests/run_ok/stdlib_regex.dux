@@ -1,0 +1,18 @@
+import data.regex
+
+int main() {
+    bool m = regex.is_match("[0-9]+", "abc123")
+    if m {
+        print("match ok")
+    }
+    bool no_m = regex.is_match("[0-9]+", "abcdef")
+    if no_m {
+        print("should not print")
+    }
+    ptr rx = regex.compile("he[l]+o")
+    str found = regex.find(rx, "say hello world")
+    print(found)
+    regex.free(rx)
+    print("regex ok")
+    return 0
+}

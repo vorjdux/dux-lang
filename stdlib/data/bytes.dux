@@ -1,0 +1,84 @@
+namespace bytes {
+    extern "C" ptr  duxrt_bytes_new(long cap) ;
+    extern "C" ptr  duxrt_bytes_from_str(str s) ;
+    extern "C" str  duxrt_bytes_to_str(ptr b) ;
+    extern "C" long duxrt_bytes_len(ptr b) ;
+    extern "C" long duxrt_bytes_get(ptr b, long i) ;
+    extern "C" void duxrt_bytes_set(ptr b, long i, long val) ;
+    extern "C" void duxrt_bytes_push(ptr b, long val) ;
+    extern "C" void duxrt_bytes_append(ptr dst, ptr src) ;
+    extern "C" void duxrt_bytes_free(ptr b) ;
+
+    # Create a new byte buffer with optional initial capacity.
+    ptr create(long cap) {
+        ptr r = null
+        unsafe {
+            r = duxrt_bytes_new(cap)
+        }
+        return r
+    }
+
+    # Create byte buffer from string contents.
+    ptr from_str(str s) {
+        ptr r = null
+        unsafe {
+            r = duxrt_bytes_from_str(s)
+        }
+        return r
+    }
+
+    # Convert byte buffer to string.
+    str to_str(ptr b) {
+        str r = ""
+        unsafe {
+            r = duxrt_bytes_to_str(b)
+        }
+        return r
+    }
+
+    # Number of bytes in buffer.
+    long len(ptr b) {
+        long r = 0
+        unsafe {
+            r = duxrt_bytes_len(b)
+        }
+        return r
+    }
+
+    # Get byte at index i (0-255).
+    long at(ptr b, long i) {
+        long r = 0
+        unsafe {
+            r = duxrt_bytes_get(b, i)
+        }
+        return r
+    }
+
+    # Set byte at index i.
+    void poke(ptr b, long i, long val) {
+        unsafe {
+            duxrt_bytes_set(b, i, val)
+        }
+    }
+
+    # Append a byte.
+    void push(ptr b, long val) {
+        unsafe {
+            duxrt_bytes_push(b, val)
+        }
+    }
+
+    # Append all bytes from another buffer.
+    void append(ptr dst, ptr src) {
+        unsafe {
+            duxrt_bytes_append(dst, src)
+        }
+    }
+
+    # Free buffer memory.
+    void free(ptr b) {
+        unsafe {
+            duxrt_bytes_free(b)
+        }
+    }
+}

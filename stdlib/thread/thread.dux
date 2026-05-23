@@ -1,0 +1,239 @@
+# stdlib/thread.dux — Thread, Mutex, MutexGuard, RWLock, CondVar, Once
+#
+# Full POSIX threading primitives wrapped in Dux classes with RAII.
+# Import with: import thread
+
+namespace thread {
+    extern "C" void duxrt_thread_sleep_ms(long ms) ;
+    extern "C" long duxrt_thread_id() ;
+    extern "C" ptr  duxrt_thread_self() ;
+    extern "C" ptr  duxrt_thread_spawn(ptr func, ptr arg) ;
+    extern "C" int  duxrt_thread_join(ptr t) ;
+    extern "C" int  duxrt_thread_detach(ptr t) ;
+
+    extern "C" ptr  duxrt_mutex_new() ;
+    extern "C" void duxrt_mutex_lock(ptr m) ;
+    extern "C" void duxrt_mutex_unlock(ptr m) ;
+    extern "C" int  duxrt_mutex_trylock(ptr m) ;
+    extern "C" void duxrt_mutex_free(ptr m) ;
+
+    extern "C" ptr  duxrt_rwlock_new() ;
+    extern "C" void duxrt_rwlock_rlock(ptr rw) ;
+    extern "C" void duxrt_rwlock_wlock(ptr rw) ;
+    extern "C" void duxrt_rwlock_unlock(ptr rw) ;
+    extern "C" void duxrt_rwlock_free(ptr rw) ;
+
+    extern "C" ptr  duxrt_cond_new() ;
+    extern "C" void duxrt_cond_wait(ptr c, ptr m) ;
+    extern "C" void duxrt_cond_signal(ptr c) ;
+    extern "C" void duxrt_cond_broadcast(ptr c) ;
+    extern "C" void duxrt_cond_free(ptr c) ;
+
+    extern "C" ptr  duxrt_once_new() ;
+    extern "C" void duxrt_once_call(ptr o, ptr func) ;
+    extern "C" void duxrt_once_free(ptr o) ;
+
+    # Sleep for ms milliseconds.
+    void sleep_ms(long ms) {
+        unsafe {
+            duxrt_thread_sleep_ms(ms)
+        }
+    }
+
+    # Current thread ID as a long integer.
+    long id() {
+        long r = 0
+        unsafe {
+            r = duxrt_thread_id()
+        }
+        return r
+    }
+}
+
+# Thread — owns a single OS thread.
+class Thread(object) {
+    public:
+    ptr _handle
+
+    # Spawn a thread running func (a fn()->void function pointer).
+    Thread(ptr func) {
+        unsafe {
+            this._handle = duxrt_thread_spawn(func, null)
+        }
+    }
+
+    # Block until the thread finishes. Returns 0 on success, errno on failure.
+    int join() {
+        int r = 0
+        unsafe {
+            r = duxrt_thread_join(this._handle)
+        }
+        this._handle = null
+        return r
+    }
+
+    # Detach the thread (runs independently). Returns 0 on success.
+    int detach() {
+        int r = 0
+        unsafe {
+            r = duxrt_thread_detach(this._handle)
+        }
+        this._handle = null
+        return r
+    }
+
+    ~Thread() {
+    }
+}
+
+# Mutex — exclusive lock.
+class Mutex(object) {
+    public:
+    ptr _m
+
+    Mutex() {
+        unsafe {
+            this._m = duxrt_mutex_new()
+        }
+    }
+
+    void lock() {
+        unsafe {
+            duxrt_mutex_lock(this._m)
+        }
+    }
+
+    void unlock() {
+        unsafe {
+            duxrt_mutex_unlock(this._m)
+        }
+    }
+
+    bool try_lock() {
+        int r = 0
+        unsafe {
+            r = duxrt_mutex_trylock(this._m)
+        }
+        return r == 0
+    }
+
+    ~Mutex() {
+        unsafe {
+            duxrt_mutex_free(this._m)
+        }
+    }
+}
+
+# MutexGuard — RAII lock/unlock.
+class MutexGuard(object) {
+    public:
+    Mutex _mtx
+
+    MutexGuard(Mutex m) {
+        this._mtx = m
+        this._mtx.lock()
+    }
+
+    ~MutexGuard() {
+        this._mtx.unlock()
+    }
+}
+
+# RWLock — multiple readers OR one exclusive writer.
+class RWLock(object) {
+    public:
+    ptr _rw
+
+    RWLock() {
+        unsafe {
+            this._rw = duxrt_rwlock_new()
+        }
+    }
+
+    void read_lock() {
+        unsafe {
+            duxrt_rwlock_rlock(this._rw)
+        }
+    }
+
+    void write_lock() {
+        unsafe {
+            duxrt_rwlock_wlock(this._rw)
+        }
+    }
+
+    void unlock() {
+        unsafe {
+            duxrt_rwlock_unlock(this._rw)
+        }
+    }
+
+    ~RWLock() {
+        unsafe {
+            duxrt_rwlock_free(this._rw)
+        }
+    }
+}
+
+# CondVar — condition variable, used together with a Mutex.
+class CondVar(object) {
+    public:
+    ptr _c
+
+    CondVar() {
+        unsafe {
+            this._c = duxrt_cond_new()
+        }
+    }
+
+    # Wait for a signal, atomically releasing m while waiting.
+    void wait(Mutex m) {
+        unsafe {
+            duxrt_cond_wait(this._c, m._m)
+        }
+    }
+
+    # Wake one waiting thread.
+    void signal() {
+        unsafe {
+            duxrt_cond_signal(this._c)
+        }
+    }
+
+    # Wake all waiting threads.
+    void broadcast() {
+        unsafe {
+            duxrt_cond_broadcast(this._c)
+        }
+    }
+
+    ~CondVar() {
+        unsafe {
+            duxrt_cond_free(this._c)
+        }
+    }
+}
+
+# Once — execute a function exactly once across all threads.
+class Once(object) {
+    public:
+    ptr _o
+
+    Once() {
+        unsafe {
+            this._o = duxrt_once_new()
+        }
+    }
+
+    void call(ptr func) {
+        unsafe {
+            duxrt_once_call(this._o, func)
+        }
+    }
+
+    ~Once() {
+        unsafe {
+            duxrt_once_free(this._o)
+        }
+    }
+}

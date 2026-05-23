@@ -1,0 +1,62 @@
+namespace json {
+    extern "C" ptr    duxrt_json_parse(str input) ;
+    extern "C" str    duxrt_json_get_str(ptr handle, str key) ;
+    extern "C" long   duxrt_json_get_int(ptr handle, str key) ;
+    extern "C" double duxrt_json_get_double(ptr handle, str key) ;
+    extern "C" int    duxrt_json_has(ptr handle, str key) ;
+    extern "C" str    duxrt_json_stringify(ptr handle) ;
+
+    # Parse a JSON string. Returns a handle (ptr) to the parsed value.
+    ptr parse(str input) {
+        ptr r = null
+        unsafe {
+            r = duxrt_json_parse(input)
+        }
+        return r
+    }
+
+    # Get a string field from a JSON object.
+    str get_str(ptr handle, str key) {
+        str r = ""
+        unsafe {
+            r = duxrt_json_get_str(handle, key)
+        }
+        return r
+    }
+
+    # Get an integer field from a JSON object.
+    long get_int(ptr handle, str key) {
+        long r = 0
+        unsafe {
+            r = duxrt_json_get_int(handle, key)
+        }
+        return r
+    }
+
+    # Get a float field from a JSON object.
+    double get_double(ptr handle, str key) {
+        double r = 0.0
+        unsafe {
+            r = duxrt_json_get_double(handle, key)
+        }
+        return r
+    }
+
+    # True if the JSON object has the given key.
+    bool has(ptr handle, str key) {
+        int r = 0
+        unsafe {
+            r = duxrt_json_has(handle, key)
+        }
+        return r != 0
+    }
+
+    # Serialize a JSON value to string.
+    str stringify(ptr handle) {
+        str r = ""
+        unsafe {
+            r = duxrt_json_stringify(handle)
+        }
+        return r
+    }
+}

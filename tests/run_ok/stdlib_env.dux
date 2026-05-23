@@ -1,0 +1,22 @@
+import sys.env
+
+int main() {
+    bool has_path = env.has("PATH")
+    if has_path {
+        print("has PATH")
+    }
+    env.store("DUX_TEST_VAR", "hello_dux")
+    str val = env.fetch("DUX_TEST_VAR")
+    print(val)
+    bool has_var = env.has("DUX_TEST_VAR")
+    if has_var {
+        print("var set")
+    }
+    env.remove("DUX_TEST_VAR")
+    bool gone = env.has("DUX_TEST_VAR")
+    if gone {
+        print("should not print")
+    }
+    print("env ok")
+    return 0
+}

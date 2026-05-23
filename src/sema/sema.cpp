@@ -90,6 +90,8 @@ TypeId Sema::type_from_te(const ast::TypeExpr& te) {
 bool Sema::require_assignable(TypeId from, TypeId to,
                               const ast::SourceLoc& loc, const std::string& ctx) {
     if (types_.assignable(from, to)) return true;
+    // Inside unsafe blocks ptr (object) can be reinterpreted as any type
+    if (in_unsafe_ && (from == TR::TID_OBJECT || to == TR::TID_OBJECT)) return true;
     std::ostringstream os;
     os << ctx << ": cannot assign '" << types_.name_of(from)
        << "' to '" << types_.name_of(to) << "'";
@@ -119,6 +121,8 @@ void Sema::hoist_top(const ast::DeclList& decls) {
             hoist_class(*c);
         else if (auto* i = dynamic_cast<const ast::InterfaceDecl*>(dp.get()))
             hoist_interface(*i);
+        else if (auto* e = dynamic_cast<const ast::EnumDecl*>(dp.get()))
+            hoist_enum(*e);
         else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(dp.get()))
             hoist_namespace(*ns);
         else if (auto* f = dynamic_cast<const ast::FunctionDecl*>(dp.get())) {
@@ -138,6 +142,43 @@ void Sema::hoist_top(const ast::DeclList& decls) {
         else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(dp.get()))
             hoist_extern(*ext);
     }
+}
+
+void Sema::hoist_enum(const ast::EnumDecl& e) {
+    // Register the enum type
+    TypeId id = types_.intern(e.name, TypeKind::Enum);
+    TypeInfo& ti = types_.info(id);
+    ti.variants.clear();
+
+    // Register each variant and its tag constant in the global scope
+    int32_t tag = 0;
+    for (const auto& v : e.variants) {
+        EnumVariantInfo vi;
+        vi.name = v.name;
+        vi.tag  = tag++;
+        for (const auto& pt : v.payload)
+            vi.payload.push_back(types_.from_type_expr(pt));
+        ti.variants.push_back(vi);
+
+        // Register "EnumName.VariantName" as a const int symbol
+        Symbol s;
+        s.name     = e.name + "." + v.name;
+        s.kind     = SymKind::Var;
+        s.type     = id;   // type is the enum itself
+        s.is_const = true;
+        s.loc      = v.loc;
+        scopes_.global_scope().define(s.name, s);
+    }
+
+    // Register the enum type itself as a symbol
+    Symbol s;
+    s.name = e.name;
+    s.kind = SymKind::Class;   // treat like class for lookup purposes
+    s.type = id;
+    s.decl = const_cast<ast::EnumDecl*>(&e);
+    s.loc  = e.loc;
+    if (!scopes_.define(s.name, s))
+        err(e.loc, "enum '" + e.name + "' already declared");
 }
 
 void Sema::hoist_extern(const ast::ExternDecl& e) {
@@ -220,6 +261,7 @@ void Sema::check_decl(const ast::Decl& d) {
     else if (auto* i  = dynamic_cast<const ast::InterfaceDecl*>(&d)) check_interface(*i);
     else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(&d)) check_namespace(*ns);
     else if (auto* im = dynamic_cast<const ast::ImportDecl*>(&d))    check_import(*im);
+    // EnumDecl: already fully processed in hoist_enum (pass 1)
     // ExternDecl: already hoisted, nothing further to check
 }
 
@@ -424,6 +466,7 @@ void Sema::check_stmt(const ast::Stmt& s) {
     if (auto* fi = dynamic_cast<const ast::ForInStmt*>(&s))     { check_for_in(*fi);  return; }
     if (auto* fc = dynamic_cast<const ast::ForCStmt*>(&s))      { check_for_c(*fc);   return; }
     if (auto* sw = dynamic_cast<const ast::SwitchStmt*>(&s))    { check_switch(*sw);  return; }
+    if (auto* mx = dynamic_cast<const ast::MatchStmt*>(&s))     { check_match(*mx);   return; }
     if (auto* tc = dynamic_cast<const ast::TryCatchStmt*>(&s))  { check_try_catch(*tc);return;}
     if (auto* r  = dynamic_cast<const ast::ReturnStmt*>(&s))    { check_return(*r);   return; }
     if (auto* br = dynamic_cast<const ast::BreakStmt*>(&s))     {
@@ -439,7 +482,13 @@ void Sema::check_stmt(const ast::Stmt& s) {
     if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))   { check_stmt(*ls->stmt); return; }
     if (auto* ds = dynamic_cast<const ast::DeferStmt*>(&s))     { check_stmts(ds->body); return; }
     if (auto* ts = dynamic_cast<const ast::ThrowStmt*>(&s))     { check_expr(*ts->expr); return; }
-    if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s))    { check_stmts(us->body); return; }
+    if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s)) {
+        bool prev = in_unsafe_;
+        in_unsafe_ = true;
+        check_stmts(us->body);
+        in_unsafe_ = prev;
+        return;
+    }
 }
 
 void Sema::check_block(const ast::BlockStmt& b) {
@@ -527,6 +576,35 @@ void Sema::check_switch(const ast::SwitchStmt& s) {
     in_loop_ = saved;
 }
 
+void Sema::check_match(const ast::MatchStmt& s) {
+    TypeId expr_t = check_expr(*s.expr);
+
+    for (const auto& arm : s.arms) {
+        // Validate enum variant patterns against the matched expression type
+        if (arm.pattern.kind == ast::MatchPattern::Kind::EnumVariant) {
+            // Verify the enum exists and has this variant
+            Symbol* enum_sym = scopes_.lookup(arm.pattern.enum_name);
+            if (!enum_sym ||
+                types_.info(enum_sym->type).kind != TypeKind::Enum) {
+                err(arm.loc, "'" + arm.pattern.enum_name + "' is not an enum type");
+            } else {
+                bool found = false;
+                for (const auto& v : types_.info(enum_sym->type).variants) {
+                    if (v.name == arm.pattern.variant_name) { found = true; break; }
+                }
+                if (!found)
+                    err(arm.loc, "enum '" + arm.pattern.enum_name +
+                        "' has no variant '" + arm.pattern.variant_name + "'");
+            }
+        }
+        // Type-check the arm body
+        scopes_.push();
+        check_stmts(arm.body);
+        scopes_.pop();
+    }
+    (void)expr_t;
+}
+
 void Sema::check_try_catch(const ast::TryCatchStmt& s) {
     check_stmt(*s.try_body);
     scopes_.push();
@@ -564,6 +642,11 @@ void Sema::check_var_decl(const ast::VarDeclStmt& s) {
 
     for (const auto& [name, init_ptr] : s.decls) {
         TypeId var_type = decl_type;
+
+        // const variables must have an initializer
+        if (is_const && !init_ptr) {
+            err(s.loc, "const variable '" + name + "' must have an initializer");
+        }
 
         if (init_ptr) {
             TypeId init_t = check_expr(*init_ptr);
@@ -673,6 +756,17 @@ TypeId Sema::check_assign(const ast::AssignExpr& e) {
             scopes_.define(name, sym);
             e.target->type_id = rhs;
             return rhs;
+        }
+    }
+
+    // Guard: reject any assignment (plain or compound) to a const variable
+    if (auto* id_target = dynamic_cast<const ast::IdentExpr*>(e.target.get())) {
+        if (Symbol* sym = scopes_.lookup(id_target->name)) {
+            if (sym->is_const) {
+                err(e.target->loc,
+                    "cannot assign to const variable '" + id_target->name + "'");
+                return sym->type;
+            }
         }
     }
 
@@ -907,6 +1001,25 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
 }
 
 TypeId Sema::check_member(const ast::MemberExpr& e) {
+    // Enum variant access: `Color.Red`
+    // The object is an identifier resolving to an enum type symbol.
+    if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.object.get())) {
+        Symbol* sym = scopes_.lookup(id->name);
+        if (sym && sym->kind == SymKind::Class &&
+            types_.info(sym->type).kind == TypeKind::Enum) {
+            TypeId enum_tid = sym->type;
+            const TypeInfo& ti = types_.info(enum_tid);
+            for (const auto& v : ti.variants) {
+                if (v.name == e.member) {
+                    e.object->type_id = enum_tid;
+                    return enum_tid;
+                }
+            }
+            err(e.loc, "enum '" + id->name + "' has no variant '" + e.member + "'");
+            return TR::TID_UNKNOWN;
+        }
+    }
+
     TypeId obj_t = check_expr(*e.object);
 
     // If the object is 'this', look up the field in the current class scope.

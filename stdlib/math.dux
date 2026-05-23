@@ -1,11 +1,24 @@
+# math — standard mathematics module
+# Usage: import math
+
+# ── Constants ────────────────────────────────────────────────────────────────
+const double PI  = 3.14159265358979323846
+const double E   = 2.71828182845904523536
+const double TAU = 6.28318530717958647692   # 2 * PI
+const double INF = 1.0 / 0.0               # positive infinity
+
+# ── Extern C runtime functions ────────────────────────────────────────────────
 extern "C" double duxrt_math_sqrt(double x)
 extern "C" double duxrt_math_sin(double x)
 extern "C" double duxrt_math_cos(double x)
+extern "C" double duxrt_math_tan(double x)
 extern "C" double duxrt_math_pow(double base, double exp)
 extern "C" double duxrt_math_floor(double x)
 extern "C" double duxrt_math_ceil(double x)
+extern "C" double duxrt_math_round(double x)
 extern "C" double duxrt_math_log(double x)
 extern "C" double duxrt_math_log2(double x)
+extern "C" double duxrt_math_log10(double x)
 extern "C" double duxrt_math_abs_d(double x)
 extern "C" double duxrt_math_min_d(double a, double b)
 extern "C" double duxrt_math_max_d(double a, double b)
@@ -13,10 +26,7 @@ extern "C" long duxrt_math_abs_i(long x)
 extern "C" long duxrt_math_min_i(long a, long b)
 extern "C" long duxrt_math_max_i(long a, long b)
 
-double sqrt(double x) {
-    return duxrt_math_sqrt(x)
-}
-
+# ── Trigonometry ─────────────────────────────────────────────────────────────
 double sin(double x) {
     return duxrt_math_sin(x)
 }
@@ -25,10 +35,20 @@ double cos(double x) {
     return duxrt_math_cos(x)
 }
 
+double tan(double x) {
+    return duxrt_math_tan(x)
+}
+
+# ── Roots and powers ─────────────────────────────────────────────────────────
+double sqrt(double x) {
+    return duxrt_math_sqrt(x)
+}
+
 double pow(double base, double exp) {
     return duxrt_math_pow(base, exp)
 }
 
+# ── Rounding ─────────────────────────────────────────────────────────────────
 double floor(double x) {
     return duxrt_math_floor(x)
 }
@@ -37,6 +57,11 @@ double ceil(double x) {
     return duxrt_math_ceil(x)
 }
 
+double round(double x) {
+    return duxrt_math_round(x)
+}
+
+# ── Logarithms ───────────────────────────────────────────────────────────────
 double log(double x) {
     return duxrt_math_log(x)
 }
@@ -45,6 +70,11 @@ double log2(double x) {
     return duxrt_math_log2(x)
 }
 
+double log10(double x) {
+    return duxrt_math_log10(x)
+}
+
+# ── Absolute value and extrema ────────────────────────────────────────────────
 double abs(double x) {
     return duxrt_math_abs_d(x)
 }

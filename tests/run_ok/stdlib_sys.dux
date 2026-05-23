@@ -1,0 +1,18 @@
+import sys.sys
+import sys.env
+
+int main() {
+    long pid = sys.pid()
+    if pid > 0 {
+        print("pid ok")
+    }
+    long ppid = sys.ppid()
+    if ppid > 0 {
+        print("ppid ok")
+    }
+    str host = sys.hostname()
+    if len(host) > 0 {
+        print("hostname ok")
+    }
+    return 0
+}

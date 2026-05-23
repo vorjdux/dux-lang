@@ -185,6 +185,9 @@ llvm::Type* Codegen::lower_type(TypeId tid) {
         case TR::TID_OBJECT: return ptr_type();
         case TR::TID_NULL:   return ptr_type();
         default:
+            // User-defined types: enums are i32, classes are heap-allocated ptr
+            if (tid >= 0 && types_.info(tid).kind == sema::TypeKind::Enum)
+                return llvm::Type::getInt32Ty(*ctx_);
             return ptr_type(); // user-defined class types are heap-allocated
     }
 }
@@ -200,9 +203,26 @@ void Codegen::build_layouts(const ast::DeclList& decls) {
     for (const auto& dp : decls) {
         if (auto* c = dynamic_cast<const ast::ClassDecl*>(dp.get()))
             build_class_layout(*c);
+        else if (auto* e = dynamic_cast<const ast::EnumDecl*>(dp.get()))
+            build_enum_type(*e);
         else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(dp.get()))
             build_layouts(ns->decls);
     }
+}
+
+void Codegen::build_enum_type(const ast::EnumDecl& e) {
+    // Register the enum type in codegen's type registry and record variant tags
+    sema::TypeId id = types_.intern(e.name, sema::TypeKind::Enum);
+    sema::TypeInfo& ti = types_.info(id);
+    ti.variants.clear();
+    int32_t tag = 0;
+    for (const auto& v : e.variants) {
+        sema::EnumVariantInfo vi;
+        vi.name = v.name;
+        vi.tag  = tag++;
+        ti.variants.push_back(vi);
+    }
+    enum_types_[e.name] = id;
 }
 
 void Codegen::build_class_layout(const ast::ClassDecl& c) {
@@ -362,6 +382,7 @@ void Codegen::gen_decl(const ast::Decl& d, const std::string& prefix) {
             gen_func(*f, mangle(prefix, f->name));
     }
     else if (auto* c  = dynamic_cast<const ast::ClassDecl*>(&d))     gen_class(*c);
+    else if (auto* e  = dynamic_cast<const ast::EnumDecl*>(&d))      gen_enum(*e);
     else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(&d)) gen_namespace(*ns);
     else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(&d)) {
         // Declare external C function with its exact name (no namespace prefix)
@@ -370,6 +391,12 @@ void Codegen::gen_decl(const ast::Decl& d, const std::string& prefix) {
         get_or_declare_rt(ext->name, lower_type_expr(ext->ret), ptypes);
     }
     // ImportDecl: nothing to generate
+}
+
+void Codegen::gen_enum(const ast::EnumDecl& /*e*/) {
+    // Enum type registration is handled in build_enum_type (build_layouts pass).
+    // Enum variant values are emitted as i32 constants inline in gen_member.
+    // Nothing to emit here.
 }
 
 void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
@@ -840,7 +867,23 @@ Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
     if (!stdlib_imports_.count(mod)) return nullptr;
 
     auto it_mod = stdlib_table().find(mod);
-    if (it_mod == stdlib_table().end()) return nullptr;
+    if (it_mod == stdlib_table().end()) {
+        // Module in stdlib_imports_ but not in table — try Dux-compiled namespace fn
+        std::string mangled = mangle(mod, mem->member);
+        if (Function* ns_fn = mod_->getFunction(mangled);
+            ns_fn && ns_fn->arg_size() == e.args.size()) {
+            std::vector<Value*> args;
+            auto param_it = ns_fn->arg_begin();
+            for (const auto& a : e.args) {
+                Value* v = gen_expr(*a);
+                if (param_it != ns_fn->arg_end())
+                    v = coerce_to_llvm_type(v, (param_it++)->getType());
+                args.push_back(v);
+            }
+            return builder_->CreateCall(ns_fn, args);
+        }
+        return nullptr;
+    }
 
     auto it_fn = it_mod->second.find(mem->member);
     if (it_fn == it_mod->second.end()) return nullptr;
@@ -886,6 +929,7 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     if (auto* fi = dynamic_cast<const ast::ForInStmt*>(&s))    { gen_for_in(*fi);  return; }
     if (auto* fc = dynamic_cast<const ast::ForCStmt*>(&s))     { gen_for_c(*fc);   return; }
     if (auto* sw = dynamic_cast<const ast::SwitchStmt*>(&s))   { gen_switch(*sw);  return; }
+    if (auto* mx = dynamic_cast<const ast::MatchStmt*>(&s))    { gen_match(*mx);   return; }
     if (auto* tc = dynamic_cast<const ast::TryCatchStmt*>(&s)) { gen_try_catch(*tc);return;}
     if (auto* r  = dynamic_cast<const ast::ReturnStmt*>(&s))   { gen_return(*r);   return; }
     if (auto* br = dynamic_cast<const ast::BreakStmt*>(&s)) {
@@ -922,6 +966,7 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
         pending_label_.clear();
         return;
     }
+    if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s))   { gen_stmts(us->body); return; }
 }
 
 void Codegen::gen_block(const ast::BlockStmt& b) {
@@ -1256,6 +1301,86 @@ void Codegen::gen_switch(const ast::SwitchStmt& s) {
     }
 
     loop_stack_.pop_back();
+    builder_->SetInsertPoint(exit_bb);
+}
+
+void Codegen::gen_match(const ast::MatchStmt& s) {
+    Function* fn = builder_->GetInsertBlock()->getParent();
+    Value* match_val = gen_expr(*s.expr);
+
+    // Ensure match value is an integer (enums are i32)
+    if (!match_val->getType()->isIntegerTy()) {
+        match_val = builder_->CreateFPToSI(match_val,
+                                           llvm::Type::getInt32Ty(*ctx_));
+    }
+
+    auto* exit_bb = BasicBlock::Create(*ctx_, "match.end", fn);
+    BasicBlock* default_bb = exit_bb; // default goes to exit unless overridden
+
+    // Collect non-wildcard arms for switch, find wildcard arm
+    const ast::MatchArm* wildcard_arm = nullptr;
+    std::vector<std::pair<long long, const ast::MatchArm*>> case_arms;
+
+    for (const auto& arm : s.arms) {
+        switch (arm.pattern.kind) {
+        case ast::MatchPattern::Kind::Wildcard:
+            wildcard_arm = &arm;
+            break;
+        case ast::MatchPattern::Kind::EnumVariant: {
+            // Look up the tag value for this variant
+            auto it = enum_types_.find(arm.pattern.enum_name);
+            if (it != enum_types_.end()) {
+                const sema::TypeInfo& ti = types_.info(it->second);
+                for (const auto& v : ti.variants) {
+                    if (v.name == arm.pattern.variant_name) {
+                        case_arms.emplace_back(v.tag, &arm);
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+        case ast::MatchPattern::Kind::IntLit:
+            case_arms.emplace_back(arm.pattern.int_value, &arm);
+            break;
+        case ast::MatchPattern::Kind::BoolLit:
+            case_arms.emplace_back(arm.pattern.bool_value ? 1LL : 0LL, &arm);
+            break;
+        }
+    }
+
+    // Build wildcard block if any
+    if (wildcard_arm) {
+        default_bb = BasicBlock::Create(*ctx_, "match.wildcard", fn);
+    }
+
+    auto* sw = builder_->CreateSwitch(match_val, default_bb,
+                                      static_cast<unsigned>(case_arms.size()));
+
+    // Emit case arms
+    for (const auto& [tag, arm] : case_arms) {
+        auto* case_bb = BasicBlock::Create(*ctx_, "match.arm", fn);
+        auto* case_val = llvm::ConstantInt::get(
+            llvm::Type::getInt32Ty(*ctx_), static_cast<uint64_t>(tag));
+        sw->addCase(case_val, case_bb);
+        builder_->SetInsertPoint(case_bb);
+        env_push();
+        gen_stmts(arm->body);
+        env_pop();
+        if (!builder_->GetInsertBlock()->getTerminator())
+            builder_->CreateBr(exit_bb);
+    }
+
+    // Emit wildcard arm
+    if (wildcard_arm) {
+        builder_->SetInsertPoint(default_bb);
+        env_push();
+        gen_stmts(wildcard_arm->body);
+        env_pop();
+        if (!builder_->GetInsertBlock()->getTerminator())
+            builder_->CreateBr(exit_bb);
+    }
+
     builder_->SetInsertPoint(exit_bb);
 }
 
@@ -1666,6 +1791,18 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
         return builder_->CreateCall(strcat_fn, {L, R});
     }
 
+    // String equality/inequality — use runtime comparison (not pointer equality)
+    if ((op == "==" || op == "!=") && (lt == TR::TID_STR || rt == TR::TID_STR)) {
+        auto* eq_fn = get_or_declare_rt("duxrt_str_eq",
+            llvm::Type::getInt32Ty(*ctx_), {ptr_type(), ptr_type()});
+        Value* eq = builder_->CreateCall(eq_fn, {L, R});
+        if (op == "!=")
+            eq = builder_->CreateICmpEQ(eq, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
+        else
+            eq = builder_->CreateICmpNE(eq, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
+        return eq;
+    }
+
     // List + list via rt call
     if (op == "+" && (lt == TR::TID_LIST || rt == TR::TID_LIST)) {
         auto* concat_fn = get_or_declare_rt("duxrt_list_concat",
@@ -1847,6 +1984,23 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
 
     // Member call: obj.method(args)
     if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e.callee.get())) {
+        // Before evaluating the object expression, check if this is a namespace
+        // call (e.g. math.square) by looking for a mangled function in the module.
+        if (auto* id = dynamic_cast<const ast::IdentExpr*>(mem->object.get())) {
+            std::string ns_mangled = mangle(id->name, mem->member);
+            if (Function* ns_fn = mod_->getFunction(ns_mangled)) {
+                std::vector<Value*> args;
+                auto param_it = ns_fn->arg_begin();
+                for (const auto& a : e.args) {
+                    Value* v = gen_expr(*a);
+                    if (param_it != ns_fn->arg_end())
+                        v = coerce_to_llvm_type(v, (param_it++)->getType());
+                    args.push_back(v);
+                }
+                return builder_->CreateCall(ns_fn, args);
+            }
+        }
+
         Value* obj = gen_expr(*mem->object);
         TypeId obj_tid = type_id_of(*mem->object);
         std::string cls_name = types_.name_of(obj_tid);
@@ -1893,6 +2047,24 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
 }
 
 Value* Codegen::gen_member(const ast::MemberExpr& e) {
+    // Enum variant access: Color.Red  →  i32 constant
+    if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.object.get())) {
+        auto enum_it = enum_types_.find(id->name);
+        if (enum_it != enum_types_.end()) {
+            TypeId enum_tid = enum_it->second;
+            const sema::TypeInfo& ti = types_.info(enum_tid);
+            for (const auto& v : ti.variants) {
+                if (v.name == e.member)
+                    return llvm::ConstantInt::get(
+                        llvm::Type::getInt32Ty(*ctx_),
+                        static_cast<uint64_t>(v.tag));
+            }
+            driver_.warning(e.loc, "unknown enum variant '" + e.member +
+                            "' on '" + id->name + "'");
+            return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0);
+        }
+    }
+
     Value* obj = gen_expr(*e.object);
     std::string cls_name = resolve_class_name(*e.object, type_id_of(*e.object));
 
