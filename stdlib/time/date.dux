@@ -1,0 +1,15 @@
+// time.date — date component extraction and formatting
+//
+// Import with:
+//   import time.date
+//   import time.clock   // for clock.unix()
+//
+// Usage:
+//   let ts  = clock.unix()           // current Unix timestamp
+//   let y   = date.year(ts)          // e.g. 2025
+//   let mo  = date.month(ts)         // 1..12
+//   let d   = date.day(ts)           // 1..31
+//   let h   = date.hour(ts)          // 0..23
+//   let m   = date.minute(ts)        // 0..59
+//   let s   = date.second(ts)        // 0..59
+//   let fmt = date.format(ts, "%Y-%m-%d")  // custom strftime format

@@ -181,6 +181,21 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── Time/clock (time.clock + time.date modules) ────────────────────────── */
+int64_t duxrt_clock_now_ns(void);
+double  duxrt_clock_now(void);
+void    duxrt_clock_sleep_ms(int64_t ms);
+int64_t duxrt_clock_unix(void);
+DuxStr* duxrt_clock_now_str(void);
+
+int64_t duxrt_date_year(int64_t unix_ts);
+int64_t duxrt_date_month(int64_t unix_ts);
+int64_t duxrt_date_day(int64_t unix_ts);
+int64_t duxrt_date_hour(int64_t unix_ts);
+int64_t duxrt_date_minute(int64_t unix_ts);
+int64_t duxrt_date_second(int64_t unix_ts);
+DuxStr* duxrt_date_format(int64_t unix_ts, DuxStr* fmt);
+
 /* ── Filesystem operations (io.fs module) ───────────────────────────────── */
 int      duxrt_fs_mkdir(DuxStr* path);
 int      duxrt_fs_mkdir_all(DuxStr* path);

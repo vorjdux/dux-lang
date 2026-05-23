@@ -632,6 +632,22 @@ static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
             {"print",    {"duxrt_print_str",    TR::TID_VOID, {TR::TID_STR}}},
             {"readline", {"duxrt_readline",     TR::TID_STR,  {}}},
         }},
+        {"clock", {
+            {"now_ns",   {"duxrt_clock_now_ns",   TR::TID_LONG, {}}},
+            {"now",      {"duxrt_clock_now",      TR::TID_DOUBLE, {}}},
+            {"sleep_ms", {"duxrt_clock_sleep_ms", TR::TID_VOID, {TR::TID_LONG}}},
+            {"unix",     {"duxrt_clock_unix",     TR::TID_LONG, {}}},
+            {"now_str",  {"duxrt_clock_now_str",  TR::TID_STR,  {}}},
+        }},
+        {"date", {
+            {"year",   {"duxrt_date_year",   TR::TID_LONG, {TR::TID_LONG}}},
+            {"month",  {"duxrt_date_month",  TR::TID_LONG, {TR::TID_LONG}}},
+            {"day",    {"duxrt_date_day",    TR::TID_LONG, {TR::TID_LONG}}},
+            {"hour",   {"duxrt_date_hour",   TR::TID_LONG, {TR::TID_LONG}}},
+            {"minute", {"duxrt_date_minute", TR::TID_LONG, {TR::TID_LONG}}},
+            {"second", {"duxrt_date_second", TR::TID_LONG, {TR::TID_LONG}}},
+            {"format", {"duxrt_date_format", TR::TID_STR,  {TR::TID_LONG, TR::TID_STR}}},
+        }},
         {"fs", {
             {"mkdir",    {"duxrt_fs_mkdir",    TR::TID_BOOL, {TR::TID_STR}}},
             {"mkdir_all",{"duxrt_fs_mkdir_all",TR::TID_BOOL, {TR::TID_STR}}},
@@ -715,6 +731,10 @@ Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
                 v = builder_->CreateSIToFP(v, expected);
             else if (expected->isIntegerTy() && v->getType()->isDoubleTy())
                 v = builder_->CreateFPToSI(v, expected);
+            else if (expected->isIntegerTy() && v->getType()->isIntegerTy())
+                v = builder_->CreateIntCast(v, expected, /*isSigned=*/true);
+            else if (expected->isPointerTy() && v->getType()->isPointerTy())
+                v = builder_->CreateBitCast(v, expected);
         }
         args.push_back(v);
     }

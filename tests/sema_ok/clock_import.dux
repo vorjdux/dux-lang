@@ -1,0 +1,17 @@
+import time.clock
+import time.date
+
+fn main() {
+    let ns = clock.now_ns()
+    let t = clock.now()
+    let ts = clock.unix()
+    let s = clock.now_str()
+    clock.sleep_ms(1)
+    let y = date.year(ts)
+    let mo = date.month(ts)
+    let d = date.day(ts)
+    let h = date.hour(ts)
+    let mi = date.minute(ts)
+    let se = date.second(ts)
+    let fmt = date.format(ts, "%Y-%m-%d")
+}

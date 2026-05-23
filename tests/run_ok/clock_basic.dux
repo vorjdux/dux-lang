@@ -1,0 +1,22 @@
+import time.clock
+import time.date
+
+fn main() {
+    let ts = clock.unix()
+    let y = date.year(ts)
+    if y > 2020 {
+        println("year ok")
+    }
+    let mo = date.month(ts)
+    if mo >= 1 {
+        if mo <= 12 {
+            println("month ok")
+        }
+    }
+    let t1 = clock.now_ns()
+    clock.sleep_ms(10)
+    let t2 = clock.now_ns()
+    if t2 > t1 {
+        println("elapsed ok")
+    }
+}

@@ -1,0 +1,6 @@
+import time.clock
+
+fn main() {
+    let ns = clock.now_ns()
+    clock.sleep_ms(1)
+}

@@ -1,0 +1,9 @@
+import time.clock
+import time.date
+
+fn main() {
+    let ns = clock.now_ns()
+    let ts = clock.unix()
+    let y = date.year(ts)
+    let s = clock.now_str()
+}

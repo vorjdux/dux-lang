@@ -1,0 +1,11 @@
+// time.clock — monotonic and wall-clock time functions
+//
+// Import with:
+//   import time.clock
+//
+// Usage:
+//   let ns  = clock.now_ns()      // monotonic nanoseconds (int)
+//   let t   = clock.now()         // wall-clock seconds (double)
+//   let ts  = clock.unix()        // Unix timestamp in seconds (int)
+//   let str = clock.now_str()     // ISO-8601 local time string
+//   clock.sleep_ms(100)           // sleep 100 milliseconds
