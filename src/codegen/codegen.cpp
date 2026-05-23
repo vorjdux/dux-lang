@@ -632,6 +632,15 @@ static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
             {"print",    {"duxrt_print_str",    TR::TID_VOID, {TR::TID_STR}}},
             {"readline", {"duxrt_readline",     TR::TID_STR,  {}}},
         }},
+        {"file", {
+            {"read",       {"duxrt_file_read",       TR::TID_STR,  {TR::TID_STR}}},
+            {"read_lines", {"duxrt_file_read_lines", TR::TID_LIST, {TR::TID_STR}}},
+            {"write",      {"duxrt_file_write",      TR::TID_BOOL, {TR::TID_STR, TR::TID_STR}}},
+            {"append",     {"duxrt_file_append",     TR::TID_BOOL, {TR::TID_STR, TR::TID_STR}}},
+            {"exists",     {"duxrt_file_exists",     TR::TID_BOOL, {TR::TID_STR}}},
+            {"remove",     {"duxrt_file_remove",     TR::TID_BOOL, {TR::TID_STR}}},
+            {"copy",       {"duxrt_file_copy",       TR::TID_BOOL, {TR::TID_STR, TR::TID_STR}}},
+        }},
         {"path", {
             {"join",      {"duxrt_path_join",      TR::TID_STR,  {TR::TID_STR, TR::TID_STR}}},
             {"basename",  {"duxrt_path_basename",  TR::TID_STR,  {TR::TID_STR}}},

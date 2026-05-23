@@ -1,0 +1,16 @@
+// io.file — file read/write operations
+//
+// Import with:
+//   import io.file
+//
+// Usage:
+//   let contents = file.read("/etc/hostname")     // read whole file → str
+//   let lines    = file.read_lines("/etc/hosts")  // read lines → list
+//   let ok       = file.write("/tmp/out.txt", "hello\n")   // write (overwrite)
+//   let ok2      = file.append("/tmp/out.txt", "world\n")  // append
+//   let exists   = file.exists("/tmp/out.txt")             // bool
+//   let removed  = file.remove("/tmp/out.txt")             // bool
+//   let copied   = file.copy("/tmp/a.txt", "/tmp/b.txt")   // bool
+//
+// All string-returning functions allocate a new DuxStr (refcount = 1).
+// Boolean-returning functions return true on success, false on failure.

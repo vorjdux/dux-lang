@@ -1,0 +1,11 @@
+import io.file
+
+fn main() {
+    let contents = file.read("/etc/hostname")
+    let ok = file.write("/tmp/test_dux.txt", contents)
+    let ok2 = file.append("/tmp/test_dux.txt", "\nappended")
+    let exists = file.exists("/etc/hostname")
+    let lines = file.read_lines("/etc/hostname")
+    let removed = file.remove("/tmp/test_dux.txt")
+    let copied = file.copy("/etc/hostname", "/tmp/hostname_copy")
+}

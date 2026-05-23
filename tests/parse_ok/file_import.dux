@@ -1,0 +1,6 @@
+import io.file
+
+fn main() {
+    let contents = file.read("/etc/hostname")
+    let ok = file.write("/tmp/test_dux.txt", contents)
+}

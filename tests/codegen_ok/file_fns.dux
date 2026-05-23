@@ -1,0 +1,8 @@
+import io.file
+
+fn main() {
+    let ok = file.write("/tmp/dux_codegen_test.txt", "hello")
+    let contents = file.read("/tmp/dux_codegen_test.txt")
+    let exists = file.exists("/tmp/dux_codegen_test.txt")
+    let removed = file.remove("/tmp/dux_codegen_test.txt")
+}

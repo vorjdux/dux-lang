@@ -1,0 +1,19 @@
+import io.file
+
+fn main() {
+    let ok = file.write("/tmp/dux_file_test.txt", "hello world")
+    let contents = file.read("/tmp/dux_file_test.txt")
+    println(contents)
+    let ok2 = file.append("/tmp/dux_file_test.txt", "\nappended")
+    let exists = file.exists("/tmp/dux_file_test.txt")
+    if exists {
+        println("exists")
+    }
+    let removed = file.remove("/tmp/dux_file_test.txt")
+    let gone = file.exists("/tmp/dux_file_test.txt")
+    if gone {
+        println("still there")
+    } else {
+        println("deleted")
+    }
+}

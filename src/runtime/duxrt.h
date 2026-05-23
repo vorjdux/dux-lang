@@ -181,6 +181,15 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── File I/O (io.file module) ──────────────────────────────────────────── */
+DuxStr*  duxrt_file_read(DuxStr* path);
+DuxList* duxrt_file_read_lines(DuxStr* path);
+int      duxrt_file_write(DuxStr* path, DuxStr* content);
+int      duxrt_file_append(DuxStr* path, DuxStr* content);
+int      duxrt_file_exists(DuxStr* path);
+int      duxrt_file_remove(DuxStr* path);
+int      duxrt_file_copy(DuxStr* src, DuxStr* dst);
+
 /* ── Path operations (io.path module) ───────────────────────────────────── */
 DuxStr* duxrt_path_join(DuxStr* dir, DuxStr* name);
 DuxStr* duxrt_path_basename(DuxStr* p);
