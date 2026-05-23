@@ -632,6 +632,16 @@ static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
             {"print",    {"duxrt_print_str",    TR::TID_VOID, {TR::TID_STR}}},
             {"readline", {"duxrt_readline",     TR::TID_STR,  {}}},
         }},
+        {"fs", {
+            {"mkdir",    {"duxrt_fs_mkdir",    TR::TID_BOOL, {TR::TID_STR}}},
+            {"mkdir_all",{"duxrt_fs_mkdir_all",TR::TID_BOOL, {TR::TID_STR}}},
+            {"rmdir",    {"duxrt_fs_rmdir",    TR::TID_BOOL, {TR::TID_STR}}},
+            {"remove",   {"duxrt_fs_remove",   TR::TID_BOOL, {TR::TID_STR}}},
+            {"rename",   {"duxrt_fs_rename",   TR::TID_BOOL, {TR::TID_STR, TR::TID_STR}}},
+            {"list_dir", {"duxrt_fs_list_dir", TR::TID_LIST, {TR::TID_STR}}},
+            {"cwd",      {"duxrt_fs_cwd",      TR::TID_STR,  {}}},
+            {"chdir",    {"duxrt_fs_chdir",    TR::TID_BOOL, {TR::TID_STR}}},
+        }},
         {"file", {
             {"read",       {"duxrt_file_read",       TR::TID_STR,  {TR::TID_STR}}},
             {"read_lines", {"duxrt_file_read_lines", TR::TID_LIST, {TR::TID_STR}}},

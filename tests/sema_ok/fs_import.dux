@@ -1,0 +1,12 @@
+import io.fs
+
+fn main() {
+    let ok = fs.mkdir("/tmp/dux_fs_test")
+    let ok2 = fs.mkdir_all("/tmp/dux_fs_test/a/b")
+    let cwd = fs.cwd()
+    let entries = fs.list_dir("/tmp")
+    let ok3 = fs.rmdir("/tmp/dux_fs_test/a/b")
+    let ok4 = fs.remove("/tmp/dux_fs_test/a")
+    let ok5 = fs.rename("/tmp/dux_fs_test", "/tmp/dux_fs_test2")
+    let ok6 = fs.chdir("/tmp")
+}

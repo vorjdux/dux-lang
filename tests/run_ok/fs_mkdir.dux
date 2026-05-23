@@ -1,0 +1,18 @@
+import io.fs
+
+fn main() {
+    let ok = fs.mkdir("/tmp/dux_fs_run_test")
+    if ok {
+        println("created")
+    }
+    let ok2 = fs.mkdir_all("/tmp/dux_fs_run_test/sub/dir")
+    if ok2 {
+        println("created_all")
+    }
+    let ok3 = fs.rmdir("/tmp/dux_fs_run_test/sub/dir")
+    let ok4 = fs.rmdir("/tmp/dux_fs_run_test/sub")
+    let ok5 = fs.rmdir("/tmp/dux_fs_run_test")
+    if ok5 {
+        println("removed")
+    }
+}

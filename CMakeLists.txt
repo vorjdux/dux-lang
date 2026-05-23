@@ -56,6 +56,7 @@ add_library(duxrt STATIC
     src/runtime/exceptions.c
     src/runtime/path_rt.c
     src/runtime/file_rt.c
+    src/runtime/fs_rt.c
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)

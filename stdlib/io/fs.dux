@@ -1,0 +1,14 @@
+// io.fs — filesystem operations
+//
+// Import with:
+//   import io.fs
+//
+// Usage:
+//   let ok  = fs.mkdir("/tmp/mydir")          // create directory
+//   let ok2 = fs.mkdir_all("/tmp/a/b/c")      // create with parents
+//   let ok3 = fs.rmdir("/tmp/mydir")          // remove empty directory
+//   let ok4 = fs.remove("/tmp/file.txt")      // remove file
+//   let ok5 = fs.rename("/tmp/a", "/tmp/b")   // rename/move
+//   let entries = fs.list_dir("/tmp")         // list directory → list of str
+//   let cwd = fs.cwd()                        // current working directory → str
+//   let ok6 = fs.chdir("/tmp")               // change working directory

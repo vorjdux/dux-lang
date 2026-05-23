@@ -1,0 +1,6 @@
+import io.fs
+
+fn main() {
+    let ok = fs.mkdir("/tmp/dux_test_dir")
+    let cwd = fs.cwd()
+}

@@ -181,6 +181,16 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── Filesystem operations (io.fs module) ───────────────────────────────── */
+int      duxrt_fs_mkdir(DuxStr* path);
+int      duxrt_fs_mkdir_all(DuxStr* path);
+int      duxrt_fs_rmdir(DuxStr* path);
+int      duxrt_fs_remove(DuxStr* path);
+int      duxrt_fs_rename(DuxStr* src, DuxStr* dst);
+DuxList* duxrt_fs_list_dir(DuxStr* path);
+DuxStr*  duxrt_fs_cwd(void);
+int      duxrt_fs_chdir(DuxStr* path);
+
 /* ── File I/O (io.file module) ──────────────────────────────────────────── */
 DuxStr*  duxrt_file_read(DuxStr* path);
 DuxList* duxrt_file_read_lines(DuxStr* path);
