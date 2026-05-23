@@ -1,0 +1,12 @@
+import data.json
+
+fn main() {
+    let v = json.parse("{\"name\":\"Alice\",\"age\":30}")
+    let t = json.type(v)
+    let name_fld = json.field(v, "name")
+    let name = json.to_str(name_fld)
+    let age_fld = json.field(v, "age")
+    let age = json.to_int(age_fld)
+    let s = json.stringify(v)
+    json.free(v)
+}

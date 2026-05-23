@@ -1,0 +1,7 @@
+import data.json
+
+fn main() {
+    let v = json.parse("{\"x\":1}")
+    let s = json.stringify(v)
+    json.free(v)
+}

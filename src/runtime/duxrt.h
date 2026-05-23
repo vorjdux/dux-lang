@@ -181,6 +181,22 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── JSON (data.json module) ─────────────────────────────────────────────── */
+typedef struct DuxJsonVal DuxJsonVal;
+
+DuxJsonVal* duxrt_json_parse(DuxStr* s);
+DuxStr*     duxrt_json_stringify(DuxJsonVal* v);
+void        duxrt_json_free(DuxJsonVal* v);
+
+int64_t     duxrt_json_type(DuxJsonVal* v);
+int64_t     duxrt_json_int(DuxJsonVal* v);
+double      duxrt_json_float(DuxJsonVal* v);
+DuxStr*     duxrt_json_str(DuxJsonVal* v);
+int         duxrt_json_bool(DuxJsonVal* v);
+int64_t     duxrt_json_len(DuxJsonVal* v);
+DuxJsonVal* duxrt_json_index(DuxJsonVal* v, int64_t idx);
+DuxJsonVal* duxrt_json_field(DuxJsonVal* v, DuxStr* key);
+
 /* ── Signal handling (sys.signal module) ─────────────────────────────────── */
 int64_t duxrt_signal_sigint(void);
 int64_t duxrt_signal_sigterm(void);

@@ -1,0 +1,23 @@
+// data.json — JSON parse and stringify
+//
+// Import with:
+//   import data.json
+//
+// Usage:
+//   let v   = json.parse("{\"x\":1}")   // parse JSON string → value
+//   let s   = json.stringify(v)         // serialize value → str
+//   json.free(v)                        // release value memory
+//
+// Type inspection (returns int: 0=null 1=bool 2=int 3=float 4=str 5=array 6=object):
+//   let t = json.type(v)
+//
+// Value extraction:
+//   let n = json.to_int(v)     // → int
+//   let f = json.to_float(v)   // → double
+//   let s = json.to_str(v)     // → str
+//   let b = json.to_bool(v)    // → bool
+//
+// Collection access:
+//   let n   = json.len(v)           // array or object length
+//   let elem = json.index(v, 0)     // array element by index
+//   let fld  = json.field(v, "key") // object field by key

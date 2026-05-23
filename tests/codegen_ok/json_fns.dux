@@ -1,0 +1,10 @@
+import data.json
+
+fn main() {
+    let v = json.parse("[1,2,3]")
+    let n = json.len(v)
+    let elem = json.index(v, 0)
+    let x = json.to_int(elem)
+    let s = json.stringify(v)
+    json.free(v)
+}

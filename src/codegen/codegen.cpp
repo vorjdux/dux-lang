@@ -619,6 +619,19 @@ using StdlibMod = std::unordered_map<std::string, StdlibFn>;
 
 static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
     static const std::unordered_map<std::string, StdlibMod> tbl = {
+        {"json", {
+            {"parse",     {"duxrt_json_parse",     TR::TID_OBJECT, {TR::TID_STR}}},
+            {"stringify", {"duxrt_json_stringify", TR::TID_STR,    {TR::TID_OBJECT}}},
+            {"free",      {"duxrt_json_free",      TR::TID_VOID,   {TR::TID_OBJECT}}},
+            {"type",      {"duxrt_json_type",      TR::TID_LONG,   {TR::TID_OBJECT}}},
+            {"to_int",    {"duxrt_json_int",       TR::TID_LONG,   {TR::TID_OBJECT}}},
+            {"to_float",  {"duxrt_json_float",     TR::TID_DOUBLE, {TR::TID_OBJECT}}},
+            {"to_str",    {"duxrt_json_str",       TR::TID_STR,    {TR::TID_OBJECT}}},
+            {"to_bool",   {"duxrt_json_bool",      TR::TID_BOOL,   {TR::TID_OBJECT}}},
+            {"len",       {"duxrt_json_len",       TR::TID_LONG,   {TR::TID_OBJECT}}},
+            {"index",     {"duxrt_json_index",     TR::TID_OBJECT, {TR::TID_OBJECT, TR::TID_LONG}}},
+            {"field",     {"duxrt_json_field",     TR::TID_OBJECT, {TR::TID_OBJECT, TR::TID_STR}}},
+        }},
         {"signal", {
             {"sigint",  {"duxrt_signal_sigint",  TR::TID_LONG, {}}},
             {"sigterm", {"duxrt_signal_sigterm", TR::TID_LONG, {}}},

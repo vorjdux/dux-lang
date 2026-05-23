@@ -1,0 +1,21 @@
+import data.json
+
+fn main() {
+    let v = json.parse("{\"name\":\"Alice\",\"age\":30}")
+    let t = json.type(v)
+    println(t)
+    let name_fld = json.field(v, "name")
+    let name = json.to_str(name_fld)
+    println(name)
+    let age_fld = json.field(v, "age")
+    let age = json.to_int(age_fld)
+    println(age)
+    let arr = json.parse("[10,20,30]")
+    let n = json.len(arr)
+    println(n)
+    let elem = json.index(arr, 1)
+    let val = json.to_int(elem)
+    println(val)
+    json.free(v)
+    json.free(arr)
+}

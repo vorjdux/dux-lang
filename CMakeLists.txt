@@ -64,6 +64,7 @@ add_library(duxrt STATIC
     src/runtime/thread_rt.c
     src/runtime/process_rt.c
     src/runtime/signal_rt.c
+    src/runtime/json_rt.c
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)
