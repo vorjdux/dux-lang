@@ -63,7 +63,7 @@ namespace bytes {
     }
 
     # Get byte at index i (0-255).
-    long at(ptr b, long i) {
+    long get(ptr b, long i) {
         long r = 0
         unsafe {
             r = duxrt_bytes_get(b, i)
@@ -72,7 +72,7 @@ namespace bytes {
     }
 
     # Set byte at index i.
-    void poke(ptr b, long i, long val) {
+    void set(ptr b, long i, long val) {
         unsafe {
             duxrt_bytes_set(b, i, val)
         }

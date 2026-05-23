@@ -25,7 +25,7 @@ int main() {
     }
 
     # Set a variable, fetch it as Option, remove it
-    env.store("DUX_FETCH_TEST", "world")
+    env.set("DUX_FETCH_TEST", "world")
     Option fetched = env.get("DUX_FETCH_TEST")
     match fetched {
         Option.Some(v) => {
