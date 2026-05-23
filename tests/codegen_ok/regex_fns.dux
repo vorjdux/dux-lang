@@ -1,0 +1,9 @@
+import data.regex
+
+fn main() {
+    let rx = regex.compile("[0-9]+")
+    let ok = regex.test(rx, "foo123")
+    let m = regex.find(rx, "foo123bar456")
+    let r = regex.replace(rx, "foo123", "X")
+    regex.free(rx)
+}

@@ -1,0 +1,7 @@
+import data.regex
+
+fn main() {
+    let rx = regex.compile("[0-9]+")
+    let ok = regex.test(rx, "abc123")
+    regex.free(rx)
+}

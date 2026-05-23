@@ -619,6 +619,16 @@ using StdlibMod = std::unordered_map<std::string, StdlibFn>;
 
 static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
     static const std::unordered_map<std::string, StdlibMod> tbl = {
+        {"regex", {
+            {"compile",     {"duxrt_regex_compile",     TR::TID_OBJECT, {TR::TID_STR}}},
+            {"free",        {"duxrt_regex_free",        TR::TID_VOID,   {TR::TID_OBJECT}}},
+            {"test",        {"duxrt_regex_test",        TR::TID_BOOL,   {TR::TID_OBJECT, TR::TID_STR}}},
+            {"find",        {"duxrt_regex_find",        TR::TID_STR,    {TR::TID_OBJECT, TR::TID_STR}}},
+            {"find_all",    {"duxrt_regex_find_all",    TR::TID_LIST,   {TR::TID_OBJECT, TR::TID_STR}}},
+            {"replace",     {"duxrt_regex_replace",     TR::TID_STR,    {TR::TID_OBJECT, TR::TID_STR, TR::TID_STR}}},
+            {"replace_all", {"duxrt_regex_replace_all", TR::TID_STR,    {TR::TID_OBJECT, TR::TID_STR, TR::TID_STR}}},
+            {"is_match",    {"duxrt_regex_match",       TR::TID_BOOL,   {TR::TID_STR, TR::TID_STR}}},
+        }},
         {"json", {
             {"parse",     {"duxrt_json_parse",     TR::TID_OBJECT, {TR::TID_STR}}},
             {"stringify", {"duxrt_json_stringify", TR::TID_STR,    {TR::TID_OBJECT}}},

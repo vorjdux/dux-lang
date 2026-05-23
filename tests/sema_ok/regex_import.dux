@@ -1,0 +1,12 @@
+import data.regex
+
+fn main() {
+    let rx = regex.compile("[a-z]+")
+    let ok = regex.test(rx, "hello")
+    let m = regex.find(rx, "hello world")
+    let ms = regex.find_all(rx, "hello world")
+    let r = regex.replace(rx, "hello world", "X")
+    let r2 = regex.replace_all(rx, "hello world", "X")
+    regex.free(rx)
+    let quick = regex.is_match("[0-9]+", "abc123")
+}

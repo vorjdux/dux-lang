@@ -1,0 +1,26 @@
+import data.regex
+
+fn main() {
+    let rx = regex.compile("[0-9]+")
+    let ok = regex.test(rx, "abc123")
+    if ok {
+        println("matched")
+    }
+    let m = regex.find(rx, "abc123def456")
+    println(m)
+    let r = regex.replace(rx, "foo123bar456", "X")
+    println(r)
+    let r2 = regex.replace_all(rx, "foo123bar456", "X")
+    println(r2)
+    regex.free(rx)
+    let quick = regex.is_match("[a-z]+", "hello")
+    if quick {
+        println("quick ok")
+    }
+    let no = regex.is_match("[0-9]+", "hello")
+    if no {
+        println("wrong")
+    } else {
+        println("no match ok")
+    }
+}

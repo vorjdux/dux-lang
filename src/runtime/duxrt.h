@@ -181,6 +181,18 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── Regular expressions (data.regex module) ─────────────────────────────── */
+typedef struct DuxRegex DuxRegex;
+
+DuxRegex* duxrt_regex_compile(DuxStr* pattern);
+void      duxrt_regex_free(DuxRegex* rx);
+int       duxrt_regex_test(DuxRegex* rx, DuxStr* s);
+DuxStr*   duxrt_regex_find(DuxRegex* rx, DuxStr* s);
+DuxList*  duxrt_regex_find_all(DuxRegex* rx, DuxStr* s);
+DuxStr*   duxrt_regex_replace(DuxRegex* rx, DuxStr* s, DuxStr* replacement);
+DuxStr*   duxrt_regex_replace_all(DuxRegex* rx, DuxStr* s, DuxStr* replacement);
+int       duxrt_regex_match(DuxStr* pattern, DuxStr* s);
+
 /* ── JSON (data.json module) ─────────────────────────────────────────────── */
 typedef struct DuxJsonVal DuxJsonVal;
 

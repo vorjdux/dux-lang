@@ -1,0 +1,19 @@
+// data.regex — POSIX extended regular expressions
+//
+// Import with:
+//   import data.regex
+//
+// Compiled pattern (reusable):
+//   let rx = regex.compile("[0-9]+")    // compile pattern
+//   let ok = regex.test(rx, "abc123")   // test → bool
+//   let m  = regex.find(rx, "abc123")   // first match → str
+//   let ms = regex.find_all(rx, "1 2 3") // all matches → list of str
+//   let r  = regex.replace(rx, "foo1bar", "X")      // replace first
+//   let r2 = regex.replace_all(rx, "foo1bar2", "X") // replace all
+//   regex.free(rx)                      // release pattern memory
+//
+// One-shot (compiles and tests in one call):
+//   let ok = regex.is_match("[a-z]+", "hello")   // bool
+//
+// Note: 'match' is a reserved keyword; use 'regex.is_match()' instead.
+// Uses POSIX Extended Regular Expressions (ERE).
