@@ -1,0 +1,76 @@
+namespace regex {
+    extern "C" ptr  duxrt_regex_compile(str pattern) ;
+    extern "C" int  duxrt_regex_matches(ptr handle, str text) ;
+    extern "C" str  duxrt_regex_find(ptr handle, str text) ;
+    extern "C" str  duxrt_regex_replace(ptr handle, str text, str replacement) ;
+    extern "C" list duxrt_regex_find_all(ptr handle, str text) ;
+    extern "C" void duxrt_regex_free(ptr handle) ;
+
+    # Compile a POSIX Extended Regular Expression pattern. Returns a handle.
+    ptr compile(str pattern) {
+        ptr r = null
+        unsafe {
+            r = duxrt_regex_compile(pattern)
+        }
+        return r
+    }
+
+    # Test if pattern matches anywhere in text.
+    bool test(ptr handle, str text) {
+        int r = 0
+        unsafe {
+            r = duxrt_regex_matches(handle, text)
+        }
+        return r != 0
+    }
+
+    # Find first match, returns the matched substring (or "" if no match).
+    str find(ptr handle, str text) {
+        str r = ""
+        unsafe {
+            r = duxrt_regex_find(handle, text)
+        }
+        return r
+    }
+
+    # Replace first match with replacement string.
+    str replace(ptr handle, str text, str replacement) {
+        str r = ""
+        unsafe {
+            r = duxrt_regex_replace(handle, text, replacement)
+        }
+        return r
+    }
+
+    # Find all matches; returns list of matched substrings.
+    list find_all(ptr handle, str text) {
+        list r = []
+        unsafe {
+            r = duxrt_regex_find_all(handle, text)
+        }
+        return r
+    }
+
+    # Free compiled pattern resources.
+    void free(ptr handle) {
+        unsafe {
+            duxrt_regex_free(handle)
+        }
+    }
+
+    # One-shot: compile pattern, test text, return bool.
+    bool is_match(str pattern, str text) {
+        ptr rx = null
+        unsafe {
+            rx = duxrt_regex_compile(pattern)
+        }
+        int r = 0
+        unsafe {
+            r = duxrt_regex_matches(rx, text)
+        }
+        unsafe {
+            duxrt_regex_free(rx)
+        }
+        return r != 0
+    }
+}

@@ -97,6 +97,7 @@ ALNUM   [a-zA-Z0-9_]
 "as"         { need_semi = false; return yy::parser::make_KW_AS(loc);        }
 "class"      { need_semi = false; return yy::parser::make_KW_CLASS(loc);     }
 "interface"  { need_semi = false; return yy::parser::make_KW_INTERFACE(loc); }
+"enum"       { need_semi = false; return yy::parser::make_KW_ENUM(loc);      }
 "public"     { need_semi = false; return yy::parser::make_KW_PUBLIC(loc);    }
 "private"    { need_semi = false; return yy::parser::make_KW_PRIVATE(loc);   }
 "protected"  { need_semi = false; return yy::parser::make_KW_PROTECTED(loc); }
@@ -113,6 +114,7 @@ ALNUM   [a-zA-Z0-9_]
 "while"      { need_semi = false; return yy::parser::make_KW_WHILE(loc);     }
 "do"         { need_semi = false; return yy::parser::make_KW_DO(loc);        }
 "switch"     { need_semi = false; return yy::parser::make_KW_SWITCH(loc);    }
+"match"      { need_semi = false; return yy::parser::make_KW_MATCH(loc);     }
 "case"       { need_semi = false; return yy::parser::make_KW_CASE(loc);      }
 "default"    { need_semi = false; return yy::parser::make_KW_DEFAULT(loc);   }
 "try"        { need_semi = false; return yy::parser::make_KW_TRY(loc);       }

@@ -55,6 +55,18 @@ add_library(duxrt STATIC
     src/runtime/range.c
     src/runtime/math_rt.c
     src/runtime/exceptions.cpp
+    src/runtime/path_rt.c
+    src/runtime/fs_rt.c
+    src/runtime/file_rt.c
+    src/runtime/time_rt.c
+    src/runtime/sys_rt.c
+    src/runtime/random_rt.c
+    src/runtime/thread_rt.c
+    src/runtime/process_rt.c
+    src/runtime/signal_rt.c
+    src/runtime/bytes_rt.c
+    src/runtime/json_rt.c
+    src/runtime/regex_rt.c
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)
@@ -67,7 +79,7 @@ target_compile_options(duxrt PRIVATE
 # duxrt must NOT be instrumented with sanitizers: user programs link against
 # it and are not compiled with sanitizer runtimes.
 
-target_link_libraries(duxrt PUBLIC m stdc++)  # math functions + C++ EH ABI
+target_link_libraries(duxrt PUBLIC m stdc++ pthread)  # math functions + C++ EH ABI + pthreads
 
 # Record absolute path so the compiler driver can find it at runtime
 set(DUXRT_LIB_PATH "$<TARGET_FILE:duxrt>")
@@ -182,6 +194,7 @@ target_compile_definitions(dux PRIVATE
     DUXRT_LIB_PATH="${DUXRT_LIB_PATH}"
     DUXRT_BC_PATH="${DUXRT_BC_PATH}"
     DUXRT_INCLUDE_DIR="${DUXRT_INCLUDE_DIR}"
+    DUXSTDLIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
     DUX_STDLIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
 )
 

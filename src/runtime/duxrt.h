@@ -173,6 +173,147 @@ double  duxrt_math_log2(double x);
 double  duxrt_math_sin(double x);
 double  duxrt_math_cos(double x);
 
+/* ── Path ────────────────────────────────────────────────────────────────── */
+DuxStr*  duxrt_fs_realpath(DuxStr* path);
+DuxStr*  duxrt_fs_getcwd(void);
+
+/* ── Filesystem ──────────────────────────────────────────────────────────── */
+int32_t  duxrt_fs_mkdir(DuxStr* path);
+int32_t  duxrt_fs_mkdir_all(DuxStr* path);
+int32_t  duxrt_fs_rmdir(DuxStr* path);
+int32_t  duxrt_fs_remove(DuxStr* path);
+int32_t  duxrt_fs_rename(DuxStr* from, DuxStr* to);
+DuxList* duxrt_fs_list_dir(DuxStr* path);
+DuxStr*  duxrt_fs_cwd(void);
+int32_t  duxrt_fs_chdir(DuxStr* path);
+int32_t  duxrt_fs_exists(DuxStr* path);
+int32_t  duxrt_fs_is_dir(DuxStr* path);
+int32_t  duxrt_fs_is_file(DuxStr* path);
+int64_t  duxrt_fs_size(DuxStr* path);
+int32_t  duxrt_fs_copy(DuxStr* src, DuxStr* dst);
+
+/* ── File I/O ────────────────────────────────────────────────────────────── */
+DuxStr*  duxrt_file_read(DuxStr* path);
+DuxList* duxrt_file_read_lines(DuxStr* path);
+int32_t  duxrt_file_write(DuxStr* path, DuxStr* content);
+int32_t  duxrt_file_append(DuxStr* path, DuxStr* content);
+int32_t  duxrt_file_exists(DuxStr* path);
+int32_t  duxrt_file_remove(DuxStr* path);
+int32_t  duxrt_file_copy(DuxStr* src, DuxStr* dst);
+int64_t  duxrt_file_size(DuxStr* path);
+
+/* ── Time / Clock ────────────────────────────────────────────────────────── */
+int64_t  duxrt_clock_now_ns(void);
+double   duxrt_clock_now(void);
+void     duxrt_clock_sleep_ms(int64_t ms);
+int64_t  duxrt_clock_unix(void);
+DuxStr*  duxrt_clock_now_str(void);
+int64_t  duxrt_date_year(int64_t unix_ts);
+int64_t  duxrt_date_month(int64_t unix_ts);
+int64_t  duxrt_date_day(int64_t unix_ts);
+int64_t  duxrt_date_hour(int64_t unix_ts);
+int64_t  duxrt_date_minute(int64_t unix_ts);
+int64_t  duxrt_date_second(int64_t unix_ts);
+DuxStr*  duxrt_date_format(int64_t unix_ts, DuxStr* fmt);
+DuxStr*  duxrt_date_iso(int64_t unix_ts);
+
+/* ── System / Environment / Args ─────────────────────────────────────────── */
+void     duxrt_sys_init(int argc, char** argv);
+void     duxrt_sys_exit(int64_t code);
+DuxStr*  duxrt_env_fetch(DuxStr* name);
+int32_t  duxrt_env_has(DuxStr* name);
+int32_t  duxrt_env_store(DuxStr* name, DuxStr* val);
+int32_t  duxrt_env_remove(DuxStr* name);
+int64_t  duxrt_args_count(void);
+DuxStr*  duxrt_args_at(int64_t i);
+DuxList* duxrt_args_all(void);
+int64_t  duxrt_sys_getpid(void);
+int64_t  duxrt_sys_getppid(void);
+DuxStr*  duxrt_sys_hostname(void);
+
+/* ── Random ──────────────────────────────────────────────────────────────── */
+void     duxrt_random_seed(int64_t seed);
+double   duxrt_random(void);
+int64_t  duxrt_random_int(int64_t lo, int64_t hi);
+double   duxrt_random_double(double lo, double hi);
+int32_t  duxrt_random_bool(double p);
+void     duxrt_random_shuffle(DuxList* list);
+
+/* ── Threading ───────────────────────────────────────────────────────────── */
+void     duxrt_thread_sleep_ms(int64_t ms);
+int64_t  duxrt_thread_id(void);
+void*    duxrt_thread_self(void);
+void*    duxrt_thread_spawn(void* fn, void* arg);
+int32_t  duxrt_thread_join(void* handle);
+int32_t  duxrt_thread_detach(void* handle);
+void*    duxrt_mutex_create(void);
+void*    duxrt_mutex_new(void);        /* alias for mutex_create */
+void     duxrt_mutex_lock(void* m);
+void     duxrt_mutex_unlock(void* m);
+int32_t  duxrt_mutex_trylock(void* m);
+void     duxrt_mutex_free(void* m);
+void*    duxrt_rwlock_new(void);
+void     duxrt_rwlock_rlock(void* rw);
+void     duxrt_rwlock_wlock(void* rw);
+void     duxrt_rwlock_unlock(void* rw);
+void     duxrt_rwlock_free(void* rw);
+void*    duxrt_cond_new(void);
+void     duxrt_cond_wait(void* c, void* m);
+void     duxrt_cond_signal(void* c);
+void     duxrt_cond_broadcast(void* c);
+void     duxrt_cond_free(void* c);
+void*    duxrt_once_new(void);
+void     duxrt_once_call(void* o, void* fn);
+void     duxrt_once_free(void* o);
+
+/* ── Process ─────────────────────────────────────────────────────────────── */
+int64_t  duxrt_process_run(DuxStr* cmd);
+DuxStr*  duxrt_process_capture(DuxStr* cmd);
+int64_t  duxrt_process_pid(void);
+int64_t  duxrt_process_ppid(void);
+int64_t  duxrt_process_wait(int64_t pid);
+int64_t  duxrt_process_spawn(DuxStr* cmd, DuxList* args_list);
+
+/* ── Signals ─────────────────────────────────────────────────────────────── */
+int64_t  duxrt_signal_sigint(void);
+int64_t  duxrt_signal_sigterm(void);
+int64_t  duxrt_signal_sighup(void);
+int64_t  duxrt_signal_sigusr1(void);
+int64_t  duxrt_signal_sigusr2(void);
+int64_t  duxrt_signal_sigchld(void);
+int64_t  duxrt_signal_sigpipe(void);
+int64_t  duxrt_signal_sigalrm(void);
+int32_t  duxrt_signal_ignore(int64_t sig);
+int32_t  duxrt_signal_reset(int64_t sig);
+int32_t  duxrt_signal_raise(int64_t sig);
+int32_t  duxrt_signal_kill(int64_t pid, int64_t sig);
+
+/* ── Bytes ───────────────────────────────────────────────────────────────── */
+void*    duxrt_bytes_new(int64_t cap);
+void*    duxrt_bytes_from_str(DuxStr* s);
+DuxStr*  duxrt_bytes_to_str(void* b);
+int64_t  duxrt_bytes_len(void* b);
+int64_t  duxrt_bytes_get(void* b, int64_t i);
+void     duxrt_bytes_set(void* b, int64_t i, int64_t val);
+void     duxrt_bytes_push(void* b, int64_t val);
+void     duxrt_bytes_free(void* b);
+
+/* ── JSON ────────────────────────────────────────────────────────────────── */
+void*    duxrt_json_parse(DuxStr* input);
+DuxStr*  duxrt_json_get_str(void* d, DuxStr* key);
+int64_t  duxrt_json_get_int(void* d, DuxStr* key);
+double   duxrt_json_get_double(void* d, DuxStr* key);
+int32_t  duxrt_json_has(void* d, DuxStr* key);
+DuxStr*  duxrt_json_stringify(void* d);
+
+/* ── Regex ───────────────────────────────────────────────────────────────── */
+void*    duxrt_regex_compile(DuxStr* pattern);
+int32_t  duxrt_regex_matches(void* r, DuxStr* text);
+DuxStr*  duxrt_regex_find(void* r, DuxStr* text);
+DuxStr*  duxrt_regex_replace(void* r, DuxStr* text, DuxStr* replacement);
+DuxList* duxrt_regex_find_all(void* r, DuxStr* text);
+void     duxrt_regex_free(void* r);
+
 /* ── Exceptions ──────────────────────────────────────────────────────────── */
 typedef struct DuxException {
     const char* type_name;

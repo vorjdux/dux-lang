@@ -1,0 +1,30 @@
+# stdlib/result.dux — Result type
+#
+# Represents either success (Ok) or failure (Err).
+# Note: full generic parameterization (Result<T,E>) requires the generics
+# milestone. Until then, this provides the Ok/Err discriminant enum.
+
+enum Result {
+    Ok,
+    Err
+}
+
+# Helper: return the Ok discriminant
+int result_ok() {
+    return Result.Ok
+}
+
+# Helper: return the Err discriminant
+int result_err() {
+    return Result.Err
+}
+
+# Check if a result is Ok
+bool result_is_ok(int res) {
+    return res == Result.Ok
+}
+
+# Check if a result is Err
+bool result_is_err(int res) {
+    return res == Result.Err
+}

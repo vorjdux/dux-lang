@@ -1,0 +1,40 @@
+namespace sys {
+    extern "C" void duxrt_sys_exit(long code) ;
+    extern "C" long duxrt_sys_getpid() ;
+    extern "C" long duxrt_sys_getppid() ;
+    extern "C" str  duxrt_sys_hostname() ;
+
+    # Exit the process with the given status code.
+    void exit(long code) {
+        unsafe {
+            duxrt_sys_exit(code)
+        }
+    }
+
+    # Current process ID.
+    long pid() {
+        long r = 0
+        unsafe {
+            r = duxrt_sys_getpid()
+        }
+        return r
+    }
+
+    # Parent process ID.
+    long ppid() {
+        long r = 0
+        unsafe {
+            r = duxrt_sys_getppid()
+        }
+        return r
+    }
+
+    # System hostname.
+    str hostname() {
+        str r = ""
+        unsafe {
+            r = duxrt_sys_hostname()
+        }
+        return r
+    }
+}

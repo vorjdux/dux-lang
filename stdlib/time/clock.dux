@@ -1,0 +1,50 @@
+namespace clock {
+    extern "C" long   duxrt_clock_now_ns() ;
+    extern "C" double duxrt_clock_now() ;
+    extern "C" void   duxrt_clock_sleep_ms(long ms) ;
+    extern "C" long   duxrt_clock_unix() ;
+    extern "C" str    duxrt_clock_now_str() ;
+
+    # Monotonic time in nanoseconds.
+    long now_ns() {
+        long r = 0
+        unsafe {
+            r = duxrt_clock_now_ns()
+        }
+        return r
+    }
+
+    # Monotonic time in seconds as a float.
+    double now() {
+        double r = 0.0
+        unsafe {
+            r = duxrt_clock_now()
+        }
+        return r
+    }
+
+    # Sleep for the given number of milliseconds.
+    void sleep_ms(long ms) {
+        unsafe {
+            duxrt_clock_sleep_ms(ms)
+        }
+    }
+
+    # Current Unix timestamp (seconds since epoch).
+    long unix() {
+        long r = 0
+        unsafe {
+            r = duxrt_clock_unix()
+        }
+        return r
+    }
+
+    # Current time as a human-readable string.
+    str now_str() {
+        str r = ""
+        unsafe {
+            r = duxrt_clock_now_str()
+        }
+        return r
+    }
+}

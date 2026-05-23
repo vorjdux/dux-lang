@@ -1,0 +1,112 @@
+namespace fs {
+    extern "C" int  duxrt_fs_mkdir(str path) ;
+    extern "C" int  duxrt_fs_mkdir_all(str path) ;
+    extern "C" int  duxrt_fs_rmdir(str path) ;
+    extern "C" int  duxrt_fs_remove(str path) ;
+    extern "C" int  duxrt_fs_rename(str src, str dst) ;
+    extern "C" list duxrt_fs_list_dir(str path) ;
+    extern "C" str  duxrt_fs_cwd() ;
+    extern "C" int  duxrt_fs_chdir(str path) ;
+    extern "C" int  duxrt_fs_exists(str path) ;
+    extern "C" int  duxrt_fs_is_dir(str path) ;
+    extern "C" int  duxrt_fs_is_file(str path) ;
+
+    # Create a directory.
+    bool mkdir(str p) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_mkdir(p)
+        }
+        return r == 0
+    }
+
+    # Create directory with all parent directories.
+    bool mkdir_all(str p) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_mkdir_all(p)
+        }
+        return r == 0
+    }
+
+    # Remove an empty directory.
+    bool rmdir(str p) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_rmdir(p)
+        }
+        return r == 0
+    }
+
+    # Remove a file.
+    bool remove(str p) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_remove(p)
+        }
+        return r == 0
+    }
+
+    # Rename or move a file/directory.
+    bool rename(str src, str dst) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_rename(src, dst)
+        }
+        return r == 0
+    }
+
+    # List directory entries (excludes . and ..).
+    list list_dir(str p) {
+        list result = []
+        unsafe {
+            result = duxrt_fs_list_dir(p)
+        }
+        return result
+    }
+
+    # Current working directory.
+    str cwd() {
+        str result = ""
+        unsafe {
+            result = duxrt_fs_cwd()
+        }
+        return result
+    }
+
+    # Change working directory.
+    bool chdir(str p) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_chdir(p)
+        }
+        return r == 0
+    }
+
+    # True if path exists.
+    bool exists(str p) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_exists(p)
+        }
+        return r != 0
+    }
+
+    # True if path is a directory.
+    bool is_dir(str p) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_is_dir(p)
+        }
+        return r != 0
+    }
+
+    # True if path is a regular file.
+    bool is_file(str p) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_is_file(p)
+        }
+        return r != 0
+    }
+}

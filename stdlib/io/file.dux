@@ -1,0 +1,72 @@
+namespace file {
+    extern "C" str  duxrt_file_read(str path) ;
+    extern "C" list duxrt_file_read_lines(str path) ;
+    extern "C" int  duxrt_file_write(str path, str content) ;
+    extern "C" int  duxrt_file_append(str path, str content) ;
+    extern "C" int  duxrt_file_exists(str path) ;
+    extern "C" int  duxrt_file_remove(str path) ;
+    extern "C" int  duxrt_file_copy(str src, str dst) ;
+
+    # Read entire file as a string.
+    str read(str path) {
+        str result = ""
+        unsafe {
+            result = duxrt_file_read(path)
+        }
+        return result
+    }
+
+    # Read file as a list of lines (newlines stripped).
+    list read_lines(str path) {
+        list result = []
+        unsafe {
+            result = duxrt_file_read_lines(path)
+        }
+        return result
+    }
+
+    # Write content to file (overwrites). Returns true on success.
+    bool write(str path, str content) {
+        int r = 0
+        unsafe {
+            r = duxrt_file_write(path, content)
+        }
+        return r == 0
+    }
+
+    # Append content to file. Returns true on success.
+    bool append(str path, str content) {
+        int r = 0
+        unsafe {
+            r = duxrt_file_append(path, content)
+        }
+        return r == 0
+    }
+
+    # True if file exists.
+    bool exists(str path) {
+        int r = 0
+        unsafe {
+            r = duxrt_file_exists(path)
+        }
+        return r != 0
+    }
+
+    # Remove a file. Returns true on success.
+    bool remove(str path) {
+        int r = 0
+        unsafe {
+            r = duxrt_file_remove(path)
+        }
+        return r == 0
+    }
+
+    # Copy a file. Returns true on success.
+    bool copy(str src, str dst) {
+        int r = 0
+        unsafe {
+            r = duxrt_file_copy(src, dst)
+        }
+        return r == 0
+    }
+}
