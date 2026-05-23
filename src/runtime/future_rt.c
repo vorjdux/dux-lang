@@ -13,13 +13,15 @@
  */
 #include "duxrt.h"
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 
 typedef struct DuxFuture {
-    pthread_mutex_t mu;
-    pthread_cond_t  cond;
-    void*           result;
-    int             done;
+    pthread_mutex_t  mu;
+    pthread_cond_t   cond;
+    void*            result;
+    int              done;
+    atomic_int       ref_count;  /* ref-counted: free when count reaches 0 */
 } DuxFuture;
 
 /* ── Lifecycle ───────────────────────────────────────────────────────────── */
@@ -29,12 +31,32 @@ void* duxrt_future_new(void) {
     if (!f) return NULL;
     pthread_mutex_init(&f->mu, NULL);
     pthread_cond_init(&f->cond, NULL);
+    atomic_init(&f->ref_count, 1);
     return f;
 }
 
+/* Increment the reference count (borrow a new owning reference). */
+void duxrt_future_retain(void* fut) {
+    DuxFuture* f = (DuxFuture*)fut;
+    if (!f) return;
+    atomic_fetch_add_explicit(&f->ref_count, 1, memory_order_relaxed);
+}
+
+/* Release one owning reference.  Destroys the future when the count
+ * reaches zero.  It is safe to call only after the future is done
+ * (i.e. after duxrt_future_await returns), which guarantees no thread
+ * holds the mutex — so pthread_mutex_destroy is well-defined (RT-6). */
 void duxrt_future_free(void* fut) {
     DuxFuture* f = (DuxFuture*)fut;
     if (!f) return;
+    if (atomic_fetch_sub_explicit(&f->ref_count, 1, memory_order_acq_rel) != 1)
+        return;  /* still has other owners */
+    /* Only destroy when the future is settled — avoids UB from destroying
+     * a mutex that may still be held by the worker thread (RT-6). */
+    pthread_mutex_lock(&f->mu);
+    while (!f->done)
+        pthread_cond_wait(&f->cond, &f->mu);
+    pthread_mutex_unlock(&f->mu);
     pthread_mutex_destroy(&f->mu);
     pthread_cond_destroy(&f->cond);
     free(f);

@@ -1694,6 +1694,42 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
     // ── catch body ────────────────────────────────────────────────────────
     builder_->SetInsertPoint(catch_bb);
     env_push();
+
+    // EH-4 fix: typed catch clause — check exception type_name at runtime.
+    // DuxException::type_name is the first field (offset 0, a const char*).
+    // If the type doesn't match, call __cxa_rethrow (before end_catch) so the
+    // exception propagates to the next handler.
+    if (s.catch_type && !s.catch_type->name.empty() &&
+        s.catch_type->name != "Exception") {
+        Value* exc_ptr = builder_->CreateLoad(ptr_type(), exc_slot, "exc.typed");
+        // Load type_name (field 0: const char*) from DuxException*
+        Value* type_name_field = builder_->CreateLoad(ptr_type(), exc_ptr, "exc.tname");
+        // Build a global string constant for the expected type name
+        Value* expected = builder_->CreateGlobalStringPtr(
+            s.catch_type->name, "catch.tname");
+        // strcmp(type_name_field, expected) == 0 means match
+        Function* strcmp_fn = get_or_declare_rt("strcmp",
+            llvm::Type::getInt32Ty(*ctx_), {ptr_type(), ptr_type()});
+        Value* cmp = builder_->CreateCall(strcmp_fn, {type_name_field, expected},
+                                          "tname.cmp");
+        Value* matches = builder_->CreateICmpEQ(
+            cmp, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0), "tname.match");
+
+        auto* type_ok_bb   = BasicBlock::Create(*ctx_, "catch.type.ok",  fn);
+        auto* type_fail_bb = BasicBlock::Create(*ctx_, "catch.type.fail", fn);
+        builder_->CreateCondBr(matches, type_ok_bb, type_fail_bb);
+
+        // Mismatch path: rethrow — exception stays "current" until __cxa_rethrow
+        builder_->SetInsertPoint(type_fail_bb);
+        Function* rethrow_fn = get_or_declare_rt(
+            "__cxa_rethrow", llvm::Type::getVoidTy(*ctx_), {});
+        builder_->CreateCall(rethrow_fn, {});
+        builder_->CreateUnreachable();
+
+        // Match path: continue to catch body
+        builder_->SetInsertPoint(type_ok_bb);
+    }
+
     if (s.catch_var) {
         Value* cv_alloca = make_alloca(ptr_type(), *s.catch_var);
         builder_->CreateStore(
@@ -2129,6 +2165,54 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
         auto* strcat_fn = get_or_declare_rt("duxrt_str_concat",
             ptr_type(), {ptr_type(), ptr_type()});
         return builder_->CreateCall(strcat_fn, {L, R});
+    }
+
+    // Enum equality/inequality — compare discriminant tags, not pointers.
+    // Payload enums are represented as ptr to {i32 tag, ptr payload}; simple
+    // enums are i32 constants.  Normalise both sides to their i32 tag first.
+    auto extract_enum_tag = [&](Value* v, TypeId tid) -> Value* {
+        const sema::TypeInfo& ti = types_.info(tid);
+        bool is_payload = std::any_of(ti.variants.begin(), ti.variants.end(),
+            [](const sema::EnumVariantInfo& vi){ return !vi.payload.empty(); });
+        if (is_payload) {
+            // ptr → GEP offset 0 → i32 tag
+            return builder_->CreateLoad(llvm::Type::getInt32Ty(*ctx_),
+                builder_->CreateStructGEP(
+                    llvm::StructType::get(*ctx_, {llvm::Type::getInt32Ty(*ctx_), ptr_type()}),
+                    v, 0, "enum.tag"),
+                "tag");
+        }
+        // Simple enum is already i32
+        return v;
+    };
+    if ((op == "==" || op == "!=") &&
+        lt == rt && lt != TR::TID_UNKNOWN &&
+        types_.info(lt).kind == sema::TypeKind::Enum) {
+        Value* tagL = extract_enum_tag(L, lt);
+        Value* tagR = extract_enum_tag(R, rt);
+        if (op == "==") return builder_->CreateICmpEQ(tagL, tagR);
+        else            return builder_->CreateICmpNE(tagL, tagR);
+    }
+    // Mixed enum vs int-literal comparison (e.g. `color == Color.Red`)
+    // where one side resolved to i32 and the other to ptr: load tag from ptr.
+    if ((op == "==" || op == "!=") && lt != rt) {
+        bool lhs_is_enum = lt != TR::TID_UNKNOWN &&
+                           types_.info(lt).kind == sema::TypeKind::Enum;
+        bool rhs_is_enum = rt != TR::TID_UNKNOWN &&
+                           types_.info(rt).kind == sema::TypeKind::Enum;
+        if (lhs_is_enum || rhs_is_enum) {
+            TypeId etid = lhs_is_enum ? lt : rt;
+            Value* tagL = lhs_is_enum ? extract_enum_tag(L, etid) : L;
+            Value* tagR = rhs_is_enum ? extract_enum_tag(R, etid) : R;
+            // Ensure both are i32
+            auto* i32ty = llvm::Type::getInt32Ty(*ctx_);
+            if (tagL->getType() != i32ty)
+                tagL = builder_->CreateTruncOrBitCast(tagL, i32ty);
+            if (tagR->getType() != i32ty)
+                tagR = builder_->CreateTruncOrBitCast(tagR, i32ty);
+            if (op == "==") return builder_->CreateICmpEQ(tagL, tagR);
+            else            return builder_->CreateICmpNE(tagL, tagR);
+        }
     }
 
     // String equality/inequality — use runtime comparison (not pointer equality)

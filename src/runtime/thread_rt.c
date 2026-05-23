@@ -56,19 +56,28 @@ void* duxrt_thread_spawn(void* fn, void* arg) {
 int32_t duxrt_thread_join(void* handle) {
     if (!handle) return -1;
     DuxThread* t = (DuxThread*)handle;
-    if (t->joined) return -1;
+    if (t->joined) { free(t); return -1; }
     int r = pthread_join(t->tid, NULL);
-    if (r == 0) t->joined = 1;
+    free(t);   /* handle is consumed; caller must null their copy */
     return r == 0 ? 0 : -1;
 }
 
 int32_t duxrt_thread_detach(void* handle) {
     if (!handle) return -1;
     DuxThread* t = (DuxThread*)handle;
-    if (t->joined) return -1;
+    if (t->joined) { free(t); return -1; }
     int r = pthread_detach(t->tid);
-    if (r == 0) t->joined = 1;
+    free(t);   /* handle is consumed; caller must null their copy */
     return r == 0 ? 0 : -1;
+}
+
+/* Free a thread handle that was never joined or detached (detaches the
+ * underlying thread first so it can reclaim OS resources on exit). */
+void duxrt_thread_free(void* handle) {
+    if (!handle) return;
+    DuxThread* t = (DuxThread*)handle;
+    if (!t->joined) pthread_detach(t->tid);
+    free(t);
 }
 
 /* ── Mutex ───────────────────────────────────────────────────────────────── */
