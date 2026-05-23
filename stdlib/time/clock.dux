@@ -1,8 +1,10 @@
 namespace clock {
     extern "C" long   duxrt_clock_now_ns() ;
+    extern "C" long   duxrt_clock_mono_ns() ;
     extern "C" double duxrt_clock_now() ;
     extern "C" void   duxrt_clock_sleep_ms(long ms) ;
     extern "C" long   duxrt_clock_unix() ;
+    extern "C" long   duxrt_clock_unix_ms() ;
     extern "C" str    duxrt_clock_now_str() ;
 
     # Monotonic time in nanoseconds.
@@ -10,6 +12,15 @@ namespace clock {
         long r = 0
         unsafe {
             r = duxrt_clock_now_ns()
+        }
+        return r
+    }
+
+    # Monotonic nanoseconds (alias for now_ns).
+    long mono_ns() {
+        long r = 0
+        unsafe {
+            r = duxrt_clock_mono_ns()
         }
         return r
     }
@@ -23,18 +34,35 @@ namespace clock {
         return r
     }
 
-    # Sleep for the given number of milliseconds.
+    # Sleep for the given number of milliseconds (EINTR-safe).
     void sleep_ms(long ms) {
         unsafe {
             duxrt_clock_sleep_ms(ms)
         }
     }
 
-    # Current Unix timestamp (seconds since epoch).
+    # Sleep for the given number of seconds.
+    void sleep_s(long s) {
+        long ms = s * 1000
+        unsafe {
+            duxrt_clock_sleep_ms(ms)
+        }
+    }
+
+    # Current Unix timestamp in seconds.
     long unix() {
         long r = 0
         unsafe {
             r = duxrt_clock_unix()
+        }
+        return r
+    }
+
+    # Current Unix timestamp in milliseconds.
+    long unix_ms() {
+        long r = 0
+        unsafe {
+            r = duxrt_clock_unix_ms()
         }
         return r
     }
@@ -46,5 +74,39 @@ namespace clock {
             r = duxrt_clock_now_str()
         }
         return r
+    }
+
+    # Stopwatch for elapsed time measurement using monotonic clock.
+    class Stopwatch {
+        long _start
+
+        Stopwatch() {
+            long s = 0
+            unsafe {
+                s = duxrt_clock_mono_ns()
+            }
+            this._start = s
+        }
+
+        long elapsed_ns() {
+            long now = 0
+            unsafe {
+                now = duxrt_clock_mono_ns()
+            }
+            return now - this._start
+        }
+
+        long elapsed_ms() {
+            long ns = this.elapsed_ns()
+            return ns / 1000000
+        }
+
+        void reset() {
+            long s = 0
+            unsafe {
+                s = duxrt_clock_mono_ns()
+            }
+            this._start = s
+        }
     }
 }

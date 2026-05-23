@@ -1,0 +1,6 @@
+open write ok
+open read ok
+read all ok
+tell ok
+seek ok
+file handle ok
