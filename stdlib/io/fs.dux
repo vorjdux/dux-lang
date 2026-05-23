@@ -3,7 +3,7 @@ namespace fs {
     extern "C" int  duxrt_fs_mkdir_all(str path) ;
     extern "C" int  duxrt_fs_rmdir(str path) ;
     extern "C" int  duxrt_fs_remove(str path) ;
-    extern "C" int  duxrt_fs_rename(str from, str to) ;
+    extern "C" int  duxrt_fs_rename(str src, str dst) ;
     extern "C" list duxrt_fs_list_dir(str path) ;
     extern "C" str  duxrt_fs_cwd() ;
     extern "C" int  duxrt_fs_chdir(str path) ;
@@ -48,10 +48,10 @@ namespace fs {
     }
 
     # Rename or move a file/directory.
-    bool rename(str from, str to) {
+    bool rename(str src, str dst) {
         int r = 0
         unsafe {
-            r = duxrt_fs_rename(from, to)
+            r = duxrt_fs_rename(src, dst)
         }
         return r == 0
     }
