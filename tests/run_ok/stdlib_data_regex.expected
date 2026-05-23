@@ -1,0 +1,12 @@
+valid ok
+matches ok
+no_match ok
+find ok
+find_none ok
+find_all ok
+replace ok
+replace_all ok
+split ok
+captures ok
+is_match ok
+regex ok

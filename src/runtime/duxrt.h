@@ -171,18 +171,40 @@ int64_t  duxrt_range_len(DuxRange r);
 /* ── Math ────────────────────────────────────────────────────────────────── */
 double  duxrt_math_sqrt(double x);
 double  duxrt_math_pow(double x, double y);
-double  duxrt_math_floor(double x);
-double  duxrt_math_ceil(double x);
 double  duxrt_math_abs_d(double x);
 int64_t duxrt_math_abs_i(int64_t x);
 double  duxrt_math_min_d(double a, double b);
 double  duxrt_math_max_d(double a, double b);
 int64_t duxrt_math_min_i(int64_t a, int64_t b);
 int64_t duxrt_math_max_i(int64_t a, int64_t b);
-double  duxrt_math_log(double x);
-double  duxrt_math_log2(double x);
+/* trig */
 double  duxrt_math_sin(double x);
 double  duxrt_math_cos(double x);
+double  duxrt_math_tan(double x);
+double  duxrt_math_asin(double x);
+double  duxrt_math_acos(double x);
+double  duxrt_math_atan(double x);
+double  duxrt_math_atan2(double y, double x);
+/* exp / log */
+double  duxrt_math_exp(double x);
+double  duxrt_math_exp2(double x);
+double  duxrt_math_log(double x);
+double  duxrt_math_log2(double x);
+double  duxrt_math_log10(double x);
+/* rounding */
+double  duxrt_math_floor(double x);
+double  duxrt_math_ceil(double x);
+double  duxrt_math_round(double x);
+double  duxrt_math_trunc(double x);
+/* misc */
+double  duxrt_math_fmod(double x, double y);
+double  duxrt_math_hypot(double x, double y);
+double  duxrt_math_clamp_d(double v, double lo, double hi);
+int64_t duxrt_math_clamp_i(int64_t v, int64_t lo, int64_t hi);
+int32_t duxrt_math_sign_d(double x);
+int32_t duxrt_math_sign_i(int64_t x);
+int32_t duxrt_math_is_nan(double x);
+int32_t duxrt_math_is_inf(double x);
 
 /* ── Path ────────────────────────────────────────────────────────────────── */
 DuxStr*  duxrt_fs_realpath(DuxStr* path);
@@ -386,10 +408,15 @@ DuxStr*  duxrt_json_stringify(void* d);
 
 /* ── Regex ───────────────────────────────────────────────────────────────── */
 void*    duxrt_regex_compile(DuxStr* pattern);
+void*    duxrt_regex_compile_flags(DuxStr* pattern, int32_t flags);
+int32_t  duxrt_regex_is_valid(void* r);
 int32_t  duxrt_regex_matches(void* r, DuxStr* text);
 DuxStr*  duxrt_regex_find(void* r, DuxStr* text);
-DuxStr*  duxrt_regex_replace(void* r, DuxStr* text, DuxStr* replacement);
 DuxList* duxrt_regex_find_all(void* r, DuxStr* text);
+DuxList* duxrt_regex_captures(void* r, DuxStr* text);
+DuxStr*  duxrt_regex_replace(void* r, DuxStr* text, DuxStr* replacement);
+DuxStr*  duxrt_regex_replace_all(void* r, DuxStr* text, DuxStr* replacement);
+DuxList* duxrt_regex_split(void* r, DuxStr* text);
 void     duxrt_regex_free(void* r);
 
 /* ── net.socket — POSIX BSD socket wrappers ──────────────────────────────── */
