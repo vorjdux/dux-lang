@@ -33,13 +33,13 @@ int main() {
         print("500 server_err ok")
     }
 
-    # Test Headers (put/fetch instead of set/get — reserved keywords in Dux)
+    # Test Headers set/get/has
     Headers h = new Headers()
-    h.put("X-Test", "hello")
+    h.set("X-Test", "hello")
     if h.has("X-Test") {
         print("headers ok")
     }
-    str v = h.fetch("X-Test")
+    str v = h.get("X-Test")
     if v == "hello" {
         print("header get ok")
     }
