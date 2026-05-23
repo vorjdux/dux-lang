@@ -1,0 +1,41 @@
+import math
+
+int clamp(int value, int lo, int hi) {
+    if (value < lo) {
+        return lo
+    }
+    if (value > hi) {
+        return hi
+    }
+    return value
+}
+
+int abs_int(int n) {
+    if (n < 0) {
+        return 0 - n
+    }
+    return n
+}
+
+int gcd(int a, int b) {
+    a = abs_int(a)
+    b = abs_int(b)
+    while (b != 0) {
+        int t = b
+        b = a % b
+        a = t
+    }
+    return a
+}
+
+int lcm(int a, int b) {
+    int d = gcd(a, b)
+    if (d == 0) {
+        return 0
+    }
+    return abs_int(a * b) / d
+}
+
+double hypotenuse(double a, double b) {
+    return math.sqrt(a * a + b * b)
+}

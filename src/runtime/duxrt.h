@@ -11,8 +11,6 @@ extern "C" {
 #endif
 
 /* ── Memory ──────────────────────────────────────────────────────────────── */
-void* duxrt_alloc(int64_t size);
-void  duxrt_free(void* ptr);
 void  duxrt_assert_fail(const char* file, int line, const char* msg);
 
 /* ── I/O ─────────────────────────────────────────────────────────────────── */
@@ -221,14 +219,29 @@ void     duxrt_random_shuffle(DuxList* list);
 /* ── Threading ───────────────────────────────────────────────────────────── */
 void     duxrt_thread_sleep_ms(int64_t ms);
 int64_t  duxrt_thread_id(void);
+void*    duxrt_thread_self(void);
 void*    duxrt_thread_spawn(void* fn, void* arg);
 int32_t  duxrt_thread_join(void* handle);
 int32_t  duxrt_thread_detach(void* handle);
 void*    duxrt_mutex_create(void);
+void*    duxrt_mutex_new(void);        /* alias for mutex_create */
 void     duxrt_mutex_lock(void* m);
 void     duxrt_mutex_unlock(void* m);
 int32_t  duxrt_mutex_trylock(void* m);
 void     duxrt_mutex_free(void* m);
+void*    duxrt_rwlock_new(void);
+void     duxrt_rwlock_rlock(void* rw);
+void     duxrt_rwlock_wlock(void* rw);
+void     duxrt_rwlock_unlock(void* rw);
+void     duxrt_rwlock_free(void* rw);
+void*    duxrt_cond_new(void);
+void     duxrt_cond_wait(void* c, void* m);
+void     duxrt_cond_signal(void* c);
+void     duxrt_cond_broadcast(void* c);
+void     duxrt_cond_free(void* c);
+void*    duxrt_once_new(void);
+void     duxrt_once_call(void* o, void* fn);
+void     duxrt_once_free(void* o);
 
 /* ── Process ─────────────────────────────────────────────────────────────── */
 int64_t  duxrt_process_run(DuxStr* cmd);

@@ -1,0 +1,90 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+str classify(int n) {
+    if (n < 0) {
+        return "negative"
+    } else if (n == 0) {
+        return "zero"
+    } else if (n < 10) {
+        return "small"
+    } else {
+        return "large"
+    }
+}
+
+str fizzbuzz(int n) {
+    if (n % 15 == 0) {
+        return "FizzBuzz"
+    } else if (n % 3 == 0) {
+        return "Fizz"
+    } else if (n % 5 == 0) {
+        return "Buzz"
+    } else {
+        return int_to_str(n)
+    }
+}
+
+void main() {
+    # Basic if / else if / else
+    println(classify(-5))   # negative
+    println(classify(0))    # zero
+    println(classify(7))    # small
+    println(classify(42))   # large
+
+    # Nested conditions
+    int x = 15
+    int y = 20
+    if (x > 10) {
+        if (y > 15) {
+            println("both large")
+        } else {
+            println("only x large")
+        }
+    }
+
+    # FizzBuzz 1..15
+    int i = 1
+    while (i <= 15) {
+        println(fizzbuzz(i))
+        i = i + 1
+    }
+}

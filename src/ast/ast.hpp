@@ -120,11 +120,6 @@ struct NewExpr final : Expr {
     void accept(Visitor& v) const override;
 };
 
-struct FormatExpr final : Expr {
-    ExprPtr tmpl;
-    ExprPtr args;   // ListExpr or DictExpr
-    void accept(Visitor& v) const override;
-};
 
 struct ListExpr final : Expr {
     ExprList elements;
@@ -346,7 +341,10 @@ struct InterfaceDecl final : Decl {
 };
 
 struct ImportDecl final : Decl {
-    std::string path;
+    std::string              path;                 // dotted module path, e.g. "com.foo.utils"
+    std::vector<std::string> symbols;              // empty=full, {"*"}=glob, else named list
+    std::string              alias;                // optional rename: "import ... as alias"
+    bool                     global_scope{false};  // true = inject into global scope (import {} from)
     void accept(Visitor& v) const override;
 };
 
@@ -354,6 +352,7 @@ struct NamespaceDecl final : Decl {
     std::string name;
     DeclList    decls;
     StmtList    stmts;
+    bool        is_package_decl{false}; // true = file-level "namespace foo.bar" with no body
     void accept(Visitor& v) const override;
 };
 
@@ -407,7 +406,6 @@ struct Visitor {
     virtual void visit(const MemberExpr&)    = 0;
     virtual void visit(const IndexExpr&)     = 0;
     virtual void visit(const NewExpr&)       = 0;
-    virtual void visit(const FormatExpr&)    = 0;
     virtual void visit(const ListExpr&)      = 0;
     virtual void visit(const DictExpr&)      = 0;
 

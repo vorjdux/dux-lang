@@ -1,0 +1,111 @@
+class Shape {
+    str color
+
+    Shape(str color) {
+        this.color = color
+    }
+
+    str getColor() {
+        return this.color
+    }
+
+    str kind() {
+        return "shape"
+    }
+
+    str describe() {
+        return this.kind() + " [" + this.color + "]"
+    }
+}
+
+class Circle(Shape) {
+    int radius
+
+    Circle(str color, int radius) {
+        this.color  = color
+        this.radius = radius
+    }
+
+    str kind() {
+        return "circle"
+    }
+
+    int radius_val() {
+        return this.radius
+    }
+}
+
+class Square(Shape) {
+    int side
+
+    Square(str color, int side) {
+        this.color = color
+        this.side  = side
+    }
+
+    str kind() {
+        return "square"
+    }
+
+    int area() {
+        return this.side * this.side
+    }
+}
+
+class Animal {
+    str name
+
+    Animal(str n) {
+        this.name = n
+    }
+
+    str getName() {
+        return this.name
+    }
+
+    str sound() {
+        return "..."
+    }
+}
+
+class Dog(Animal) {
+    Dog(str n) {
+        this.name = n
+    }
+
+    str sound() {
+        return "Woof"
+    }
+}
+
+class Cat(Animal) {
+    Cat(str n) {
+        this.name = n
+    }
+
+    str sound() {
+        return "Meow"
+    }
+}
+
+void main() {
+    Circle c = new Circle("red", 5)
+    println(c.getColor())    # red
+    println(c.kind())        # circle
+    println(c.describe())    # circle [red]
+    delete c
+
+    Square s = new Square("blue", 4)
+    println(s.getColor())    # blue
+    println(s.area())        # 16
+    println(s.describe())    # square [blue]
+    delete s
+
+    Dog dog = new Dog("Rex")
+    println(dog.sound())     # Woof
+    delete dog
+
+    Cat cat = new Cat("Whiskers")
+    println(cat.sound())     # Meow
+    delete cat
+}

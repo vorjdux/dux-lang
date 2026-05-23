@@ -123,6 +123,16 @@ private:
     // so env_pop can emit duxrt_str_release calls for them.
     std::vector<std::vector<llvm::Value*>> str_scopes_;
 
+    // Scope-tracked class instances for automatic destructor calls (RAII).
+    // Populated by env_define() when the variable's type is a class that has
+    // a registered destructor.  env_pop() calls emit_dtor() on each in LIFO
+    // order; gen_return() calls emit_all_obj_dtors() across all open scopes.
+    struct ScopedObject {
+        llvm::Value* alloca;      // alloca holding the ptr to the heap object
+        std::string  class_name;  // used to resolve the destructor symbol
+    };
+    std::vector<std::vector<ScopedObject>> obj_scopes_;
+
     // Cache of immortal DuxStr* globals for string literals (keyed by value).
     std::unordered_map<std::string, llvm::GlobalVariable*> str_lit_cache_;
 
@@ -144,10 +154,15 @@ private:
     // Stdlib modules imported in this compilation unit (e.g. "math")
     std::unordered_set<std::string> stdlib_imports_;
 
+    // User-defined modules imported via file (e.g. "utils" from utils.dux).
+    // Calls like utils.fn(args) are dispatched through mangle("utils","fn").
+    std::unordered_set<std::string> user_module_imports_;
+
     // Current function context
     llvm::Function* current_fn_{nullptr};
     TypeId          current_ret_type_{TypeRegistry::TID_VOID};
     std::string     current_class_;
+    std::string     current_namespace_;  // set while generating a namespace body
     std::string     pending_label_;   // label from &label before a loop stmt
 
     // ── Type lowering (#14) ──────────────────────────────────────────────
@@ -231,10 +246,17 @@ private:
     // Environment helpers
     void   env_push();
     void   env_pop();
-    // Pass tid=TID_STR to register this alloca for release on scope exit.
+    // Pass tid=TID_STR to register this alloca for str release on scope exit.
+    // Pass a class TypeId to register for RAII destructor call on scope exit.
     void   env_define(const std::string& name, llvm::Value* alloca,
                       TypeId tid = TypeRegistry::TID_UNKNOWN);
     llvm::Value* env_lookup(const std::string& name) const;
+
+    // RAII destructor emission helpers
+    // Emits a null-guarded dtor call + free() for a single scoped class instance.
+    void emit_dtor(llvm::Value* alloca, const std::string& class_name);
+    // Emits dtors for all obj_scopes_ in LIFO order (used by gen_return).
+    void emit_all_obj_dtors();
 
     // Create an alloca, register its element type, and define it in the current scope
     llvm::Value* make_alloca(llvm::Type* t, const std::string& name);

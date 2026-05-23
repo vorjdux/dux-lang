@@ -1,0 +1,23 @@
+# Full module import: all public declarations accessible as module.fn().
+# Syntax:  import module_path
+#
+# The module name is the last component of the path:
+#   import lib.strings  →  strings.fn()
+#   import lib.math_extra  →  math_extra.fn()
+
+import lib.strings
+import lib.math_extra
+
+void main() {
+    # All of lib/strings.dux accessible as strings.*
+    println(strings.int_to_str(100))
+    println(strings.repeat("-", 20))
+    println(strings.pad_left("42", 6))
+
+    # All of lib/math_extra.dux accessible as math_extra.*
+    println(math_extra.gcd(36, 48))          # 12
+    println(math_extra.lcm(6, 10))           # 30
+    println(math_extra.clamp(25, 0, 20))     # 20
+    println(math_extra.abs_int(-99))         # 99
+    println(math_extra.hypotenuse(3.0, 4.0)) # 5
+}

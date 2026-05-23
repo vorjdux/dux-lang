@@ -1,0 +1,78 @@
+str int_to_str(int n) {
+    if (n == 0) {
+        return "0"
+    }
+    str result = ""
+    int neg = 0
+    if (n < 0) {
+        neg = 1
+        n = 0 - n
+    }
+    while (n > 0) {
+        int digit = n % 10
+        if (digit == 0) {
+            result = "0" + result
+        } else if (digit == 1) {
+            result = "1" + result
+        } else if (digit == 2) {
+            result = "2" + result
+        } else if (digit == 3) {
+            result = "3" + result
+        } else if (digit == 4) {
+            result = "4" + result
+        } else if (digit == 5) {
+            result = "5" + result
+        } else if (digit == 6) {
+            result = "6" + result
+        } else if (digit == 7) {
+            result = "7" + result
+        } else if (digit == 8) {
+            result = "8" + result
+        } else {
+            result = "9" + result
+        }
+        n = n / 10
+    }
+    if (neg == 1) {
+        result = "-" + result
+    }
+    return result
+}
+
+void main() {
+    # String literals
+    str s1 = "Hello"
+    str s2 = "World"
+
+    # Concatenation with +
+    str s3 = s1 + ", " + s2 + "!"
+    println(s3)          # Hello, World!
+
+    # Length
+    println(len(s3))     # 13
+
+    # Empty string
+    str empty = ""
+    println(len(empty))  # 0
+
+    # Equality
+    str a = "dux"
+    str b = "dux"
+    str c = "other"
+    if (a == b) {
+        println("equal")
+    }
+    if (a != c) {
+        println("not equal")
+    }
+
+    # Building strings from numbers using helper
+    int x = 42
+    double y = 3.14
+    str msg = "x=" + int_to_str(x)
+    println(msg)
+
+    # Single-quoted strings work too
+    str sq = 'single quotes'
+    println(sq)
+}
