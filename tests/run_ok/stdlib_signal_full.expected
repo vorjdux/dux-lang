@@ -1,0 +1,5 @@
+SIGINT ok
+SIGTERM ok
+SIGPIPE ok
+ignore ok
+signal full ok
