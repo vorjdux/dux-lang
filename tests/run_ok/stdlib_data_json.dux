@@ -1,0 +1,55 @@
+import data.json
+
+int main() {
+    # Parse a flat JSON object via class-based API
+    JsonValue v = new JsonValue(json.parse("{\"name\":\"Alice\",\"age\":\"30\",\"active\":\"true\"}"))
+
+    # has
+    if v.has("name") {
+        print("has ok")
+    }
+    if !v.has("missing") {
+        print("has_missing ok")
+    }
+
+    # get / get_str
+    str name = v.get("name")
+    if name == "Alice" {
+        print("get ok")
+    }
+    str name2 = v.get_str("name")
+    if name2 == "Alice" {
+        print("get_str ok")
+    }
+
+    # get_int
+    long age = v.get_int("age")
+    if age == 30l {
+        print("get_int ok")
+    }
+
+    # missing key returns default
+    str def = v.get("missing")
+    if def == "" {
+        print("get_missing ok")
+    }
+    long def_i = v.get_int("missing")
+    if def_i == 0l {
+        print("get_int_missing ok")
+    }
+
+    # stringify produces non-empty JSON
+    str wire = v.stringify()
+    if len(wire) > 0 {
+        print("stringify ok")
+    }
+
+    # parse empty object
+    JsonValue empty = new JsonValue(json.parse("{}"))
+    if !empty.has("k") {
+        print("empty ok")
+    }
+
+    print("json ok")
+    return 0
+}
