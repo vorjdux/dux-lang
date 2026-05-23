@@ -132,6 +132,7 @@ void Sema::hoist_top(const ast::DeclList& decls) {
             s.kind        = SymKind::Function;
             s.type        = ret;
             s.return_type = ret;
+            s.is_async    = f->is_async;
             s.decl        = dp.get();
             s.loc         = f->loc;
             for (const auto& p : f->params)
@@ -740,6 +741,13 @@ TypeId Sema::check_expr(const ast::Expr& e) {
         result = check_dict(*dct_e);
     } else if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(&e)) {
         result = check_lambda(*lam);
+    } else if (auto* aw = dynamic_cast<const ast::AwaitExpr*>(&e)) {
+        // await <expr> — evaluate the inner expression while marking that
+        // we are inside an await so async calls are permitted.
+        bool saved_in_await = in_await_;
+        in_await_ = true;
+        result = check_expr(*aw->operand);
+        in_await_ = saved_in_await;
     }
     // else: unknown Expr subtype — leave as TID_UNKNOWN
 
@@ -966,6 +974,10 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
 
     // Check argument count
     if (sym->kind == SymKind::Function || sym->kind == SymKind::BuiltIn) {
+        // Async functions must be called with 'await'
+        if (sym->is_async && !in_await_) {
+            err(e.loc, "async function '" + sym->name + "' must be called with 'await'");
+        }
         if (!sym->params.empty() &&
             sym->params.size() != e.args.size()) {
             std::ostringstream os;
