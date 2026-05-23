@@ -28,6 +28,9 @@ struct TypeExpr {
     std::string name;          // "int", "str", "MyClass", etc.
     bool        is_const{false};
     SourceLoc   loc;
+    std::vector<TypeExpr> fn_params;  // for function types: fn(T...) -> R
+    std::string           fn_ret;     // for function types: return type name
+    std::vector<TypeExpr> type_args;  // for generic instantiations: Stack<int>
 };
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
@@ -43,8 +46,18 @@ struct IntLitExpr final : Expr {
     void accept(Visitor& v) const override;
 };
 
+struct LongLitExpr final : Expr {
+    long long value{};
+    void accept(Visitor& v) const override;
+};
+
 struct FloatLitExpr final : Expr {
     double value{};
+    void accept(Visitor& v) const override;
+};
+
+struct RealLitExpr final : Expr {
+    double value{};   // stored as double, lowered to f32 in codegen
     void accept(Visitor& v) const override;
 };
 
@@ -130,6 +143,8 @@ struct DictExpr final : Expr {
     std::vector<std::pair<ExprPtr, ExprPtr>> pairs;
     void accept(Visitor& v) const override;
 };
+
+// LambdaExpr is defined after Param and StmtPtr (see below).
 
 // ─── Statements ──────────────────────────────────────────────────────────────
 
@@ -267,6 +282,16 @@ struct LabeledStmt final : Stmt {
     void accept(Visitor& v) const override;
 };
 
+struct DeferStmt final : Stmt {
+    StmtList body;
+    void accept(Visitor& v) const override;
+};
+
+struct ThrowStmt final : Stmt {
+    ExprPtr expr;
+    void accept(Visitor& v) const override;
+};
+
 struct UnsafeStmt final : Stmt {
     StmtList body;
     void accept(Visitor& v) const override;
@@ -283,6 +308,15 @@ struct Param {
     std::string name;
 };
 
+struct LambdaExpr final : Expr {
+    std::vector<Param> params;
+    StmtPtr            body;          // always BlockStmt (expr body is wrapped in return)
+    std::vector<std::string> captures; // filled by codegen
+    std::optional<TypeExpr> explicit_ret;  // from fn(params) -> type { body } form
+    std::string        inferred_ret;  // return type name, set by sema after type inference
+    void accept(Visitor& v) const override;
+};
+
 struct Decorator {
     std::string name;   // "doc" or "doc::markdown"
     ExprList    args;
@@ -296,9 +330,16 @@ struct InitEntry {
     ExprList    args;
 };
 
+struct TypeBound {
+    std::string param;           // e.g. "T"
+    std::string interface_name;  // e.g. "IComparable"
+};
+
 struct FunctionDecl final : Decl {
     TypeExpr                   return_type;
     std::string                name;
+    std::vector<std::string>   type_params;   // generic type params, e.g. {"T"}
+    std::vector<TypeBound>     type_bounds;   // bounds, e.g. {T: IComparable}
     std::vector<Param>         params;
     std::optional<std::string> modifier;   // "get" or "set"
     std::optional<BlockStmt>   body;
@@ -329,6 +370,8 @@ struct BaseClass {
 struct ClassDecl final : Decl {
     std::vector<Decorator>   decorators;
     std::string              name;
+    std::vector<std::string> type_params;  // generic type params, e.g. {"T"}
+    std::vector<TypeBound>   type_bounds;  // bounds, e.g. {T: IComparable}
     std::vector<BaseClass>   bases;
     std::vector<ClassMember> members;
     void accept(Visitor& v) const override;
@@ -392,7 +435,9 @@ struct Visitor {
     virtual ~Visitor() = default;
 
     virtual void visit(const IntLitExpr&)    = 0;
+    virtual void visit(const LongLitExpr&)   = 0;
     virtual void visit(const FloatLitExpr&)  = 0;
+    virtual void visit(const RealLitExpr&)   = 0;
     virtual void visit(const StringLitExpr&) = 0;
     virtual void visit(const BoolLitExpr&)   = 0;
     virtual void visit(const NullLitExpr&)   = 0;
@@ -408,6 +453,7 @@ struct Visitor {
     virtual void visit(const NewExpr&)       = 0;
     virtual void visit(const ListExpr&)      = 0;
     virtual void visit(const DictExpr&)      = 0;
+    virtual void visit(const LambdaExpr&)    = 0;
 
     virtual void visit(const BlockStmt&)     = 0;
     virtual void visit(const ExprStmt&)      = 0;
@@ -426,6 +472,8 @@ struct Visitor {
     virtual void visit(const AssertStmt&)    = 0;
     virtual void visit(const DeleteStmt&)    = 0;
     virtual void visit(const LabeledStmt&)   = 0;
+    virtual void visit(const DeferStmt&)     = 0;
+    virtual void visit(const ThrowStmt&)     = 0;
     virtual void visit(const UnsafeStmt&)    = 0;
 
     virtual void visit(const FunctionDecl&)  = 0;

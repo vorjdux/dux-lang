@@ -1,8 +1,63 @@
-// str — string utilities module
-// Usage: import str
+extern "C" ptr duxrt_str_concat(ptr a, ptr b)
+extern "C" ptr duxrt_str_from_int(long n)
+extern "C" ptr duxrt_str_from_double(double x)
+extern "C" long duxrt_str_length(ptr s)
+extern "C" ptr duxrt_str_slice(ptr s, long start, long end)
+extern "C" ptr duxrt_str_index(ptr s, long i)
+extern "C" int duxrt_str_eq(ptr a, ptr b)
 
-str concat(str a, str b)
-str from_int(long n)
-str from_double(double x)
-long length(str s)
-str slice(str s, long start, long end)
+str concat(str a, str b) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_concat(a, b)
+    }
+    return result
+}
+
+str from_int(long n) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_from_int(n)
+    }
+    return result
+}
+
+str from_double(double x) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_from_double(x)
+    }
+    return result
+}
+
+long length(str s) {
+    long result = 0l
+    unsafe {
+        result = duxrt_str_length(s)
+    }
+    return result
+}
+
+str slice(str s, long start, long end) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_slice(s, start, end)
+    }
+    return result
+}
+
+str index(str s, long i) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_index(s, i)
+    }
+    return result
+}
+
+bool eq(str a, str b) {
+    int result = 0
+    unsafe {
+        result = duxrt_str_eq(a, b)
+    }
+    return result != 0
+}

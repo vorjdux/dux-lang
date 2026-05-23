@@ -95,6 +95,12 @@ bool TypeRegistry::assignable(TypeId from, TypeId to) const {
     if (from == TID_UNKNOWN || to == TID_UNKNOWN) return true;
     if (from == to) return true;
     if (to == TID_OBJECT) return true;
+    // ptr (TID_OBJECT) can be assigned to any heap type (unsafe casts, list element retrieval)
+    if (from == TID_OBJECT) {
+        if (to == TID_STR || to == TID_LIST || to == TID_DICT) return true;
+        const TypeInfo& ti = info(to);
+        if (ti.kind == TypeKind::Class || ti.kind == TypeKind::Interface) return true;
+    }
     if (from == TID_NULL) {
         // null is assignable to any class/interface/list/dict/str
         const TypeInfo& ti = info(to);
@@ -152,6 +158,18 @@ void TypeRegistry::set_parent(TypeId child, TypeId parent) {
 void TypeRegistry::add_interface(TypeId cls, TypeId iface) {
     if (cls >= 0 && cls < static_cast<TypeId>(types_.size()))
         types_[static_cast<std::size_t>(cls)].ifaces.push_back(iface);
+}
+
+bool TypeRegistry::satisfies(TypeId cls, TypeId iface) const {
+    if (cls == iface || iface == TID_OBJECT) return true;
+    if (cls == TID_UNKNOWN || iface == TID_UNKNOWN) return true;
+    if (cls < 0 || cls >= static_cast<TypeId>(types_.size())) return false;
+    for (TypeId i : types_[static_cast<std::size_t>(cls)].ifaces)
+        if (i == iface) return true;
+    TypeId par = types_[static_cast<std::size_t>(cls)].parent;
+    if (par != cls && par >= 0 && par != TID_UNKNOWN)
+        return satisfies(par, iface);
+    return false;
 }
 
 std::string TypeRegistry::name_of(TypeId id) const {

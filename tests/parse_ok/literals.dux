@@ -1,5 +1,7 @@
-# Literals: integers, floats, strings, bools, null
+# Literals: integers, floats, strings, bools, null, and suffix variants
 void main() {
+    # ── Plain literals ────────────────────────────────────────────────────────
+
     x = 0
     x = 42
     x = 9999999999
@@ -13,4 +15,24 @@ void main() {
     x = true
     x = false
     x = null
+
+    # ── Integer suffix literals ───────────────────────────────────────────────
+
+    auto a = 42i          # int  (explicit — same as plain 42)
+    auto b = 42l          # long (64-bit signed)
+    auto c = 9000000000l  # long literal too large for int
+
+    # ── Float suffix literals ─────────────────────────────────────────────────
+
+    auto d = 3.14f    # real   (32-bit float)
+    auto e = 3.14d    # double (64-bit float, explicit)
+    auto f = 42f      # real   from integer literal
+    auto g = 42d      # double from integer literal
+
+    # ── Auto inference without suffixes ──────────────────────────────────────
+
+    auto h = 42       # int
+    auto i = 3.14     # double
+    auto j = "Dux"    # str
+    auto k = true     # bool
 }

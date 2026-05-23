@@ -1,189 +1,223 @@
-namespace com.vorjdux.lang {
+"""
+  design.dux — full language showcase
+  Demonstrates every major Dux feature in a single file.
+"""
 
-    # Comment single line test
+import math
 
-    const str name = "Matheus Santos"
-    real valor = 0.0
-    double dvalor = 0.0
-    list names = []
+# ── Generics ─────────────────────────────────────────────────────────────────
 
-    dict people = {
-        "nome": name,
+class Box<T> {
+    T value
+
+    Box(T v) {
+        this.value = v
     }
 
-    tuple coordinates = [22, 23]
+    T unwrap() {
+        return this.value
+    }
+}
 
-    """
-        Comment multline test 1
-        ~!@#$%^&*()_+=-{}[]|\:;'`/.,<>?
-        Comment multline test 2 / *
-        Comment multline test 3 //
-        Comment multline test 4 /*
-        Comment multline test 5
-    """
+class Pair<A, B> {
+    A first
+    B second
 
-    interface IPerson() {
-        public:
-        int burn_year()
-        str set_name(str name, int age)
+    Pair(A a, B b) {
+        this.first  = a
+        this.second = b
     }
 
-    class Hand()
-
-    class Person(public object, private IPerson) {
-
-        public:
-
-        Person() {
-            this._age = 0
-            this._hand = new Hand()
-        }
-
-        Person(str _name, int _age) {
-            this._age = _age
-            this._hand = new Hand()
-        }
-
-        ~Person() {
-            delete this._hand
-        }
-
-        private:
-        int _age = 33
-        bool _live = false
-        Hand _hand
-
-        protected:
-        void init(str _name) {
-            this._name = _name
-        }
-
-        public:
-
-        int burn_year() {
-            const int year = 2024
-            return year - this._age
-        }
-
-        int get_age() {
-            return this._age
-        }
-
+    A fst() {
+        return this.first
     }
 
-    class Animal() {
+    B snd() {
+        return this.second
+    }
+}
 
-        int _age = 2
+# ── Operator overloading ──────────────────────────────────────────────────────
 
-        public:
+class Vec2 {
+    int x
+    int y
 
-        Animal(str _name) {
-            this._name = _name
-        }
-
-        int burn_year() {
-            const int _year = 2024
-            return _year - this._age
-        }
-
+    Vec2(int x, int y) {
+        this.x = x
+        this.y = y
     }
 
-    void main() {
+    Vec2 operator__add(Vec2 other) {
+        return new Vec2(this.x + other.x, this.y + other.y)
+    }
 
-        Person _person = new Person()
-        println(_person.burn_year())
+    bool operator__eq(Vec2 other) {
+        return this.x == other.x && this.y == other.y
+    }
 
-        Animal _animal = new Animal("Buddy")
-        println(_animal.burn_year())
-
-        assert(2 + 2 == 4)
-
-        println("Hi, my name is someone and I am old")
-
-        str _text = "Hi, my name is someone"
-
-        int a = 1
-        int b = 2
-        int total = 0
-
-        total = a + b
-
-        assert(total == 3)
-
-        total++
-
-        assert(total == 4)
-
-        total--
-
-        assert(total == 3)
-
-        println(total)
-
-        for int i in range(10) {
-            println(i)
+    int operator__index(int i) {
+        if i == 0 {
+            return this.x
         }
+        return this.y
+    }
+}
 
-        for int i in 0..<5 {
-            println(i)
-        }
+# ── Inheritance ───────────────────────────────────────────────────────────────
 
-        for int i = 0, i < 5, i++ {
-            println(i)
-        }
+class Animal() {
+    int age
 
-        int i = 0
+    Animal(int a) {
+        this.age = a
+    }
 
-        do {
-            i++
-        } while i < 10
+    int born_year() {
+        return 2025 - this.age
+    }
+}
 
-        switch i {
-            case 1:
-                println("It is the number one")
-                break
-            case 10:
-                println("It is ten!")
-                break
-            default:
-                println("I don't know")
-        }
+class Dog(public Animal) {
+    Dog(int a) : Animal(a) {
+    }
+}
 
-        int j = 0
+# ── RAII resource guard ───────────────────────────────────────────────────────
 
-        try {
+class Guard {
+    Guard() {
+        println("open")
+    }
 
-            &label1 while true {
+    ~Guard() {
+        println("close")
+    }
+}
 
-                int k = 0
+# ── Extern C / unsafe ─────────────────────────────────────────────────────────
 
-                println(k)
+extern "C" double duxrt_math_sqrt(double x)
 
-                k++
+double fast_sqrt(double x) {
+    double result
+    unsafe {
+        result = duxrt_math_sqrt(x)
+    }
+    return result
+}
 
-                while k < 10 {
+# ── Higher-order functions ────────────────────────────────────────────────────
 
-                    if k == 5 {
-                        break &label1
-                    } else {
-                        j++
-                    }
+int apply(fn(int) -> int f, int x) {
+    return f(x)
+}
 
-                    k++
-                }
+# ── Entry point ───────────────────────────────────────────────────────────────
 
-                if k == 10 {
-                    break
-                }
+int main() {
 
+    # ── Generics
+    Box<int> bi = new Box<int>(42)
+    println(bi.unwrap())
+
+    Box<str> bs = new Box<str>("hello")
+    println(bs.unwrap())
+
+    Pair<int, str> p = new Pair<int, str>(7, "seven")
+    println(p.fst())
+    println(p.snd())
+
+    # ── Operator overloading
+    Vec2 a = new Vec2(1, 2)
+    Vec2 b = new Vec2(3, 4)
+    Vec2 c = a + b
+    println(c.x)
+    println(c.y)
+    if c == new Vec2(4, 6) {
+        println("eq")
+    }
+    println(a[0])
+
+    # ── Inheritance
+    Dog d = new Dog(3)
+    println(d.born_year())
+
+    # ── Closures / lambdas
+    auto sq = fn(int n) -> int => n * n
+    println(sq(5))
+
+    int base = 100
+    auto addBase = fn(int n) -> int => n + base
+    println(addBase(7))
+
+    println(apply(sq, 6))
+
+    # ── Math stdlib
+    println(math.sqrt(2.0))
+
+    # ── Unsafe / extern C
+    println(fast_sqrt(9.0))
+
+    # ── Control flow
+    for int i in range(3) {
+        println(i)
+    }
+
+    for int i in 0..<3 {
+        println(i)
+    }
+
+    int count = 0
+    for int i = 0, i < 3, i++ {
+        count++
+    }
+    println(count)
+
+    int x = 0
+    do {
+        x++
+    } while x < 3
+    println(x)
+
+    switch x {
+        case 3:
+            println("three")
+            break
+        default:
+            println("other")
+    }
+
+    # ── Labeled break
+    &outer while true {
+        int k = 0
+        while k < 5 {
+            if k == 2 {
+                break &outer
             }
-
-        } catch ... {
-            println("Error")
+            k++
         }
+    }
+    println("after break")
 
-        println("done")
-
+    # ── Exception handling
+    try {
+        throw new Vec2(0, 0)
+    } catch ... {
+        println("caught")
     }
 
+    # ── Defer (executes last, LIFO)
+    defer {
+        println("defer:done")
+    }
+
+    # ── RAII (destructor called on scope exit)
+    Guard g = new Guard()
+
+    assert(2 + 2 == 4)
+
+    println("done")
+
+    return 0
 }

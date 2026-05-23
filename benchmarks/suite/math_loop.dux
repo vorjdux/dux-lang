@@ -1,0 +1,11 @@
+int main() {
+    long sum = 0l
+    long i = 0l
+    long N = 50000000l
+    while i < N {
+        sum = sum + i * 2l + 1l
+        i = i + 1l
+    }
+    println(sum)
+    return 0
+}

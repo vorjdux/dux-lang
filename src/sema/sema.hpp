@@ -72,9 +72,10 @@ private:
     TypeId check_new(const ast::NewExpr& e);
     TypeId check_list(const ast::ListExpr& e);
     TypeId check_dict(const ast::DictExpr& e);
+    TypeId check_lambda(const ast::LambdaExpr& e);
 
     // ── Helpers ───────────────────────────────────────────────────────────
-    TypeId type_from_te(const ast::TypeExpr& te) const;
+    TypeId type_from_te(const ast::TypeExpr& te);
     bool   require_assignable(TypeId from, TypeId to,
                               const ast::SourceLoc& loc, const std::string& ctx);
     bool   require_numeric(TypeId t, const ast::SourceLoc& loc, const std::string& ctx);

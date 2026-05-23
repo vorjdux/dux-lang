@@ -1,0 +1,34 @@
+class Logger {
+    str tag
+    Logger(str t) {
+        this.tag = t
+    }
+    ~Logger() {
+        println("dtor:" + this.tag)
+    }
+}
+
+void test_defer_order() {
+    defer {
+        println("defer:first")
+    }
+    defer {
+        println("defer:second")
+    }
+    println("body")
+}
+
+void test_defer_with_raii() {
+    Logger a = new Logger("a")
+    defer {
+        println("defer:between")
+    }
+    Logger b = new Logger("b")
+    println("inner")
+}
+
+int main() {
+    test_defer_order()
+    test_defer_with_raii()
+    return 0
+}

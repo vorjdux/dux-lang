@@ -23,7 +23,9 @@ private:
 
     // ── Expressions ──────────────────────────────────────────────────────────
     void visit(const IntLitExpr& n) override    { out_ << n.value; }
+    void visit(const LongLitExpr& n) override   { out_ << n.value << 'l'; }
     void visit(const FloatLitExpr& n) override  { out_ << n.value; }
+    void visit(const RealLitExpr& n) override   { out_ << n.value << 'f'; }
     void visit(const BoolLitExpr& n) override   { out_ << (n.value ? "true" : "false"); }
     void visit(const NullLitExpr&) override     { out_ << "null"; }
     void visit(const ThisExpr&) override        { out_ << "this"; }
@@ -102,6 +104,16 @@ private:
             n.pairs[i].second->accept(*this);
         }
         out_ << '}';
+    }
+
+    void visit(const LambdaExpr& n) override {
+        out_ << "fn(";
+        for (size_t i = 0; i < n.params.size(); ++i) {
+            if (i > 0) out_ << ", ";
+            out_ << n.params[i].type.name << ' ' << n.params[i].name;
+        }
+        out_ << ") => ";
+        if (n.body) n.body->accept(*this);
     }
 
     // ── Statements ───────────────────────────────────────────────────────────
@@ -270,6 +282,20 @@ private:
     void visit(const LabeledStmt& n) override {
         out_ << pad() << '&' << n.label << ' ';
         n.stmt->accept(*this);
+    }
+
+    void visit(const DeferStmt& n) override {
+        out_ << pad() << "defer {\n";
+        indent();
+        for (const auto& s : n.body) s->accept(*this);
+        dedent();
+        out_ << pad() << "}\n";
+    }
+
+    void visit(const ThrowStmt& n) override {
+        out_ << pad() << "throw ";
+        n.expr->accept(*this);
+        out_ << '\n';
     }
 
     void visit(const UnsafeStmt& n) override {

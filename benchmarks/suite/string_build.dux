@@ -1,0 +1,30 @@
+# Efficient string building: pre-allocated growing buffer, single malloc at the end.
+# duxrt_strbuf_new()         allocates buffer (64-byte initial capacity, doubles on grow)
+# duxrt_strbuf_append_str()  amortised O(1) append (realloc doubles cap, rare)
+# duxrt_strbuf_build()       one duxrt_str_new call; returns DuxStr* (refcount=1)
+# duxrt_strbuf_free()        frees the staging buffer
+extern "C" ptr duxrt_strbuf_new()
+extern "C" void duxrt_strbuf_append_str(ptr buf, ptr s)
+extern "C" ptr duxrt_strbuf_build(ptr buf)
+extern "C" void duxrt_strbuf_free(ptr buf)
+
+int main() {
+    ptr buf = null
+    unsafe {
+        buf = duxrt_strbuf_new()
+    }
+    long i = 0l
+    while i < 50000l {
+        unsafe {
+            duxrt_strbuf_append_str(buf, "x")
+        }
+        i = i + 1l
+    }
+    str result = ""
+    unsafe {
+        result = duxrt_strbuf_build(buf)
+        duxrt_strbuf_free(buf)
+    }
+    println(len(result))
+    return 0
+}

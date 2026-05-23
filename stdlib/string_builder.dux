@@ -1,0 +1,39 @@
+# StringBuilder: pre-allocated growing string buffer.
+# Backed by DuxStrBuf: amortised O(1) append, single malloc on build().
+extern "C" ptr duxrt_strbuf_new()
+extern "C" void duxrt_strbuf_append_str(ptr buf, ptr s)
+extern "C" ptr duxrt_strbuf_build(ptr buf)
+extern "C" void duxrt_strbuf_free(ptr buf)
+
+class StringBuilder(object) {
+    public:
+    ptr _buf
+
+    StringBuilder() {
+        ptr b = null
+        unsafe {
+            b = duxrt_strbuf_new()
+        }
+        this._buf = b
+    }
+
+    void append(str s) {
+        unsafe {
+            duxrt_strbuf_append_str(this._buf, s)
+        }
+    }
+
+    str build() {
+        str result = ""
+        unsafe {
+            result = duxrt_strbuf_build(this._buf)
+        }
+        return result
+    }
+
+    ~StringBuilder() {
+        unsafe {
+            duxrt_strbuf_free(this._buf)
+        }
+    }
+}

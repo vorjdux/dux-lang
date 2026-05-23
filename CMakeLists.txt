@@ -42,6 +42,7 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} at ${LLVM_DIR}")
 llvm_map_components_to_libnames(LLVM_LIBS
     core support irreader passes
     native nativecodegen
+    linker bitreader
 )
 
 # ─── duxrt: runtime library ───────────────────────────────────────────────────
@@ -53,7 +54,7 @@ add_library(duxrt STATIC
     src/runtime/dict.c
     src/runtime/range.c
     src/runtime/math_rt.c
-    src/runtime/exceptions.c
+    src/runtime/exceptions.cpp
     src/runtime/path_rt.c
     src/runtime/fs_rt.c
     src/runtime/file_rt.c
@@ -78,11 +79,74 @@ target_compile_options(duxrt PRIVATE
 # duxrt must NOT be instrumented with sanitizers: user programs link against
 # it and are not compiled with sanitizer runtimes.
 
-target_link_libraries(duxrt PUBLIC m pthread)  # math functions + pthreads
+target_link_libraries(duxrt PUBLIC m stdc++ pthread)  # math functions + C++ EH ABI + pthreads
 
 # Record absolute path so the compiler driver can find it at runtime
 set(DUXRT_LIB_PATH "$<TARGET_FILE:duxrt>")
 set(DUXRT_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime")
+
+# ─── Runtime bitcode for LTO ──────────────────────────────────────────────────
+# Compile the pure-C runtime files (no C++ EH code) to a single LLVM bitcode
+# bundle.  The driver links this into the user module before running the
+# optimiser, giving LLVM full visibility of all runtime function bodies.
+# LTO is silently disabled if clang or llvm-link are absent.
+
+find_program(LLVM_CLANG_EXE
+    NAMES "clang-${LLVM_VERSION_MAJOR}" clang
+    HINTS "${LLVM_TOOLS_BINARY_DIR}"
+    DOC "clang for building runtime bitcode")
+
+find_program(LLVM_LINK_EXE
+    NAMES "llvm-link-${LLVM_VERSION_MAJOR}" llvm-link
+    HINTS "${LLVM_TOOLS_BINARY_DIR}"
+    DOC "llvm-link for merging bitcode files")
+
+set(DUXRT_BC_PATH "")   # default: LTO disabled
+
+if(LLVM_CLANG_EXE AND LLVM_LINK_EXE)
+    message(STATUS "LTO enabled: ${LLVM_CLANG_EXE}  ${LLVM_LINK_EXE}")
+
+    # Pure C runtime sources — exceptions.cpp excluded (C++ EH ABI stays opaque).
+    set(DUXRT_C_SRCS
+        src/runtime/alloc.c
+        src/runtime/io.c
+        src/runtime/str.c
+        src/runtime/list.c
+        src/runtime/dict.c
+        src/runtime/range.c
+        src/runtime/math_rt.c
+    )
+
+    set(DUXRT_BC_DIR "${CMAKE_CURRENT_BINARY_DIR}/runtime_bc")
+    file(MAKE_DIRECTORY "${DUXRT_BC_DIR}")
+
+    set(DUXRT_BC_FILES "")
+    foreach(src IN LISTS DUXRT_C_SRCS)
+        get_filename_component(stem "${src}" NAME_WE)
+        set(bc "${DUXRT_BC_DIR}/${stem}.bc")
+        add_custom_command(
+            OUTPUT  "${bc}"
+            COMMAND "${LLVM_CLANG_EXE}"
+                    -c -emit-llvm -O0
+                    -I "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/${src}"
+                    -o "${bc}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${src}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/duxrt.h"
+            COMMENT "Bitcode: ${src}")
+        list(APPEND DUXRT_BC_FILES "${bc}")
+    endforeach()
+
+    set(DUXRT_BC_PATH "${DUXRT_BC_DIR}/duxrt.bc")
+    add_custom_command(
+        OUTPUT  "${DUXRT_BC_PATH}"
+        COMMAND "${LLVM_LINK_EXE}" ${DUXRT_BC_FILES} -o "${DUXRT_BC_PATH}"
+        DEPENDS ${DUXRT_BC_FILES}
+        COMMENT "Bitcode: linking → duxrt.bc")
+    add_custom_target(duxrt_bc ALL DEPENDS "${DUXRT_BC_PATH}")
+else()
+    message(STATUS "LTO disabled: clang or llvm-link not found")
+endif()
 
 # ─── Code generation ──────────────────────────────────────────────────────────
 set(GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
@@ -111,6 +175,7 @@ add_executable(dux
     src/sema/types.cpp
     src/sema/symbol.cpp
     src/sema/sema.cpp
+    src/sema/generics.cpp
     src/codegen/codegen.cpp
     ${FLEX_DuxLexer_OUTPUTS}
     ${BISON_DuxParser_OUTPUTS}
@@ -122,14 +187,21 @@ target_include_directories(dux PRIVATE
     ${LLVM_INCLUDE_DIRS}
 )
 
-# Bake duxrt paths into the compiler so --compile works from any directory
+# Bake duxrt paths and stdlib dir into the compiler
 target_compile_definitions(dux PRIVATE
     DUX_VERSION="${PROJECT_VERSION}"
     ${LLVM_DEFINITIONS}
     DUXRT_LIB_PATH="${DUXRT_LIB_PATH}"
+    DUXRT_BC_PATH="${DUXRT_BC_PATH}"
     DUXRT_INCLUDE_DIR="${DUXRT_INCLUDE_DIR}"
     DUXSTDLIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
+    DUX_STDLIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
 )
+
+# Ensure duxrt.bc is built before the dux compiler (when LTO is enabled)
+if(TARGET duxrt_bc)
+    add_dependencies(dux duxrt_bc)
+endif()
 
 target_link_libraries(dux PRIVATE ${LLVM_LIBS})
 

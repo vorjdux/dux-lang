@@ -7,42 +7,94 @@ const double E   = 2.71828182845904523536
 const double TAU = 6.28318530717958647692   # 2 * PI
 const double INF = 1.0 / 0.0               # positive infinity
 
+# ── Extern C runtime functions ────────────────────────────────────────────────
+extern "C" double duxrt_math_sqrt(double x)
+extern "C" double duxrt_math_sin(double x)
+extern "C" double duxrt_math_cos(double x)
+extern "C" double duxrt_math_tan(double x)
+extern "C" double duxrt_math_pow(double base, double exp)
+extern "C" double duxrt_math_floor(double x)
+extern "C" double duxrt_math_ceil(double x)
+extern "C" double duxrt_math_round(double x)
+extern "C" double duxrt_math_log(double x)
+extern "C" double duxrt_math_log2(double x)
+extern "C" double duxrt_math_log10(double x)
+extern "C" double duxrt_math_abs_d(double x)
+extern "C" double duxrt_math_min_d(double a, double b)
+extern "C" double duxrt_math_max_d(double a, double b)
+extern "C" long duxrt_math_abs_i(long x)
+extern "C" long duxrt_math_min_i(long a, long b)
+extern "C" long duxrt_math_max_i(long a, long b)
+
 # ── Trigonometry ─────────────────────────────────────────────────────────────
-double sin(double x)
-double cos(double x)
-double tan(double x)
-double asin(double x)
-double acos(double x)
-double atan(double x)
-double atan2(double y, double x)
+double sin(double x) {
+    return duxrt_math_sin(x)
+}
+
+double cos(double x) {
+    return duxrt_math_cos(x)
+}
+
+double tan(double x) {
+    return duxrt_math_tan(x)
+}
 
 # ── Roots and powers ─────────────────────────────────────────────────────────
-double sqrt(double x)
-double pow(double base, double exp)
-double exp(double x)
-double exp2(double x)
+double sqrt(double x) {
+    return duxrt_math_sqrt(x)
+}
+
+double pow(double base, double exp) {
+    return duxrt_math_pow(base, exp)
+}
 
 # ── Rounding ─────────────────────────────────────────────────────────────────
-double floor(double x)
-double ceil(double x)
-double round(double x)
-double trunc(double x)
+double floor(double x) {
+    return duxrt_math_floor(x)
+}
+
+double ceil(double x) {
+    return duxrt_math_ceil(x)
+}
+
+double round(double x) {
+    return duxrt_math_round(x)
+}
 
 # ── Logarithms ───────────────────────────────────────────────────────────────
-double log(double x)
-double log2(double x)
-double log10(double x)
+double log(double x) {
+    return duxrt_math_log(x)
+}
+
+double log2(double x) {
+    return duxrt_math_log2(x)
+}
+
+double log10(double x) {
+    return duxrt_math_log10(x)
+}
 
 # ── Absolute value and extrema ────────────────────────────────────────────────
-double abs(double x)
-double min(double a, double b)
-double max(double a, double b)
-double clamp(double x, double lo, double hi)
-int    clamp_i(int x, int lo, int hi)
+double abs(double x) {
+    return duxrt_math_abs_d(x)
+}
 
-# ── Misc ─────────────────────────────────────────────────────────────────────
-double hypot(double x, double y)
-double fmod(double x, double y)
-int    sign(double x)     # -1, 0, or 1
-bool   is_nan(double x)
-bool   is_inf(double x)
+double min(double a, double b) {
+    return duxrt_math_min_d(a, b)
+}
+
+double max(double a, double b) {
+    return duxrt_math_max_d(a, b)
+}
+
+long abs_i(long x) {
+    return duxrt_math_abs_i(x)
+}
+
+long min_i(long a, long b) {
+    return duxrt_math_min_i(a, b)
+}
+
+long max_i(long a, long b) {
+    return duxrt_math_max_i(a, b)
+}

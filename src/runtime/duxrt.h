@@ -10,6 +10,9 @@
 extern "C" {
 #endif
 
+/* Forward declaration needed by duxrt_str_join_list below. */
+typedef struct DuxList DuxList;
+
 /* ── Memory ──────────────────────────────────────────────────────────────── */
 void  duxrt_assert_fail(const char* file, int line, const char* msg);
 
@@ -86,8 +89,27 @@ DuxStr* duxrt_str_index(DuxStr* s, int64_t i);   /* single char as new DuxStr */
 DuxStr* duxrt_str_slice(DuxStr* s, int64_t start, int64_t end);
 int     duxrt_str_eq(DuxStr* a, DuxStr* b);
 
+/* Efficiently joins all DuxStr* elements of a DuxList into one new DuxStr*.
+   Returns a new string with refcount=1 (caller owns). O(n) in total length. */
+DuxStr* duxrt_str_join_list(DuxList* parts, int64_t count);
+
 /* Generic len (dispatches to DuxStr.len for strings) */
 int64_t duxrt_len(DuxStr* s);
+
+/* ── StringBuffer — pre-allocated growing char buffer ─────────────────────
+ * Equivalent to std::string with reserve(): amortised O(1) append,
+ * O(n) build.  Use duxrt_strbuf_append_str to accumulate parts, then
+ * duxrt_strbuf_build to materialise a single DuxStr* at the end.       */
+typedef struct DuxStrBuf {
+    char*   data;
+    int64_t len;
+    int64_t cap;
+} DuxStrBuf;
+
+DuxStrBuf* duxrt_strbuf_new(void);
+void       duxrt_strbuf_append_str(DuxStrBuf* b, DuxStr* s);
+DuxStr*    duxrt_strbuf_build(DuxStrBuf* b);   /* refcount=1, caller owns */
+void       duxrt_strbuf_free(DuxStrBuf* b);
 
 /* ── List (dynamic array of void*) ──────────────────────────────────────── */
 typedef struct DuxList {
@@ -102,6 +124,7 @@ void*    duxrt_list_get(DuxList* l, int64_t idx);
 void     duxrt_list_set(DuxList* l, int64_t idx, void* val);
 int64_t  duxrt_list_len(DuxList* l);
 void     duxrt_list_free(DuxList* l);
+DuxList* duxrt_list_concat(DuxList* a, DuxList* b);
 
 /* ── Dict (open-addressing hash map, char* keys) ─────────────────────────── */
 typedef struct DuxDictEntry {
@@ -302,23 +325,8 @@ typedef struct DuxException {
 DuxException* duxrt_exception_new(const char* type, const char* msg);
 void          duxrt_exception_free(DuxException* e);
 
-/*
- * try/catch plumbing via setjmp.
- * Usage in generated IR:
- *   %slot = alloca ptr
- *   %in_catch = call i32 @duxrt_try_enter(ptr %slot)
- *   br i1 (icmp ne i32 %in_catch, 0), catch_bb, try_bb
- * try_bb:
- *   ... try body ...
- *   call void @duxrt_try_exit()
- *   br end_bb
- * catch_bb:
- *   ... catch body ...
- *   br end_bb
- */
-int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
-void duxrt_try_exit(void);
-void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
+/* Throw a DuxException via the C++ Itanium ABI (__cxa_throw). */
+void duxrt_throw(DuxException* e);
 
 #ifdef __cplusplus
 } /* extern "C" */

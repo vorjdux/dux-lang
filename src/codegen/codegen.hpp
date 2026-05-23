@@ -56,10 +56,11 @@ struct MethodInfo {
 
 struct ClassLayout {
     std::string              class_name;
+    std::string              parent_name;  // first non-interface base, empty if none
     llvm::StructType*        struct_type{nullptr};
     llvm::Value*             vtable_global{nullptr};
-    std::vector<FieldInfo>   fields;   // excludes vtable ptr
-    std::vector<MethodInfo>  methods;  // virtual methods
+    std::vector<FieldInfo>   fields;   // excludes vtable ptr (includes inherited fields first)
+    std::vector<MethodInfo>  methods;  // virtual methods (own only)
 };
 
 // ─── Loop context (for break/continue) ──────────────────────────────────────
@@ -123,15 +124,21 @@ private:
     // so env_pop can emit duxrt_str_release calls for them.
     std::vector<std::vector<llvm::Value*>> str_scopes_;
 
-    // Scope-tracked class instances for automatic destructor calls (RAII).
-    // Populated by env_define() when the variable's type is a class that has
-    // a registered destructor.  env_pop() calls emit_dtor() on each in LIFO
-    // order; gen_return() calls emit_all_obj_dtors() across all open scopes.
-    struct ScopedObject {
-        llvm::Value* alloca;      // alloca holding the ptr to the heap object
-        std::string  class_name;  // used to resolve the destructor symbol
+    // Unified LIFO cleanup stack for both RAII and defer.
+    //
+    // Each entry is one of:
+    //   - Class RAII dtor:  alloca != nullptr, defer_body == nullptr
+    //   - Defer block:      alloca == nullptr, defer_body != nullptr
+    //
+    // Entries within a scope are processed in reverse-declaration order
+    // (LIFO) so that later declarations are destroyed first, matching
+    // C++ destructor ordering and Go's defer semantics.
+    struct ScopeCleanup {
+        llvm::Value*          alloca{nullptr};      // RAII: alloca holding heap ptr
+        std::string           class_name;            // RAII: destructor symbol prefix
+        const ast::StmtList*  defer_body{nullptr};  // defer: statements to run
     };
-    std::vector<std::vector<ScopedObject>> obj_scopes_;
+    std::vector<std::vector<ScopeCleanup>> cleanup_scopes_;
 
     // Cache of immortal DuxStr* globals for string literals (keyed by value).
     std::unordered_map<std::string, llvm::GlobalVariable*> str_lit_cache_;
@@ -151,6 +158,11 @@ private:
     // Loop stack for break/continue
     std::vector<LoopCtx> loop_stack_;
 
+    // Unwind target stack for invoke-based EH.
+    // Non-empty while inside a try body; each entry is the landing-pad block
+    // that should receive exceptions from calls in that try scope.
+    std::vector<llvm::BasicBlock*> lp_stack_;
+
     // Stdlib modules imported in this compilation unit (e.g. "math")
     std::unordered_set<std::string> stdlib_imports_;
 
@@ -164,6 +176,8 @@ private:
     std::string     current_class_;
     std::string     current_namespace_;  // set while generating a namespace body
     std::string     pending_label_;   // label from &label before a loop stmt
+    int             lambda_counter_{0};  // counter for unique lambda names
+    std::unordered_map<std::string, ast::TypeExpr> fn_var_types_; // fn-typed vars/params
 
     // ── Type lowering (#14) ──────────────────────────────────────────────
     llvm::Type* lower_type(TypeId tid);
@@ -183,6 +197,13 @@ private:
 
     // ── Optimization pass (#37) ──────────────────────────────────────────
     void optimize();
+
+    // ── LTO: merge runtime bitcode before optimisation ───────────────────
+    // Loads DUXRT_BC_PATH, links runtime IR into mod_, marks linked
+    // definitions available_externally so they are not emitted in the
+    // output object (avoiding duplicate-symbol conflicts with duxrt.a).
+    // No-op and returns true when DUXRT_BC_PATH is empty (LTO disabled).
+    bool lto_merge_runtime();
 
     // ── DWARF debug info (#36) ───────────────────────────────────────────
     void debug_init(const std::string& source_path);
@@ -218,10 +239,12 @@ private:
     void gen_switch(const ast::SwitchStmt& s);
     void gen_match(const ast::MatchStmt& s);
     void gen_try_catch(const ast::TryCatchStmt& s);
+    void gen_throw(const ast::ThrowStmt& s);
     void gen_return(const ast::ReturnStmt& s);
     void gen_var_decl(const ast::VarDeclStmt& s);
     void gen_assert(const ast::AssertStmt& s);
     void gen_delete(const ast::DeleteStmt& s);
+    void gen_defer(const ast::DeferStmt& s);
 
     // ── Expression codegen ───────────────────────────────────────────────
     llvm::Value* gen_expr(const ast::Expr& e);
@@ -234,6 +257,7 @@ private:
     llvm::Value* gen_new(const ast::NewExpr& e);
     llvm::Value* gen_list(const ast::ListExpr& e);
     llvm::Value* gen_dict(const ast::DictExpr& e);
+    llvm::Value* gen_lambda(const ast::LambdaExpr& e);
 
     // ── Helpers ──────────────────────────────────────────────────────────
     llvm::Value* load_var(const std::string& name, const ast::SourceLoc& loc);
@@ -252,17 +276,25 @@ private:
                       TypeId tid = TypeRegistry::TID_UNKNOWN);
     llvm::Value* env_lookup(const std::string& name) const;
 
-    // RAII destructor emission helpers
-    // Emits a null-guarded dtor call + free() for a single scoped class instance.
+    // Scope cleanup helpers (RAII + defer)
+    // Emit all cleanups across all active scopes in LIFO order (gen_return).
+    void emit_all_scope_cleanups();
+    // Emit one cleanup entry (RAII dtor or inline defer block).
+    void emit_scope_cleanup(const ScopeCleanup& c);
+    // Convenience: emit a null-guarded dtor + free for a class instance.
     void emit_dtor(llvm::Value* alloca, const std::string& class_name);
-    // Emits dtors for all obj_scopes_ in LIFO order (used by gen_return).
-    void emit_all_obj_dtors();
 
     // Create an alloca, register its element type, and define it in the current scope
     llvm::Value* make_alloca(llvm::Type* t, const std::string& name);
 
     // Mangling
     static std::string mangle(const std::string& cls, const std::string& method);
+
+    // Emit a call or invoke depending on whether we're inside a try block.
+    // Use this for all user-visible calls that may throw.
+    llvm::Value* emit_call(llvm::FunctionCallee callee,
+                           llvm::ArrayRef<llvm::Value*> args,
+                           const std::string& name = "");
 
     // Runtime call helpers (intrinsics / duxrt stubs)
     llvm::Value* rt_malloc(llvm::Value* size);
