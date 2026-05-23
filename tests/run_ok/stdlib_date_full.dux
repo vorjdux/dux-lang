@@ -1,0 +1,37 @@
+import time.date
+import time.clock
+
+int main() {
+    long ts = clock.unix()
+    long yr = date.year(ts)
+    if yr > 2020 {
+        print("year ok")
+    }
+
+    long wd = date.weekday(ts)
+    if wd >= 0 {
+        if wd <= 6 {
+            print("weekday ok")
+        }
+    }
+
+    str iso = date.iso(ts)
+    if len(iso) == 10 {
+        print("iso ok")
+    }
+
+    # Round-trip: convert back to unix
+    long y2 = date.year(ts)
+    long mo2 = date.month(ts)
+    long d2 = date.day(ts)
+    long h2 = 12
+    long mi2 = 0
+    long s2 = 0
+    long rt = date.to_unix(y2, mo2, d2, h2, mi2, s2)
+    if rt > 0 {
+        print("to_unix ok")
+    }
+
+    print("date full ok")
+    return 0
+}

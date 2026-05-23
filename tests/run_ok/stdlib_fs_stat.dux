@@ -1,0 +1,40 @@
+import io.fs
+import io.file
+
+int main() {
+    str tmp = "/tmp/dux_test_stat.txt"
+    file.write(tmp, "hello stat")
+
+    Stat s = fs.stat(tmp)
+    if s != null {
+        print("stat ok")
+    }
+    if s.is_file {
+        print("is file ok")
+    }
+    if s.size > 0 {
+        print("size ok")
+    }
+    if s.mtime > 0 {
+        print("mtime ok")
+    }
+
+    Stat missing = fs.stat("/nonexistent/abc123")
+    if missing == null {
+        print("missing ok")
+    }
+
+    long sz = fs.size(tmp)
+    if sz > 0 {
+        print("size fn ok")
+    }
+
+    long mt = fs.mtime(tmp)
+    if mt > 0 {
+        print("mtime fn ok")
+    }
+
+    file.remove(tmp)
+    print("stat ok")
+    return 0
+}

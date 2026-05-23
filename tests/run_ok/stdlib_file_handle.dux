@@ -1,0 +1,45 @@
+import io.file
+
+int main() {
+    str tmp = "/tmp/dux_test_file_handle.txt"
+
+    # Write with File class
+    File fw = new File(tmp, "w")
+    if fw.is_open() {
+        print("open write ok")
+    }
+    fw.writeln("line one")
+    fw.writeln("line two")
+    fw.writeln("line three")
+    fw.close()
+
+    # Read with File class
+    File fr = new File(tmp, "r")
+    if fr.is_open() {
+        print("open read ok")
+    }
+    str all = fr.read_all()
+    if len(all) > 0 {
+        print("read all ok")
+    }
+    fr.close()
+
+    # Seek and tell
+    File fs = new File(tmp, "r")
+    long pos0 = fs.tell()
+    if pos0 == 0 {
+        print("tell ok")
+    }
+    long off = 5
+    fs.seek(off, 0)
+    long pos1 = fs.tell()
+    if pos1 == 5 {
+        print("seek ok")
+    }
+    fs.close()
+
+    # Cleanup
+    file.remove(tmp)
+    print("file handle ok")
+    return 0
+}
