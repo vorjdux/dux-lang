@@ -1,0 +1,218 @@
+import net.http
+
+namespace server {
+    extern "C" ptr  duxrt_http_parse_request(str raw) ;
+    extern "C" str  duxrt_http_req_method(ptr req) ;
+    extern "C" str  duxrt_http_req_path(ptr req) ;
+    extern "C" str  duxrt_http_req_query(ptr req) ;
+    extern "C" str  duxrt_http_req_header(ptr req, str name) ;
+    extern "C" str  duxrt_http_req_body(ptr req) ;
+    extern "C" void duxrt_http_req_free(ptr req) ;
+    extern "C" str  duxrt_http_format_response(int status, str status_text, ptr headers_dict, str body) ;
+    extern "C" ptr  duxrt_sock_new(int af, int sock_type, int proto) ;
+    extern "C" void duxrt_sock_close(ptr s) ;
+    extern "C" ptr  duxrt_sock_accept(ptr s) ;
+    extern "C" str  duxrt_sock_recv_str(ptr s, long max_bytes, int flags) ;
+    extern "C" long duxrt_sock_send_str(ptr s, str data, int flags) ;
+    extern "C" int  duxrt_sock_shutdown(ptr s, int how) ;
+    extern "C" str  duxrt_sock_peer_addr(ptr s) ;
+    extern "C" str  duxrt_sock_local_addr(ptr s) ;
+    extern "C" int  duxrt_sock_setsockopt_int(ptr s, int level, int optname, int val) ;
+    extern "C" int  duxrt_sock_bind_ip(ptr s, str addr, int port) ;
+    extern "C" int  duxrt_sock_listen(ptr s, int backlog) ;
+}
+
+# ServerRequest — an incoming HTTP request parsed by the server.
+class ServerRequest {
+    str     method
+    str     path
+    str     query
+    Headers headers
+    str     body
+    str     remote_addr
+    ptr     _raw
+
+    ServerRequest(ptr raw, str remote) {
+        this._raw        = raw
+        this.remote_addr = remote
+        this.headers     = new Headers()
+        if raw != null {
+            unsafe {
+                this.method = duxrt_http_req_method(raw)
+                this.path   = duxrt_http_req_path(raw)
+                this.query  = duxrt_http_req_query(raw)
+                this.body   = duxrt_http_req_body(raw)
+            }
+        }
+    }
+
+    # Look up a request header value by name
+    str header(str name) {
+        str r = ""
+        if this._raw != null {
+            unsafe {
+                r = duxrt_http_req_header(this._raw, name)
+            }
+        }
+        return r
+    }
+
+    ~ServerRequest() {
+        if this._raw != null {
+            unsafe {
+                duxrt_http_req_free(this._raw)
+            }
+        }
+    }
+}
+
+# ServerResponse — an HTTP response to send back to the client.
+class ServerResponse {
+    int     status
+    str     status_text
+    Headers headers
+    str     body
+
+    ServerResponse(int s, str st, str b) {
+        this.status      = s
+        this.status_text = st
+        this.body        = b
+        this.headers     = new Headers()
+    }
+
+    # Add or replace a response header
+    void add_header(str name, str value) {
+        this.headers.put(name, value)
+    }
+
+    # Serialize to a raw HTTP/1.1 response string
+    str to_wire() {
+        str r = ""
+        unsafe {
+            r = duxrt_http_format_response(this.status, this.status_text, null, this.body)
+        }
+        return r
+    }
+}
+
+# Convenience response constructors
+ServerResponse ok(str body) {
+    return new ServerResponse(200, "OK", body)
+}
+
+ServerResponse json_response(str body) {
+    return new ServerResponse(200, "OK", body)
+}
+
+ServerResponse not_found() {
+    return new ServerResponse(404, "Not Found", "Not Found")
+}
+
+ServerResponse server_error(str msg) {
+    return new ServerResponse(500, "Internal Server Error", msg)
+}
+
+ServerResponse redirect(str location) {
+    return new ServerResponse(302, "Found", location)
+}
+
+# HttpServer — simple blocking HTTP/1.1 server.
+# Call accept_request() in a loop, then respond with send_response().
+class HttpServer {
+    ptr  _listener
+    ptr  _client
+    int  _port
+    bool _running
+
+    HttpServer(int port, int backlog) {
+        this._port    = port
+        this._running = false
+        this._client  = null
+        ptr s = null
+        unsafe {
+            s = duxrt_sock_new(2, 1, 6)
+        }
+        this._listener = s
+        if this._listener != null {
+            unsafe {
+                duxrt_sock_setsockopt_int(this._listener, 1, 2, 1)
+                duxrt_sock_bind_ip(this._listener, "0.0.0.0", port)
+                duxrt_sock_listen(this._listener, backlog)
+            }
+            this._running = true
+        }
+    }
+
+    bool is_running() {
+        return this._running
+    }
+
+    # Return the local address:port the server is bound to
+    str local_addr() {
+        str r = ""
+        unsafe {
+            r = duxrt_sock_local_addr(this._listener)
+        }
+        return r
+    }
+
+    # Block until a client connects and sends a complete request.
+    # Returns a ServerRequest for the current connection.
+    ServerRequest accept_request() {
+        if this._client != null {
+            unsafe {
+                duxrt_sock_close(this._client)
+            }
+            this._client = null
+        }
+        ptr client = null
+        unsafe {
+            client = duxrt_sock_accept(this._listener)
+        }
+        this._client = client
+        str remote = ""
+        unsafe {
+            remote = duxrt_sock_peer_addr(client)
+        }
+        str raw = ""
+        unsafe {
+            raw = duxrt_sock_recv_str(client, 65536, 0)
+        }
+        ptr parsed = null
+        unsafe {
+            parsed = duxrt_http_parse_request(raw)
+        }
+        return new ServerRequest(parsed, remote)
+    }
+
+    # Send a ServerResponse to the current client and close the connection.
+    void send_response(ServerResponse resp) {
+        if this._client != null {
+            str wire = resp.to_wire()
+            unsafe {
+                duxrt_sock_send_str(this._client, wire, 0)
+                duxrt_sock_shutdown(this._client, 2)
+                duxrt_sock_close(this._client)
+            }
+            this._client = null
+        }
+    }
+
+    # Stop accepting new connections
+    void stop() {
+        this._running = false
+    }
+
+    ~HttpServer() {
+        if this._client != null {
+            unsafe {
+                duxrt_sock_close(this._client)
+            }
+        }
+        if this._listener != null {
+            unsafe {
+                duxrt_sock_close(this._listener)
+            }
+        }
+    }
+}

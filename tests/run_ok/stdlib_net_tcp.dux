@@ -1,0 +1,18 @@
+import net.tcp
+
+int main() {
+    # Create a TcpListener bound to loopback on an ephemeral port
+    TcpListener lst = new TcpListener("127.0.0.1", 0, 5)
+    if lst.is_bound() {
+        print("listener ok")
+    }
+
+    # Check local address
+    str addr = lst.local_addr()
+    if len(addr) > 0 {
+        print("addr ok")
+    }
+
+    print("tcp ok")
+    return 0
+}

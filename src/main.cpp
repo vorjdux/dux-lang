@@ -119,6 +119,9 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
             DUXRT_LIB_PATH,
             "-lm",
             "-lstdc++",  // C++ EH ABI (__gxx_personality_v0, __cxa_*)
+            "-lpthread", // POSIX threads (thread.pool, thread.chan, etc.)
+            "-lssl",     // OpenSSL TLS (net.tls)
+            "-lcrypto",  // OpenSSL crypto (net.tls)
             "-o", out_path.c_str(),
             nullptr
         };

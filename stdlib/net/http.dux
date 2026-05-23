@@ -1,0 +1,221 @@
+namespace http {
+    extern "C" ptr  duxrt_http_request(str method, str url, ptr headers_dict, str body, long timeout_ms) ;
+    extern "C" int  duxrt_http_resp_status(ptr resp) ;
+    extern "C" str  duxrt_http_resp_status_text(ptr resp) ;
+    extern "C" str  duxrt_http_resp_header(ptr resp, str name) ;
+    extern "C" str  duxrt_http_resp_body(ptr resp) ;
+    extern "C" void duxrt_http_resp_free(ptr resp) ;
+    extern "C" str  duxrt_http_last_error() ;
+
+    # C runtime declarations for the internal headers store
+    extern "C" ptr  duxrt_dict_new() ;
+    extern "C" void duxrt_dict_set(ptr d, ptr key, ptr val) ;
+    extern "C" ptr  duxrt_dict_get(ptr d, ptr key) ;
+    extern "C" int  duxrt_dict_has(ptr d, ptr key) ;
+    extern "C" void duxrt_dict_free(ptr d) ;
+    extern "C" ptr  duxrt_str_cstr(ptr s) ;
+
+    # Get last HTTP error message
+    str last_error() {
+        str r = ""
+        unsafe {
+            r = duxrt_http_last_error()
+        }
+        return r
+    }
+}
+
+# Headers — name/value string dictionary for HTTP headers.
+# Uses the raw C dict API internally to avoid dict-write limitations in Dux.
+# Note: 'set' and 'get' are reserved keywords in Dux; use put/fetch instead.
+class Headers {
+    ptr _h
+
+    Headers() {
+        unsafe {
+            this._h = duxrt_dict_new()
+        }
+    }
+
+    # Add or replace a header value
+    void put(str name, str value) {
+        unsafe {
+            ptr k = duxrt_str_cstr(name)
+            duxrt_dict_set(this._h, k, value)
+        }
+    }
+
+    # Look up a header value (returns empty string if not present)
+    str fetch(str name) {
+        str r = ""
+        unsafe {
+            ptr k = duxrt_str_cstr(name)
+            ptr v = duxrt_dict_get(this._h, k)
+            if v != null {
+                r = v
+            }
+        }
+        return r
+    }
+
+    # Check if a header is present
+    bool has(str name) {
+        int r = 0
+        unsafe {
+            ptr k = duxrt_str_cstr(name)
+            r = duxrt_dict_has(this._h, k)
+        }
+        return r != 0
+    }
+
+}
+
+# Response — parsed HTTP response from a server.
+class Response {
+    int     status
+    str     status_text
+    Headers headers
+    str     body
+    ptr     _raw
+
+    Response(ptr raw_resp) {
+        this._raw = raw_resp
+        this.headers = new Headers()
+        if raw_resp != null {
+            unsafe {
+                this.status = duxrt_http_resp_status(raw_resp)
+                this.status_text = duxrt_http_resp_status_text(raw_resp)
+                this.body = duxrt_http_resp_body(raw_resp)
+            }
+        }
+    }
+
+    # Return true if status is 2xx
+    bool ok() {
+        return this.status >= 200 and this.status < 300
+    }
+
+    # Look up a response header value by name
+    str header(str name) {
+        str r = ""
+        if this._raw != null {
+            unsafe {
+                r = duxrt_http_resp_header(this._raw, name)
+            }
+        }
+        return r
+    }
+
+    ~Response() {
+        if this._raw != null {
+            unsafe {
+                duxrt_http_resp_free(this._raw)
+            }
+        }
+    }
+}
+
+# Request — HTTP request to send via HttpClient.
+class Request {
+    str     method
+    str     url
+    Headers headers
+    str     body
+
+    Request(str m, str u) {
+        this.method  = m
+        this.url     = u
+        this.headers = new Headers()
+        this.body    = ""
+    }
+
+    # Add a request header
+    void header(str name, str value) {
+        this.headers.put(name, value)
+    }
+
+    # Set Content-Type header
+    void content_type(str ct) {
+        this.headers.put("Content-Type", ct)
+    }
+}
+
+# HttpClient — configurable HTTP/1.1 client.
+class HttpClient {
+    long    _timeout_ms
+    Headers _default_headers
+
+    HttpClient() {
+        this._timeout_ms    = 30000
+        this._default_headers = new Headers()
+    }
+
+    # Set request timeout in milliseconds
+    void timeout(long ms) {
+        this._timeout_ms = ms
+    }
+
+    # Set User-Agent header for all requests
+    void user_agent(str ua) {
+        this._default_headers.put("User-Agent", ua)
+    }
+
+    # Set a default header sent with every request
+    void add_header(str name, str value) {
+        this._default_headers.put(name, value)
+    }
+
+    # Send a Request; returns a Response.
+    Response send(Request req) {
+        ptr raw = null
+        unsafe {
+            raw = duxrt_http_request(req.method, req.url, null, req.body, this._timeout_ms)
+        }
+        return new Response(raw)
+    }
+
+    # Convenience: HTTP GET
+    Response get_url(str url) {
+        Request req = new Request("GET", url)
+        return this.send(req)
+    }
+
+    # Convenience: HTTP POST with body and content type
+    Response post_url(str url, str body, str content_type) {
+        Request req = new Request("POST", url)
+        req.body = body
+        req.content_type(content_type)
+        return this.send(req)
+    }
+
+    # Convenience: HTTP PUT with body and content type
+    Response put_url(str url, str body, str content_type) {
+        Request req = new Request("PUT", url)
+        req.body = body
+        req.content_type(content_type)
+        return this.send(req)
+    }
+
+    # Convenience: HTTP DELETE
+    Response delete_url(str url) {
+        Request req = new Request("DELETE", url)
+        return this.send(req)
+    }
+}
+
+# Status code helpers
+bool is_success(int code) {
+    return code >= 200 and code < 300
+}
+
+bool is_redirect(int code) {
+    return code >= 300 and code < 400
+}
+
+bool is_client_err(int code) {
+    return code >= 400 and code < 500
+}
+
+bool is_server_err(int code) {
+    return code >= 500 and code < 600
+}

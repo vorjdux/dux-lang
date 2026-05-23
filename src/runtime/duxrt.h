@@ -392,6 +392,66 @@ DuxStr*  duxrt_regex_replace(void* r, DuxStr* text, DuxStr* replacement);
 DuxList* duxrt_regex_find_all(void* r, DuxStr* text);
 void     duxrt_regex_free(void* r);
 
+/* ── net.socket — POSIX BSD socket wrappers ──────────────────────────────── */
+void*   duxrt_sock_new(int32_t af, int32_t sock_type, int32_t proto);
+void    duxrt_sock_close(void* s);
+int32_t duxrt_sock_bind_ip(void* s, DuxStr* addr, int32_t port);
+int32_t duxrt_sock_bind_unix(void* s, DuxStr* path);
+int32_t duxrt_sock_connect_ip(void* s, DuxStr* addr, int32_t port);
+int32_t duxrt_sock_connect_unix(void* s, DuxStr* path);
+int32_t duxrt_sock_listen(void* s, int32_t backlog);
+void*   duxrt_sock_accept(void* s);
+int64_t duxrt_sock_send_str(void* s, DuxStr* data, int32_t flags);
+DuxStr* duxrt_sock_recv_str(void* s, int64_t max_bytes, int32_t flags);
+int64_t duxrt_sock_sendto_ip(void* s, DuxStr* data, DuxStr* addr, int32_t port);
+DuxStr* duxrt_sock_recvfrom_str(void* s, int64_t max_bytes);
+DuxStr* duxrt_sock_last_sender(void);
+int32_t duxrt_sock_setsockopt_int(void* s, int32_t level, int32_t optname, int32_t val);
+int32_t duxrt_sock_getsockopt_int(void* s, int32_t level, int32_t optname);
+int32_t duxrt_sock_shutdown(void* s, int32_t how);
+int32_t duxrt_sock_set_nonblocking(void* s, int32_t enable);
+int32_t duxrt_sock_set_timeout_ms(void* s, int32_t direction, int64_t ms);
+int32_t duxrt_sock_fd(void* s);
+DuxStr* duxrt_sock_last_error(void);
+DuxStr* duxrt_sock_peer_addr(void* s);
+DuxStr* duxrt_sock_local_addr(void* s);
+int32_t duxrt_sock_join_multicast(void* s, DuxStr* group);
+int32_t duxrt_sock_leave_multicast(void* s, DuxStr* group);
+
+/* ── net.tls — OpenSSL TLS wrappers ──────────────────────────────────────── */
+void*   duxrt_tls_ctx_new_client(void);
+void*   duxrt_tls_ctx_new_server(DuxStr* cert_path, DuxStr* key_path);
+void    duxrt_tls_ctx_free(void* ctx);
+void*   duxrt_tls_connect(void* ctx, DuxStr* host, int32_t port);
+void*   duxrt_tls_accept(void* ctx, int32_t tcp_fd);
+int64_t duxrt_tls_send(void* tls, DuxStr* data);
+DuxStr* duxrt_tls_recv(void* tls, int64_t cap);
+DuxStr* duxrt_tls_peer_cert_subject(void* tls);
+void    duxrt_tls_close(void* tls);
+DuxStr* duxrt_tls_last_error(void);
+
+/* ── net.http — HTTP/1.1 client and server ───────────────────────────────── */
+void*   duxrt_http_request(DuxStr* method, DuxStr* url,
+                            void* headers_dict, DuxStr* body,
+                            int64_t timeout_ms);
+int32_t duxrt_http_resp_status(void* resp);
+DuxStr* duxrt_http_resp_status_text(void* resp);
+DuxStr* duxrt_http_resp_header(void* resp, DuxStr* name);
+DuxStr* duxrt_http_resp_body(void* resp);
+void    duxrt_http_resp_free(void* resp);
+DuxStr* duxrt_http_last_error(void);
+
+void*   duxrt_http_parse_request(DuxStr* raw);
+DuxStr* duxrt_http_req_method(void* req);
+DuxStr* duxrt_http_req_path(void* req);
+DuxStr* duxrt_http_req_query(void* req);
+DuxStr* duxrt_http_req_header(void* req, DuxStr* name);
+DuxStr* duxrt_http_req_body(void* req);
+void    duxrt_http_req_free(void* req);
+
+DuxStr* duxrt_http_format_response(int32_t status, DuxStr* status_text,
+                                    void* headers_dict, DuxStr* body);
+
 /* ── Exceptions ──────────────────────────────────────────────────────────── */
 typedef struct DuxException {
     const char* type_name;
