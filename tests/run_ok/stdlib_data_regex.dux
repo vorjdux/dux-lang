@@ -1,0 +1,64 @@
+import data.regex
+
+int main() {
+    # Basic construction and validity
+    Regex r = new Regex("[0-9]+")
+    if r.is_valid() {
+        print("valid ok")
+    }
+
+    # matches
+    if r.matches("abc123def") {
+        print("matches ok")
+    }
+    if !r.matches("abcdef") {
+        print("no_match ok")
+    }
+
+    # find
+    str m = r.find("abc123def")
+    if m == "123" {
+        print("find ok")
+    }
+    str nm = r.find("abcdef")
+    if nm == "" {
+        print("find_none ok")
+    }
+
+    # find_all
+    list all = r.find_all("1a22b333")
+    if len(all) == 3 {
+        print("find_all ok")
+    }
+
+    # replace / replace_all
+    str rep = r.replace("abc123def456", "NUM")
+    if rep == "abcNUMdef456" {
+        print("replace ok")
+    }
+    str repall = r.replace_all("abc123def456", "NUM")
+    if repall == "abcNUMdefNUM" {
+        print("replace_all ok")
+    }
+
+    # split
+    list parts = r.split("1a22b333")
+    if len(parts) == 4 {
+        print("split ok")
+    }
+
+    # capture groups
+    Regex cap = new Regex("([a-z]+)([0-9]+)")
+    list caps = cap.captures("abc123")
+    if len(caps) == 3 {
+        print("captures ok")
+    }
+
+    # one-shot via namespace API
+    if regex.is_match("[0-9]+", "hello99world") {
+        print("is_match ok")
+    }
+
+    print("regex ok")
+    return 0
+}

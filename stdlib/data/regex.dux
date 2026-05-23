@@ -1,12 +1,31 @@
+# data.regex — POSIX Extended Regular Expression support
+# Usage: import data.regex
+
 namespace regex {
     extern "C" ptr  duxrt_regex_compile(str pattern) ;
+    extern "C" int  duxrt_regex_is_valid(ptr handle) ;
     extern "C" int  duxrt_regex_matches(ptr handle, str text) ;
     extern "C" str  duxrt_regex_find(ptr handle, str text) ;
-    extern "C" str  duxrt_regex_replace(ptr handle, str text, str replacement) ;
     extern "C" list duxrt_regex_find_all(ptr handle, str text) ;
+    extern "C" list duxrt_regex_captures(ptr handle, str text) ;
+    extern "C" str  duxrt_regex_replace(ptr handle, str text, str replacement) ;
+    extern "C" str  duxrt_regex_replace_all(ptr handle, str text, str replacement) ;
+    extern "C" list duxrt_regex_split(ptr handle, str text) ;
     extern "C" void duxrt_regex_free(ptr handle) ;
 
-    # Compile a POSIX Extended Regular Expression pattern. Returns a handle.
+    # Low-level namespace API (opaque ptr handle, compatible with old stdlib_regex test)
+    bool is_match(str pattern, str text) {
+        ptr h = null
+        unsafe {
+            h = duxrt_regex_compile(pattern)
+        }
+        int r = 0
+        unsafe {
+            r = duxrt_regex_matches(h, text)
+            duxrt_regex_free(h)
+        }
+        return r != 0
+    }
     ptr compile(str pattern) {
         ptr r = null
         unsafe {
@@ -14,17 +33,6 @@ namespace regex {
         }
         return r
     }
-
-    # Test if pattern matches anywhere in text.
-    bool test(ptr handle, str text) {
-        int r = 0
-        unsafe {
-            r = duxrt_regex_matches(handle, text)
-        }
-        return r != 0
-    }
-
-    # Find first match, returns the matched substring (or "" if no match).
     str find(ptr handle, str text) {
         str r = ""
         unsafe {
@@ -32,8 +40,6 @@ namespace regex {
         }
         return r
     }
-
-    # Replace first match with replacement string.
     str replace(ptr handle, str text, str replacement) {
         str r = ""
         unsafe {
@@ -41,8 +47,6 @@ namespace regex {
         }
         return r
     }
-
-    # Find all matches; returns list of matched substrings.
     list find_all(ptr handle, str text) {
         list r = []
         unsafe {
@@ -50,27 +54,106 @@ namespace regex {
         }
         return r
     }
-
-    # Free compiled pattern resources.
     void free(ptr handle) {
         unsafe {
             duxrt_regex_free(handle)
         }
     }
+}
 
-    # One-shot: compile pattern, test text, return bool.
-    bool is_match(str pattern, str text) {
-        ptr rx = null
+# Regex — a compiled POSIX Extended Regular Expression.
+# Usage:
+#   Regex r = new Regex("[0-9]+")
+#   if r.matches("abc123") { print("match") }
+class Regex {
+    ptr _h
+
+    Regex(str pattern) {
         unsafe {
-            rx = duxrt_regex_compile(pattern)
+            this._h = duxrt_regex_compile(pattern)
         }
+    }
+
+    # True if the pattern compiled without errors.
+    bool is_valid() {
         int r = 0
         unsafe {
-            r = duxrt_regex_matches(rx, text)
-        }
-        unsafe {
-            duxrt_regex_free(rx)
+            r = duxrt_regex_is_valid(this._h)
         }
         return r != 0
     }
+
+    # True if the pattern matches anywhere in text.
+    bool matches(str text) {
+        int r = 0
+        unsafe {
+            r = duxrt_regex_matches(this._h, text)
+        }
+        return r != 0
+    }
+
+    # Return the first matching substring, or "" if no match.
+    str find(str text) {
+        str r = ""
+        unsafe {
+            r = duxrt_regex_find(this._h, text)
+        }
+        return r
+    }
+
+    # Return all non-overlapping matching substrings.
+    list find_all(str text) {
+        list r = []
+        unsafe {
+            r = duxrt_regex_find_all(this._h, text)
+        }
+        return r
+    }
+
+    # Return capture groups for the first match as a list.
+    # Index 0 = full match, 1..N = capture groups.
+    # Returns empty list if no match.
+    list captures(str text) {
+        list r = []
+        unsafe {
+            r = duxrt_regex_captures(this._h, text)
+        }
+        return r
+    }
+
+    # Replace the first match with replacement.
+    str replace(str text, str replacement) {
+        str r = ""
+        unsafe {
+            r = duxrt_regex_replace(this._h, text, replacement)
+        }
+        return r
+    }
+
+    # Replace all non-overlapping matches with replacement.
+    str replace_all(str text, str replacement) {
+        str r = ""
+        unsafe {
+            r = duxrt_regex_replace_all(this._h, text, replacement)
+        }
+        return r
+    }
+
+    # Split text around matches; returns parts between matches.
+    list split(str text) {
+        list r = []
+        unsafe {
+            r = duxrt_regex_split(this._h, text)
+        }
+        return r
+    }
+
+    ~Regex() {
+        if this._h != null {
+            unsafe {
+                duxrt_regex_free(this._h)
+            }
+        }
+    }
 }
+
