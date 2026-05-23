@@ -1,0 +1,11 @@
+import sys.process
+
+int main() {
+    str out = process.capture("echo hello_from_process")
+    print(out)
+    int code = process.run("true")
+    if code == 0 {
+        print("run ok")
+    }
+    return 0
+}

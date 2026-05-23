@@ -1,0 +1,147 @@
+namespace path {
+    extern "C" str duxrt_fs_realpath(str p) ;
+    extern "C" str duxrt_fs_getcwd() ;
+    extern "C" str duxrt_str_slice(str s, long start, long end) ;
+
+    # Join two path segments with "/" separator.
+    str join(str a, str b) {
+        if len(a) == 0 {
+            return b
+        }
+        if len(b) == 0 {
+            return a
+        }
+        str last = a[len(a) - 1]
+        if last == "/" {
+            return a + b
+        }
+        return a + "/" + b
+    }
+
+    # Final component of a path (filename + extension).
+    str basename(str p) {
+        long i = len(p) - 1
+        while i >= 0 {
+            str ch = p[i]
+            if ch == "/" {
+                str result = ""
+                unsafe {
+                    result = duxrt_str_slice(p, i + 1, len(p))
+                }
+                return result
+            }
+            i = i - 1
+        }
+        return p
+    }
+
+    # Parent directory.
+    str dirname(str p) {
+        long i = len(p) - 1
+        str slash = "/"
+        while i >= 0 {
+            str ch = p[i]
+            if ch == "/" {
+                if i == 0 {
+                    return slash
+                }
+                str result = ""
+                unsafe {
+                    result = duxrt_str_slice(p, 0, i)
+                }
+                return result
+            }
+            i = i - 1
+        }
+        return "."
+    }
+
+    # File extension including the dot; "" if none.
+    str ext(str p) {
+        long n = len(p) - 1
+        while n >= 0 {
+            str ch = p[n]
+            if ch == "/" {
+                return ""
+            }
+            if ch == "." {
+                if n == 0 {
+                    return ""
+                }
+                str result = ""
+                unsafe {
+                    result = duxrt_str_slice(p, n, len(p))
+                }
+                return result
+            }
+            n = n - 1
+        }
+        return ""
+    }
+
+    # Basename without extension.
+    str stem(str p) {
+        long n = len(p) - 1
+        long dot_pos = -1
+        while n >= 0 {
+            str ch = p[n]
+            if ch == "/" {
+                if dot_pos < 0 {
+                    str result = ""
+                    unsafe {
+                        result = duxrt_str_slice(p, n + 1, len(p))
+                    }
+                    return result
+                }
+                str result = ""
+                unsafe {
+                    result = duxrt_str_slice(p, n + 1, dot_pos)
+                }
+                return result
+            }
+            if ch == "." {
+                if dot_pos < 0 {
+                    if n > 0 {
+                        dot_pos = n
+                    }
+                }
+            }
+            n = n - 1
+        }
+        if dot_pos < 0 {
+            return p
+        }
+        str result = ""
+        unsafe {
+            result = duxrt_str_slice(p, 0, dot_pos)
+        }
+        return result
+    }
+
+    # Resolve to absolute path (uses realpath(3)).
+    str abs(str p) {
+        str result = ""
+        unsafe {
+            result = duxrt_fs_realpath(p)
+        }
+        return result
+    }
+
+    # Current working directory.
+    str cwd() {
+        str result = ""
+        unsafe {
+            result = duxrt_fs_getcwd()
+        }
+        return result
+    }
+
+    # True if path starts with "/".
+    bool is_abs(str p) {
+        if len(p) == 0 {
+            return false
+        }
+        str first = p[0]
+        return first == "/"
+    }
+}

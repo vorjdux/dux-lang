@@ -1,0 +1,18 @@
+import time.clock
+
+int main() {
+    long ns = clock.now_ns()
+    if ns > 0 {
+        print("ns ok")
+    }
+    double secs = clock.now()
+    if secs > 0.0 {
+        print("secs ok")
+    }
+    long unix = clock.unix()
+    if unix > 1000000000 {
+        print("unix ok")
+    }
+    print("clock ok")
+    return 0
+}

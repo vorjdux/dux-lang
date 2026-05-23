@@ -1,0 +1,72 @@
+namespace date {
+    extern "C" long duxrt_date_year(long unix_ts) ;
+    extern "C" long duxrt_date_month(long unix_ts) ;
+    extern "C" long duxrt_date_day(long unix_ts) ;
+    extern "C" long duxrt_date_hour(long unix_ts) ;
+    extern "C" long duxrt_date_minute(long unix_ts) ;
+    extern "C" long duxrt_date_second(long unix_ts) ;
+    extern "C" str  duxrt_date_format(long unix_ts, str fmt) ;
+
+    # Year from Unix timestamp.
+    long year(long ts) {
+        long r = 0
+        unsafe {
+            r = duxrt_date_year(ts)
+        }
+        return r
+    }
+
+    # Month from Unix timestamp (1-12).
+    long month(long ts) {
+        long r = 0
+        unsafe {
+            r = duxrt_date_month(ts)
+        }
+        return r
+    }
+
+    # Day of month from Unix timestamp (1-31).
+    long day(long ts) {
+        long r = 0
+        unsafe {
+            r = duxrt_date_day(ts)
+        }
+        return r
+    }
+
+    # Hour from Unix timestamp (0-23).
+    long hour(long ts) {
+        long r = 0
+        unsafe {
+            r = duxrt_date_hour(ts)
+        }
+        return r
+    }
+
+    # Minute from Unix timestamp (0-59).
+    long minute(long ts) {
+        long r = 0
+        unsafe {
+            r = duxrt_date_minute(ts)
+        }
+        return r
+    }
+
+    # Second from Unix timestamp (0-59).
+    long second(long ts) {
+        long r = 0
+        unsafe {
+            r = duxrt_date_second(ts)
+        }
+        return r
+    }
+
+    # Format a Unix timestamp using strftime format string.
+    str format(long ts, str fmt) {
+        str r = ""
+        unsafe {
+            r = duxrt_date_format(ts, fmt)
+        }
+        return r
+    }
+}

@@ -1,0 +1,25 @@
+import io.file
+
+int main() {
+    str tmp = "/tmp/dux_test_file_stdlib.txt"
+    bool w = file.write(tmp, "hello world")
+    if w {
+        print("write ok")
+    }
+    str content = file.read(tmp)
+    print(content)
+    bool ex = file.exists(tmp)
+    if ex {
+        print("exists ok")
+    }
+    bool rm = file.remove(tmp)
+    if rm {
+        print("remove ok")
+    }
+    bool gone = file.exists(tmp)
+    if gone {
+        print("should not print")
+    }
+    print("file ok")
+    return 0
+}

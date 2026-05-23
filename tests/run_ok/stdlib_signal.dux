@@ -1,0 +1,18 @@
+import sys.signal
+
+int main() {
+    long sigint = signal.SIGINT()
+    if sigint > 0 {
+        print("SIGINT ok")
+    }
+    long sigterm = signal.SIGTERM()
+    if sigterm > 0 {
+        print("SIGTERM ok")
+    }
+    bool ok = signal.ignore(signal.SIGPIPE())
+    if ok {
+        print("ignore ok")
+    }
+    signal.reset(signal.SIGPIPE())
+    return 0
+}

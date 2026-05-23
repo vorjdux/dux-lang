@@ -1,0 +1,19 @@
+import math.random
+
+int main() {
+    random.seed(12345)
+    long n = random.integer(0, 100)
+    if n >= 0 {
+        if n < 100 {
+            print("int in range")
+        }
+    }
+    double d = random.uniform(0.0, 1.0)
+    if d >= 0.0 {
+        if d <= 1.0 {
+            print("double in range")
+        }
+    }
+    print("random ok")
+    return 0
+}

@@ -1,0 +1,23 @@
+import io.path
+
+int main() {
+    str j = path.join("foo", "bar")
+    print(j)
+    str b = path.basename("/a/b/c.txt")
+    print(b)
+    str d = path.dirname("/a/b/c.txt")
+    print(d)
+    str e = path.ext("hello.dux")
+    print(e)
+    str s = path.stem("hello.dux")
+    print(s)
+    bool is = path.is_abs("/tmp")
+    if is {
+        print("abs ok")
+    }
+    bool not_is = path.is_abs("relative")
+    if not_is {
+        print("should not print")
+    }
+    return 0
+}

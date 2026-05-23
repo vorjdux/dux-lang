@@ -73,6 +73,8 @@ TypeId Sema::type_from_te(const ast::TypeExpr& te) const {
 bool Sema::require_assignable(TypeId from, TypeId to,
                               const ast::SourceLoc& loc, const std::string& ctx) {
     if (types_.assignable(from, to)) return true;
+    // Inside unsafe blocks ptr (object) can be reinterpreted as any type
+    if (in_unsafe_ && (from == TR::TID_OBJECT || to == TR::TID_OBJECT)) return true;
     std::ostringstream os;
     os << ctx << ": cannot assign '" << types_.name_of(from)
        << "' to '" << types_.name_of(to) << "'";
@@ -399,7 +401,13 @@ void Sema::check_stmt(const ast::Stmt& s) {
     if (auto* d  = dynamic_cast<const ast::DeleteStmt*>(&s))    { check_delete(*d);   return; }
     // LabeledStmt, etc. — visit the inner stmt
     if (auto* ls = dynamic_cast<const ast::LabeledStmt*>(&s))   { check_stmt(*ls->stmt); return; }
-    if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s))    { check_stmts(us->body); return; }
+    if (auto* us = dynamic_cast<const ast::UnsafeStmt*>(&s)) {
+        bool prev = in_unsafe_;
+        in_unsafe_ = true;
+        check_stmts(us->body);
+        in_unsafe_ = prev;
+        return;
+    }
 }
 
 void Sema::check_block(const ast::BlockStmt& b) {
