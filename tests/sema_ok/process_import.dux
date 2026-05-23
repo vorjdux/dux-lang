@@ -1,0 +1,8 @@
+import sys.process
+
+fn main() {
+    let pid = process.pid()
+    let ppid = process.ppid()
+    let code = process.run("true")
+    let out = process.capture("echo hello")
+}

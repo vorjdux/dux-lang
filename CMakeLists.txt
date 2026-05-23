@@ -62,6 +62,7 @@ add_library(duxrt STATIC
     src/runtime/bytes_rt.c
     src/runtime/random_rt.c
     src/runtime/thread_rt.c
+    src/runtime/process_rt.c
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)

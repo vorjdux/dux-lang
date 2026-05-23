@@ -1,0 +1,18 @@
+import sys.process
+
+fn main() {
+    let pid = process.pid()
+    if pid > 0 {
+        println("has pid")
+    }
+    let out = process.capture("echo captured")
+    println(out)
+    let code = process.run("true")
+    if code == 0 {
+        println("true ok")
+    }
+    let code2 = process.run("false")
+    if code2 != 0 {
+        println("false ok")
+    }
+}

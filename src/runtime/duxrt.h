@@ -181,6 +181,14 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── Process management (sys.process module) ─────────────────────────────── */
+int64_t  duxrt_process_run(DuxStr* cmd);
+DuxStr*  duxrt_process_capture(DuxStr* cmd);
+int64_t  duxrt_process_pid(void);
+int64_t  duxrt_process_ppid(void);
+int64_t  duxrt_process_spawn(DuxStr* prog, DuxList* args);
+int64_t  duxrt_process_wait(int64_t pid);
+
 /* ── Thread primitives (thread module) ──────────────────────────────────── */
 /* DuxThread and DuxMutex are opaque; all access via functions below. */
 typedef struct DuxThread DuxThread;

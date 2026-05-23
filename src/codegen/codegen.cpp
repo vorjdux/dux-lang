@@ -619,6 +619,14 @@ using StdlibMod = std::unordered_map<std::string, StdlibFn>;
 
 static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
     static const std::unordered_map<std::string, StdlibMod> tbl = {
+        {"process", {
+            {"run",     {"duxrt_process_run",     TR::TID_LONG,   {TR::TID_STR}}},
+            {"capture", {"duxrt_process_capture", TR::TID_STR,    {TR::TID_STR}}},
+            {"pid",     {"duxrt_process_pid",     TR::TID_LONG,   {}}},
+            {"ppid",    {"duxrt_process_ppid",    TR::TID_LONG,   {}}},
+            {"spawn",   {"duxrt_process_spawn",   TR::TID_LONG,   {TR::TID_STR, TR::TID_LIST}}},
+            {"wait",    {"duxrt_process_wait",    TR::TID_LONG,   {TR::TID_LONG}}},
+        }},
         {"thread", {
             {"sleep_ms", {"duxrt_thread_sleep_ms", TR::TID_VOID,   {TR::TID_LONG}}},
             {"id",       {"duxrt_thread_id",       TR::TID_LONG,   {}}},

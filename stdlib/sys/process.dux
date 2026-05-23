@@ -1,0 +1,12 @@
+// sys.process — process management
+//
+// Import with:
+//   import sys.process
+//
+// Usage:
+//   let code = process.run("ls -l")      // run shell command → exit code
+//   let out  = process.capture("echo hi") // run and capture stdout → str
+//   let pid  = process.pid()              // current PID → int
+//   let ppid = process.ppid()             // parent PID → int
+//   let cpid = process.spawn("/bin/ls", args_list) // fork+exec → child PID
+//   let code = process.wait(cpid)         // wait for child → exit code
