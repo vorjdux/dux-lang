@@ -27,7 +27,6 @@ namespace http {
 
 # Headers — name/value string dictionary for HTTP headers.
 # Uses the raw C dict API internally to avoid dict-write limitations in Dux.
-# Note: 'set' and 'get' are reserved keywords in Dux; use put/fetch instead.
 class Headers {
     ptr _h
 
@@ -38,7 +37,7 @@ class Headers {
     }
 
     # Add or replace a header value
-    void put(str name, str value) {
+    void set(str name, str value) {
         unsafe {
             ptr k = duxrt_str_cstr(name)
             duxrt_dict_set(this._h, k, value)
@@ -46,7 +45,7 @@ class Headers {
     }
 
     # Look up a header value (returns empty string if not present)
-    str fetch(str name) {
+    str get(str name) {
         str r = ""
         unsafe {
             ptr k = duxrt_str_cstr(name)
@@ -131,12 +130,12 @@ class Request {
 
     # Add a request header
     void header(str name, str value) {
-        this.headers.put(name, value)
+        this.headers.set(name, value)
     }
 
     # Set Content-Type header
     void content_type(str ct) {
-        this.headers.put("Content-Type", ct)
+        this.headers.set("Content-Type", ct)
     }
 }
 
@@ -157,12 +156,12 @@ class HttpClient {
 
     # Set User-Agent header for all requests
     void user_agent(str ua) {
-        this._default_headers.put("User-Agent", ua)
+        this._default_headers.set("User-Agent", ua)
     }
 
     # Set a default header sent with every request
     void add_header(str name, str value) {
-        this._default_headers.put(name, value)
+        this._default_headers.set(name, value)
     }
 
     # Send a Request; returns a Response.
