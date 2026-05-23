@@ -1,0 +1,24 @@
+import async.task
+
+int main() {
+    # sleep_ms should not crash
+    task.sleep_ms(1)
+    print("sleep ok")
+
+    # yield_now should not crash
+    task.yield_now()
+    print("yield ok")
+
+    # is_running returns false before run() is called
+    if !task.is_running() {
+        print("not_running ok")
+    }
+
+    # stop() before run() causes run() to return immediately
+    task.stop()
+    task.run()
+    print("run_stop ok")
+
+    print("task ok")
+    return 0
+}

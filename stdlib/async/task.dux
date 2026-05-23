@@ -1,0 +1,52 @@
+# async.task — cooperative task scheduler (Phase 1)
+#
+# Phase 1 provides time-based cooperative yield and event-loop control.
+# Phase 2 will add async/await keywords with LLVM coroutine lowering.
+#
+# Usage: import async.task
+
+namespace task {
+    extern "C" void duxrt_async_sleep_ms(long ms) ;
+    extern "C" void duxrt_async_yield() ;
+    extern "C" void duxrt_async_run() ;
+    extern "C" void duxrt_async_stop() ;
+    extern "C" int  duxrt_async_is_running() ;
+
+    # Yield control for ms milliseconds (cooperative sleep).
+    void sleep_ms(long ms) {
+        unsafe {
+            duxrt_async_sleep_ms(ms)
+        }
+    }
+
+    # Cooperative yield — give other threads / tasks a chance to run.
+    void yield_now() {
+        unsafe {
+            duxrt_async_yield()
+        }
+    }
+
+    # Run the event loop until stop() is called.
+    # If stop() was called before run(), returns immediately.
+    void run() {
+        unsafe {
+            duxrt_async_run()
+        }
+    }
+
+    # Signal the event loop to stop.
+    void stop() {
+        unsafe {
+            duxrt_async_stop()
+        }
+    }
+
+    # Returns true while the event loop is executing inside run().
+    bool is_running() {
+        int r = 0
+        unsafe {
+            r = duxrt_async_is_running()
+        }
+        return r != 0
+    }
+}
