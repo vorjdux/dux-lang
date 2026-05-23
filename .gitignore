@@ -1,6 +1,6 @@
 # CMake build directory
 build/
-build-*/
+build*/
 cmake-build-*/
 Testing/
 
