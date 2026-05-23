@@ -95,6 +95,7 @@ ALNUM   [a-zA-Z0-9_]
 "import"     { need_semi = false; return yy::parser::make_KW_IMPORT(loc);    }
 "class"      { need_semi = false; return yy::parser::make_KW_CLASS(loc);     }
 "interface"  { need_semi = false; return yy::parser::make_KW_INTERFACE(loc); }
+"enum"       { need_semi = false; return yy::parser::make_KW_ENUM(loc);      }
 "public"     { need_semi = false; return yy::parser::make_KW_PUBLIC(loc);    }
 "private"    { need_semi = false; return yy::parser::make_KW_PRIVATE(loc);   }
 "protected"  { need_semi = false; return yy::parser::make_KW_PROTECTED(loc); }

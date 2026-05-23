@@ -173,6 +173,9 @@ llvm::Type* Codegen::lower_type(TypeId tid) {
         case TR::TID_OBJECT: return ptr_type();
         case TR::TID_NULL:   return ptr_type();
         default:
+            // User-defined types: enums are i32, classes are heap-allocated ptr
+            if (tid >= 0 && types_.info(tid).kind == sema::TypeKind::Enum)
+                return llvm::Type::getInt32Ty(*ctx_);
             return ptr_type(); // user-defined class types are heap-allocated
     }
 }
@@ -188,9 +191,26 @@ void Codegen::build_layouts(const ast::DeclList& decls) {
     for (const auto& dp : decls) {
         if (auto* c = dynamic_cast<const ast::ClassDecl*>(dp.get()))
             build_class_layout(*c);
+        else if (auto* e = dynamic_cast<const ast::EnumDecl*>(dp.get()))
+            build_enum_type(*e);
         else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(dp.get()))
             build_layouts(ns->decls);
     }
+}
+
+void Codegen::build_enum_type(const ast::EnumDecl& e) {
+    // Register the enum type in codegen's type registry and record variant tags
+    sema::TypeId id = types_.intern(e.name, sema::TypeKind::Enum);
+    sema::TypeInfo& ti = types_.info(id);
+    ti.variants.clear();
+    int32_t tag = 0;
+    for (const auto& v : e.variants) {
+        sema::EnumVariantInfo vi;
+        vi.name = v.name;
+        vi.tag  = tag++;
+        ti.variants.push_back(vi);
+    }
+    enum_types_[e.name] = id;
 }
 
 void Codegen::build_class_layout(const ast::ClassDecl& c) {
@@ -327,6 +347,7 @@ void Codegen::gen_decl(const ast::Decl& d, const std::string& prefix) {
             gen_func(*f, mangle(prefix, f->name));
     }
     else if (auto* c  = dynamic_cast<const ast::ClassDecl*>(&d))     gen_class(*c);
+    else if (auto* e  = dynamic_cast<const ast::EnumDecl*>(&d))      gen_enum(*e);
     else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(&d)) gen_namespace(*ns);
     else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(&d)) {
         std::vector<llvm::Type*> ptypes;
@@ -334,6 +355,12 @@ void Codegen::gen_decl(const ast::Decl& d, const std::string& prefix) {
         get_or_declare_rt(ext->name, lower_type_expr(ext->ret), ptypes);
     }
     // ImportDecl: nothing to generate
+}
+
+void Codegen::gen_enum(const ast::EnumDecl& /*e*/) {
+    // Enum type registration is handled in build_enum_type (build_layouts pass).
+    // Enum variant values are emitted as i32 constants inline in gen_member.
+    // Nothing to emit here.
 }
 
 void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
@@ -1497,6 +1524,24 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
 }
 
 Value* Codegen::gen_member(const ast::MemberExpr& e) {
+    // Enum variant access: Color.Red  →  i32 constant
+    if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.object.get())) {
+        auto enum_it = enum_types_.find(id->name);
+        if (enum_it != enum_types_.end()) {
+            TypeId enum_tid = enum_it->second;
+            const sema::TypeInfo& ti = types_.info(enum_tid);
+            for (const auto& v : ti.variants) {
+                if (v.name == e.member)
+                    return llvm::ConstantInt::get(
+                        llvm::Type::getInt32Ty(*ctx_),
+                        static_cast<uint64_t>(v.tag));
+            }
+            driver_.warning(e.loc, "unknown enum variant '" + e.member +
+                            "' on '" + id->name + "'");
+            return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0);
+        }
+    }
+
     Value* obj = gen_expr(*e.object);
     std::string cls_name = resolve_class_name(*e.object, type_id_of(*e.object));
 

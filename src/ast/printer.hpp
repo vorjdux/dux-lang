@@ -347,6 +347,25 @@ private:
         out_ << ")\n";
     }
 
+    void visit(const EnumDecl& n) override {
+        out_ << pad() << "enum " << n.name << " {\n";
+        indent();
+        for (const auto& v : n.variants) {
+            out_ << pad() << v.name;
+            if (!v.payload.empty()) {
+                out_ << '(';
+                for (std::size_t i = 0; i < v.payload.size(); ++i) {
+                    if (i) out_ << ", ";
+                    out_ << v.payload[i].name;
+                }
+                out_ << ')';
+            }
+            out_ << '\n';
+        }
+        dedent();
+        out_ << pad() << "}\n";
+    }
+
     void visit(const Program& n) override {
         for (auto& d : n.decls) d->accept(*this);
         for (auto& s : n.stmts) s->accept(*this);

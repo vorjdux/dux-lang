@@ -1,0 +1,9 @@
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+void main() {
+    int c = Color.Purple
+}

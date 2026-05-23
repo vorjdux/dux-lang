@@ -106,6 +106,13 @@ bool TypeRegistry::assignable(TypeId from, TypeId to) const {
     // list literal can initialize a tuple
     if (from == TID_LIST && to == TID_TUPLE) return true;
 
+    // Enum types are represented as i32; assignable to int and vice versa
+    if (from >= 0 && info(from).kind == TypeKind::Enum &&
+        (to == TID_INT || to == TID_LONG)) return true;
+    if (to >= 0 && info(to).kind == TypeKind::Enum &&
+        (from == TID_INT || from == TID_LONG)) return true;
+    // Two enum variables of the same type: covered by (from == to) above.
+
     // Class subtyping
     return is_subtype(from, to);
 }

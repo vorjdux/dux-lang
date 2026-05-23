@@ -70,7 +70,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token <bool>        BOOL_LIT   "bool literal"
 
 /* Keywords */
-%token KW_NAMESPACE KW_IMPORT KW_CLASS KW_INTERFACE
+%token KW_NAMESPACE KW_IMPORT KW_CLASS KW_INTERFACE KW_ENUM
 %token KW_PUBLIC KW_PRIVATE KW_PROTECTED
 %token KW_NEW KW_DELETE KW_THIS KW_SUPER KW_NULL
 %token KW_RETURN KW_BREAK KW_CONTINUE
@@ -110,8 +110,12 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <DeclList>                         top_decl_list
 %type <DeclPtr>                          top_decl decl extern_decl
 /* Declarations */
-%type <DeclPtr>  namespace_decl import_decl class_decl interface_decl
+%type <DeclPtr>  namespace_decl import_decl class_decl interface_decl enum_decl
 %type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl
+/* Enum */
+%type <std::vector<EnumVariant>>  enum_variants
+%type <EnumVariant>               enum_variant
+%type <std::vector<TypeExpr>>     enum_payload opt_enum_payload
 /* Namespace body accumulates into a temporary Program */
 %type <std::unique_ptr<Program>>         namespace_body
 /* Class / interface */
@@ -206,6 +210,7 @@ decl
     | import_decl     { $$ = std::move($1); }
     | class_decl      { $$ = std::move($1); }
     | interface_decl  { $$ = std::move($1); }
+    | enum_decl       { $$ = std::move($1); }
     | func_decl       { $$ = std::move($1); }
     | extern_decl     { $$ = std::move($1); }
     ;
@@ -391,6 +396,59 @@ interface_member
             ClassMember cm; cm.decl = std::move(f);
             $$ = std::move(cm);
         }
+    ;
+
+/* =====================================================================
+   Enum
+   ===================================================================== */
+
+enum_decl
+    : KW_ENUM IDENT LBRACE enum_variants RBRACE
+        {
+            auto n        = mk<EnumDecl>();
+            n->loc        = sl(@$, driver);
+            n->name       = $2;
+            n->variants   = std::move($4);
+            $$ = std::move(n);
+        }
+    | KW_ENUM IDENT LBRACE enum_variants RBRACE SEMI
+        {
+            auto n        = mk<EnumDecl>();
+            n->loc        = sl(@$, driver);
+            n->name       = $2;
+            n->variants   = std::move($4);
+            $$ = std::move(n);
+        }
+    ;
+
+enum_variants
+    : %empty               { $$ = std::vector<EnumVariant>{}; }
+    | enum_variant         { $$.push_back(std::move($1)); }
+    | enum_variants COMMA enum_variant
+        { $1.push_back(std::move($3)); $$ = std::move($1); }
+    | enum_variants COMMA  { $$ = std::move($1); }  /* trailing comma */
+    | enum_variants SEMI   { $$ = std::move($1); }  /* absorb auto-semicolons */
+    ;
+
+enum_variant
+    : IDENT opt_enum_payload
+        {
+            EnumVariant v;
+            v.loc     = sl(@$, driver);
+            v.name    = $1;
+            v.payload = std::move($2);
+            $$ = std::move(v);
+        }
+    ;
+
+opt_enum_payload
+    : %empty                           { $$ = std::vector<TypeExpr>{}; }
+    | LPAREN enum_payload RPAREN       { $$ = std::move($2); }
+    ;
+
+enum_payload
+    : type_expr                        { $$.push_back(std::move($1)); }
+    | enum_payload COMMA type_expr     { $1.push_back(std::move($3)); $$ = std::move($1); }
     ;
 
 /* =====================================================================

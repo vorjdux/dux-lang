@@ -129,6 +129,9 @@ private:
     // Per-class layouts
     std::unordered_map<std::string, ClassLayout> layouts_;
 
+    // Enum type registry: enum name → TypeId in codegen's TypeRegistry
+    std::unordered_map<std::string, sema::TypeId> enum_types_;
+
     // Maps variable name → class name (for member access resolution)
     std::unordered_map<std::string, std::string> var_class_;
 
@@ -155,6 +158,7 @@ private:
     // ── Class layout building ────────────────────────────────────────────
     void build_layouts(const ast::DeclList& decls);
     void build_class_layout(const ast::ClassDecl& c);
+    void build_enum_type(const ast::EnumDecl& e);
 
     // ── Hoisting pass: declare all functions/methods before bodies ───────
     void declare_functions(const ast::DeclList& decls, const std::string& prefix = "");
@@ -182,6 +186,7 @@ private:
     void gen_func(const ast::FunctionDecl& f, const std::string& mangled,
                   TypeId class_type = TypeRegistry::TID_UNKNOWN);
     void gen_class(const ast::ClassDecl& c);
+    void gen_enum(const ast::EnumDecl& e);
     void gen_namespace(const ast::NamespaceDecl& ns);
     // Ensure there is a proper i32 @main() entry point the C runtime can call
     void emit_main_wrapper();
