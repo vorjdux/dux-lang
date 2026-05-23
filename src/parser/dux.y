@@ -119,7 +119,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <DeclPtr>                          top_decl decl extern_decl
 /* Declarations */
 %type <DeclPtr>  namespace_decl import_decl class_decl interface_decl enum_decl
-%type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl extern_decl
+%type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl
 /* Enum */
 %type <std::vector<EnumVariant>>  enum_variants
 %type <EnumVariant>               enum_variant
@@ -781,7 +781,6 @@ stmt
     | unsafe_stmt         { $$ = std::move($1); }
     | var_decl_stmt       { $$ = std::move($1); }
     | simple_stmt SEMI    { $$ = std::move($1); }
-    | unsafe_stmt         { $$ = std::move($1); }
     ;
 
 simple_stmt
