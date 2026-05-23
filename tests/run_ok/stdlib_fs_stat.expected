@@ -1,0 +1,8 @@
+stat ok
+is file ok
+size ok
+mtime ok
+missing ok
+size fn ok
+mtime fn ok
+stat ok

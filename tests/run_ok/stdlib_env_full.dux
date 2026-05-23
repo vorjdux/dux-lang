@@ -1,0 +1,26 @@
+import sys.env
+
+int main() {
+    # Test get_or with unset var
+    str val = env.get_or("DUX_NONEXISTENT_VAR_12345", "default_val")
+    if val == "default_val" {
+        print("get_or default ok")
+    }
+
+    # Set and get_or with set var
+    env.store("DUX_TEST_GET_OR", "hello")
+    str val2 = env.get_or("DUX_TEST_GET_OR", "fallback")
+    if val2 == "hello" {
+        print("get_or set ok")
+    }
+    env.remove("DUX_TEST_GET_OR")
+
+    # all() returns non-empty list
+    list all = env.all()
+    if len(all) > 0 {
+        print("all ok")
+    }
+
+    print("env full ok")
+    return 0
+}

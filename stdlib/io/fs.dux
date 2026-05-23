@@ -10,6 +10,10 @@ namespace fs {
     extern "C" int  duxrt_fs_exists(str path) ;
     extern "C" int  duxrt_fs_is_dir(str path) ;
     extern "C" int  duxrt_fs_is_file(str path) ;
+    extern "C" long duxrt_fs_size(str path) ;
+    extern "C" long duxrt_fs_mtime(str path) ;
+    extern "C" int  duxrt_fs_last_errno() ;
+    extern "C" int  duxrt_fs_copy(str src, str dst) ;
 
     # Create a directory.
     bool mkdir(str p) {
@@ -56,7 +60,7 @@ namespace fs {
         return r == 0
     }
 
-    # List directory entries (excludes . and ..).
+    # List directory entries (excluding . and ..).
     list list_dir(str p) {
         list result = []
         unsafe {
@@ -67,11 +71,11 @@ namespace fs {
 
     # Current working directory.
     str cwd() {
-        str result = ""
+        str r = ""
         unsafe {
-            result = duxrt_fs_cwd()
+            r = duxrt_fs_cwd()
         }
-        return result
+        return r
     }
 
     # Change working directory.
@@ -108,5 +112,82 @@ namespace fs {
             r = duxrt_fs_is_file(p)
         }
         return r != 0
+    }
+
+    # File size in bytes; -1 if not a file or error.
+    long size(str p) {
+        long r = 0
+        unsafe {
+            r = duxrt_fs_size(p)
+        }
+        return r
+    }
+
+    # Last-modified time as Unix seconds; -1 on error.
+    long mtime(str p) {
+        long r = 0
+        unsafe {
+            r = duxrt_fs_mtime(p)
+        }
+        return r
+    }
+
+    # Copy a file. Returns true on success.
+    bool copy(str src, str dst) {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_copy(src, dst)
+        }
+        return r == 0
+    }
+
+    # errno from the last failed fs operation.
+    int last_errno() {
+        int r = 0
+        unsafe {
+            r = duxrt_fs_last_errno()
+        }
+        return r
+    }
+
+    # Stat: snapshot of file/directory metadata.
+    class Stat {
+        str  path
+        bool is_file
+        bool is_dir
+        long size
+        long mtime
+
+        Stat(str p, bool f, bool d, long s, long m) {
+            this.path    = p
+            this.is_file = f
+            this.is_dir  = d
+            this.size    = s
+            this.mtime   = m
+        }
+    }
+
+    # Return a Stat for the given path, or null if it does not exist.
+    Stat stat(str p) {
+        int ex = 0
+        unsafe {
+            ex = duxrt_fs_exists(p)
+        }
+        if ex == 0 {
+            return null
+        }
+        int fi = 0
+        int di = 0
+        long s = 0
+        long m = 0
+        unsafe {
+            fi = duxrt_fs_is_file(p)
+            di = duxrt_fs_is_dir(p)
+            s = duxrt_fs_size(p)
+            m = duxrt_fs_mtime(p)
+        }
+        bool f = fi != 0
+        bool d = di != 0
+        return new Stat(p, f, d, s, m)
     }
 }

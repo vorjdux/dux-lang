@@ -1,0 +1,27 @@
+import time.clock
+
+int main() {
+    long ms = clock.unix_ms()
+    if ms > 1000000000000 {
+        print("unix_ms ok")
+    }
+
+    long ns = clock.mono_ns()
+    if ns > 0 {
+        print("mono_ns ok")
+    }
+
+    Stopwatch sw = new Stopwatch()
+    long e1 = sw.elapsed_ms()
+    if e1 >= 0 {
+        print("elapsed ok")
+    }
+    sw.reset()
+    long e2 = sw.elapsed_ms()
+    if e2 >= 0 {
+        print("reset ok")
+    }
+
+    print("stopwatch ok")
+    return 0
+}

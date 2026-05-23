@@ -636,18 +636,52 @@ void Codegen::emit_main_wrapper() {
     if (!user_main) return;
 
     bool returns_void = user_main->getReturnType()->isVoidTy();
-    if (!returns_void) return; // already returns int, nothing to do
+    bool returns_int  = user_main->getReturnType()->isIntegerTy(32) ||
+                        user_main->getReturnType()->isIntegerTy(64);
 
-    // Rename void @<whatever_main> → @dux_main
-    user_main->setName("dux_main");
+    // Declare duxrt_sys_init(i32, ptr) — initialises argc/argv for args module
+    auto* i32t  = llvm::Type::getInt32Ty(*ctx_);
+    auto* i64t  = llvm::Type::getInt64Ty(*ctx_);
+    auto* pt    = ptr_type();
+    llvm::FunctionCallee sys_init_callee = mod_->getOrInsertFunction(
+        "duxrt_sys_init",
+        llvm::FunctionType::get(llvm::Type::getVoidTy(*ctx_), {i32t, pt}, false));
 
-    // Create i32 @main() { call void @dux_main(); ret i32 0 }
-    auto* ft  = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_), false);
-    auto* fn  = Function::Create(ft, Function::ExternalLinkage, "main", *mod_);
-    auto* bb  = BasicBlock::Create(*ctx_, "entry", fn);
-    builder_->SetInsertPoint(bb);
-    builder_->CreateCall(user_main, {});
-    builder_->CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
+    if (returns_void) {
+        // Rename void @<whatever_main> → @dux_main
+        user_main->setName("dux_main");
+
+        // Create i32 @main(i32 argc, ptr argv) { sys_init(argc,argv); dux_main(); ret 0 }
+        auto* ft  = llvm::FunctionType::get(i32t, {i32t, pt}, false);
+        auto* fn  = Function::Create(ft, Function::ExternalLinkage, "main", *mod_);
+        auto* bb  = BasicBlock::Create(*ctx_, "entry", fn);
+        builder_->SetInsertPoint(bb);
+        auto it = fn->arg_begin();
+        llvm::Value* argc_v = &*it++;
+        llvm::Value* argv_v = &*it;
+        builder_->CreateCall(sys_init_callee, {argc_v, argv_v});
+        builder_->CreateCall(user_main, {});
+        builder_->CreateRet(llvm::ConstantInt::get(i32t, 0));
+    } else if (returns_int) {
+        // User wrote int main() — rename it and wrap with argc/argv + sys_init
+        user_main->setName("dux_main");
+
+        // Create i32 @main(i32 argc, ptr argv) { sys_init(argc,argv); ret dux_main() }
+        auto* ft  = llvm::FunctionType::get(i32t, {i32t, pt}, false);
+        auto* fn  = Function::Create(ft, Function::ExternalLinkage, "main", *mod_);
+        auto* bb  = BasicBlock::Create(*ctx_, "entry", fn);
+        builder_->SetInsertPoint(bb);
+        auto it = fn->arg_begin();
+        llvm::Value* argc_v = &*it++;
+        llvm::Value* argv_v = &*it;
+        builder_->CreateCall(sys_init_callee, {argc_v, argv_v});
+        llvm::Value* ret_v = builder_->CreateCall(user_main, {});
+        // Truncate to i32 if user returned i64
+        if (user_main->getReturnType()->isIntegerTy(64))
+            ret_v = builder_->CreateTrunc(ret_v, i32t, "ret32");
+        builder_->CreateRet(ret_v);
+    }
+    (void)i64t; // suppress unused warning
 }
 
 void Codegen::gen_namespace(const ast::NamespaceDecl& ns) {
