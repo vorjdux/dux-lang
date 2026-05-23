@@ -1,6 +1,4 @@
-# const modifier in local variable declarations
 void main() {
-    const int x = 42
-    const str msg = "hello"
-    const bool flag = true
+    static const int MAX = 100
+    println(MAX)
 }
