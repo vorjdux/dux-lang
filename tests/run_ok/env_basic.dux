@@ -1,0 +1,20 @@
+import sys.env
+
+fn main() {
+    let ok = env.store("DUX_RUN_TEST", "hello")
+    if ok {
+        let val = env.fetch("DUX_RUN_TEST")
+        println(val)
+    }
+    let has = env.has("DUX_RUN_TEST")
+    if has {
+        println("has var")
+    }
+    let ok2 = env.remove("DUX_RUN_TEST")
+    let gone = env.has("DUX_RUN_TEST")
+    if gone {
+        println("still set")
+    } else {
+        println("unset ok")
+    }
+}

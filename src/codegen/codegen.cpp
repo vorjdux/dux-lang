@@ -495,13 +495,25 @@ void Codegen::emit_main_wrapper() {
     // Rename void @<whatever_main> → @dux_main
     user_main->setName("dux_main");
 
-    // Create i32 @main() { call void @dux_main(); ret i32 0 }
-    auto* ft  = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_), false);
-    auto* fn  = Function::Create(ft, Function::ExternalLinkage, "main", *mod_);
-    auto* bb  = BasicBlock::Create(*ctx_, "entry", fn);
+    // Create i32 @main(i32 %argc, ptr %argv) {
+    //   call void @duxrt_sys_init(i32 %argc, ptr %argv)
+    //   call void @dux_main()
+    //   ret i32 0
+    // }
+    auto* i32t  = llvm::Type::getInt32Ty(*ctx_);
+    auto* ft    = llvm::FunctionType::get(i32t,
+                      {i32t, ptr_type()}, /*isVarArg=*/false);
+    auto* fn    = Function::Create(ft, Function::ExternalLinkage, "main", *mod_);
+    fn->getArg(0)->setName("argc");
+    fn->getArg(1)->setName("argv");
+    auto* bb    = BasicBlock::Create(*ctx_, "entry", fn);
     builder_->SetInsertPoint(bb);
+    // Initialise the runtime with argc/argv for sys.env / sys.args
+    auto* init_fn = get_or_declare_rt("duxrt_sys_init",
+        llvm::Type::getVoidTy(*ctx_), {i32t, ptr_type()});
+    builder_->CreateCall(init_fn, {fn->getArg(0), fn->getArg(1)});
     builder_->CreateCall(user_main, {});
-    builder_->CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
+    builder_->CreateRet(llvm::ConstantInt::get(i32t, 0));
 }
 
 void Codegen::gen_namespace(const ast::NamespaceDecl& ns) {
@@ -631,6 +643,20 @@ static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
             {"println",  {"duxrt_println_str",  TR::TID_VOID, {TR::TID_STR}}},
             {"print",    {"duxrt_print_str",    TR::TID_VOID, {TR::TID_STR}}},
             {"readline", {"duxrt_readline",     TR::TID_STR,  {}}},
+        }},
+        {"env", {
+            {"fetch",  {"duxrt_env_fetch",  TR::TID_STR,  {TR::TID_STR}}},
+            {"has",    {"duxrt_env_has",    TR::TID_BOOL, {TR::TID_STR}}},
+            {"store",  {"duxrt_env_store",  TR::TID_BOOL, {TR::TID_STR, TR::TID_STR}}},
+            {"remove", {"duxrt_env_remove", TR::TID_BOOL, {TR::TID_STR}}},
+        }},
+        {"args", {
+            {"count", {"duxrt_args_count", TR::TID_LONG, {}}},
+            {"at",    {"duxrt_args_at",    TR::TID_STR,  {TR::TID_LONG}}},
+            {"all",   {"duxrt_args_all",   TR::TID_LIST, {}}},
+        }},
+        {"sys", {
+            {"exit",  {"duxrt_sys_exit",   TR::TID_VOID, {TR::TID_LONG}}},
         }},
         {"clock", {
             {"now_ns",   {"duxrt_clock_now_ns",   TR::TID_LONG, {}}},

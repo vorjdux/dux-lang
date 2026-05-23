@@ -1,0 +1,12 @@
+// sys.args — command-line argument access
+//
+// Import with:
+//   import sys.args
+//
+// Usage:
+//   let n    = args.count()     // number of arguments (int, includes argv[0])
+//   let a0   = args.at(0)       // get argument by index → str
+//   let all  = args.all()       // all arguments as list of str
+//
+// Note: 'get' is a reserved word; use 'args.at(idx)' instead.
+// Call sys.exit(code) to terminate with a given exit code (import sys).

@@ -1,0 +1,8 @@
+import sys.env
+import sys.args
+
+fn main() {
+    let home = env.fetch("HOME")
+    let n = args.count()
+    let a0 = args.at(0)
+}

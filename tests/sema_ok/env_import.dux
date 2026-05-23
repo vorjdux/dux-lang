@@ -1,0 +1,12 @@
+import sys.env
+import sys.args
+
+fn main() {
+    let home = env.fetch("HOME")
+    let has_path = env.has("PATH")
+    let ok = env.store("DUX_TEST", "1")
+    let ok2 = env.remove("DUX_TEST")
+    let n = args.count()
+    let a0 = args.at(0)
+    let all = args.all()
+}

@@ -181,6 +181,17 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── System environment + args (sys.env / sys.args modules) ─────────────── */
+void     duxrt_sys_init(int argc, char** argv);
+DuxStr*  duxrt_env_fetch(DuxStr* name);
+int      duxrt_env_has(DuxStr* name);
+int      duxrt_env_store(DuxStr* name, DuxStr* value);
+int      duxrt_env_remove(DuxStr* name);
+int64_t  duxrt_args_count(void);
+DuxStr*  duxrt_args_at(int64_t idx);
+DuxList* duxrt_args_all(void);
+void     duxrt_sys_exit(int64_t code);
+
 /* ── Time/clock (time.clock + time.date modules) ────────────────────────── */
 int64_t duxrt_clock_now_ns(void);
 double  duxrt_clock_now(void);
