@@ -1,0 +1,10 @@
+import io.path
+
+fn main() {
+    let p = path.join("/tmp", "test.txt")
+    let b = path.basename(p)
+    let d = path.dirname(p)
+    let e = path.extension(p)
+    let s = path.stem(p)
+    let ok = path.exists(p)
+}

@@ -1,0 +1,14 @@
+import io.path
+
+fn main() {
+    let p = path.join("/usr", "local")
+    println(p)
+    let b = path.basename("/usr/local/bin")
+    println(b)
+    let d = path.dirname("/usr/local/bin")
+    println(d)
+    let e = path.extension("file.txt")
+    println(e)
+    let s = path.stem("file.txt")
+    println(s)
+}

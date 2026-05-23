@@ -181,6 +181,17 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── Path operations (io.path module) ───────────────────────────────────── */
+DuxStr* duxrt_path_join(DuxStr* dir, DuxStr* name);
+DuxStr* duxrt_path_basename(DuxStr* p);
+DuxStr* duxrt_path_dirname(DuxStr* p);
+DuxStr* duxrt_path_extension(DuxStr* p);
+DuxStr* duxrt_path_stem(DuxStr* p);
+int     duxrt_path_exists(DuxStr* p);
+int     duxrt_path_is_file(DuxStr* p);
+int     duxrt_path_is_dir(DuxStr* p);
+DuxStr* duxrt_path_absolute(DuxStr* p);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

@@ -632,6 +632,17 @@ static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
             {"print",    {"duxrt_print_str",    TR::TID_VOID, {TR::TID_STR}}},
             {"readline", {"duxrt_readline",     TR::TID_STR,  {}}},
         }},
+        {"path", {
+            {"join",      {"duxrt_path_join",      TR::TID_STR,  {TR::TID_STR, TR::TID_STR}}},
+            {"basename",  {"duxrt_path_basename",  TR::TID_STR,  {TR::TID_STR}}},
+            {"dirname",   {"duxrt_path_dirname",   TR::TID_STR,  {TR::TID_STR}}},
+            {"extension", {"duxrt_path_extension", TR::TID_STR,  {TR::TID_STR}}},
+            {"stem",      {"duxrt_path_stem",      TR::TID_STR,  {TR::TID_STR}}},
+            {"exists",    {"duxrt_path_exists",    TR::TID_BOOL, {TR::TID_STR}}},
+            {"is_file",   {"duxrt_path_is_file",   TR::TID_BOOL, {TR::TID_STR}}},
+            {"is_dir",    {"duxrt_path_is_dir",    TR::TID_BOOL, {TR::TID_STR}}},
+            {"absolute",  {"duxrt_path_absolute",  TR::TID_STR,  {TR::TID_STR}}},
+        }},
     };
     return tbl;
 }
@@ -1275,6 +1286,15 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
                 init_val = gen_expr(*init_ptr);
                 TypeId init_tid = type_id_of(*init_ptr);
                 if (var_tid == TR::TID_UNKNOWN) var_tid = init_tid;
+                // If sema couldn't determine the type (e.g., stdlib member call),
+                // infer var_tid from the actual LLVM value type.
+                if (var_tid == TR::TID_UNKNOWN && init_val) {
+                    llvm::Type* vt = init_val->getType();
+                    if (vt->isPointerTy())              var_tid = TR::TID_STR;
+                    else if (vt->isDoubleTy())          var_tid = TR::TID_DOUBLE;
+                    else if (vt->isIntegerTy(1))        var_tid = TR::TID_BOOL;
+                    else if (vt->isIntegerTy(64))       var_tid = TR::TID_LONG;
+                }
                 init_val = coerce(init_val, init_tid, var_tid);
             }
             if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;

@@ -397,15 +397,25 @@ void Sema::check_namespace(const ast::NamespaceDecl& ns) {
 }
 
 void Sema::check_import(const ast::ImportDecl& imp) {
-    // Simplified: register the module name as an object-typed symbol.
-    // Full resolution (loading files) is M5 work.
+    // Register both the top-level namespace (first component) and the leaf
+    // module (last component) so that `import io.path` makes both `io` and
+    // `path` available as namespace symbols.  The codegen dispatch uses the
+    // last component as the module key (matching stdlib_table() keys).
+    auto register_ns = [&](const std::string& name) {
+        if (!name.empty() && !scopes_.lookup(name)) {
+            Symbol s;
+            s.name = name;
+            s.kind = SymKind::Namespace;
+            s.type = TR::TID_OBJECT;
+            scopes_.define(name, s);
+        }
+    };
     std::string first = imp.path.substr(0, imp.path.find('.'));
-    if (!first.empty() && !scopes_.lookup(first)) {
-        Symbol s;
-        s.name = first;
-        s.kind = SymKind::Namespace;
-        s.type = TR::TID_OBJECT;
-        scopes_.define(first, s);
+    register_ns(first);
+    auto dot = imp.path.rfind('.');
+    if (dot != std::string::npos) {
+        std::string last = imp.path.substr(dot + 1);
+        register_ns(last);
     }
 }
 

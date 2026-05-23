@@ -1,0 +1,13 @@
+import io.path
+
+fn main() {
+    let p = path.join("/usr", "local")
+    let b = path.basename("/usr/local/bin")
+    let d = path.dirname("/usr/local/bin")
+    let e = path.extension("file.txt")
+    let s = path.stem("file.txt")
+    let ok = path.exists("/etc/hosts")
+    let isf = path.is_file("/etc/hosts")
+    let isd = path.is_dir("/etc")
+    let abs = path.absolute(".")
+}

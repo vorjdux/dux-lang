@@ -1,0 +1,18 @@
+// io.path — path manipulation utilities
+//
+// Import with:
+//   import io.path
+//
+// Usage:
+//   let full = path.join("/usr", "local")      // "/usr/local"
+//   let base = path.basename("/usr/local/bin") // "bin"
+//   let dir  = path.dirname("/usr/local/bin")  // "/usr/local"
+//   let ext  = path.extension("file.txt")      // ".txt"
+//   let stem = path.stem("file.txt")           // "file"
+//   let ok   = path.exists("/etc/hosts")       // true / false
+//   let f    = path.is_file("/etc/hosts")      // true
+//   let d    = path.is_dir("/etc")             // true
+//   let abs  = path.absolute("relative/path")  // absolute path string
+//
+// All functions that return strings allocate a new DuxStr (refcount = 1).
+// The caller is responsible for lifetime management via the usual rules.

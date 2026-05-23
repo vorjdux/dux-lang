@@ -1,0 +1,5 @@
+import io.path
+
+fn main() {
+    let p = path.join("/usr", "local")
+}
