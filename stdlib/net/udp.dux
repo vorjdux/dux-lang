@@ -1,0 +1,135 @@
+namespace udp {
+    extern "C" ptr  duxrt_sock_new(int af, int sock_type, int proto) ;
+    extern "C" void duxrt_sock_close(ptr s) ;
+    extern "C" int  duxrt_sock_bind_ip(ptr s, str addr, int port) ;
+    extern "C" int  duxrt_sock_setsockopt_int(ptr s, int level, int optname, int val) ;
+    extern "C" int  duxrt_sock_set_timeout_ms(ptr s, int direction, long ms) ;
+    extern "C" long duxrt_sock_sendto_ip(ptr s, str data, str addr, int port) ;
+    extern "C" str  duxrt_sock_recvfrom_str(ptr s, long max_bytes) ;
+    extern "C" str  duxrt_sock_last_sender() ;
+    extern "C" str  duxrt_sock_local_addr(ptr s) ;
+    extern "C" int  duxrt_sock_join_multicast(ptr s, str group) ;
+    extern "C" int  duxrt_sock_leave_multicast(ptr s, str group) ;
+}
+
+# Datagram — a received UDP datagram with payload and sender address.
+class Datagram {
+    str data
+    str addr
+    long size
+
+    Datagram(str d, str a) {
+        this.data = d
+        this.addr = a
+        this.size = len(d)
+    }
+}
+
+# UdpSocket — connectionless datagram socket (IPv4).
+class UdpSocket {
+    ptr _sock
+
+    UdpSocket(str host, int port) {
+        ptr s = null
+        unsafe {
+            s = duxrt_sock_new(2, 2, 17)
+        }
+        this._sock = s
+        if this._sock != null {
+            if port >= 0 {
+                unsafe {
+                    duxrt_sock_bind_ip(this._sock, host, port)
+                }
+            }
+        }
+    }
+
+    bool is_open() {
+        return this._sock != null
+    }
+
+    # Set receive timeout in milliseconds (0 = block forever)
+    void set_timeout_ms(long ms) {
+        unsafe {
+            duxrt_sock_set_timeout_ms(this._sock, 0, ms)
+        }
+    }
+
+    # Enable or disable broadcast (SO_BROADCAST = 6 on SOL_SOCKET = 1)
+    void set_broadcast(bool on) {
+        int v = 0
+        if on {
+            v = 1
+        }
+        unsafe {
+            duxrt_sock_setsockopt_int(this._sock, 1, 6, v)
+        }
+    }
+
+    # Send a datagram to host:port; returns bytes sent (-1 on error)
+    long send_to(str data, str host, int port) {
+        long r = 0
+        unsafe {
+            r = duxrt_sock_sendto_ip(this._sock, data, host, port)
+        }
+        return r
+    }
+
+    # Receive one datagram; blocks until data arrives (or timeout)
+    Datagram recv() {
+        str data = ""
+        unsafe {
+            data = duxrt_sock_recvfrom_str(this._sock, 65535)
+        }
+        str addr = ""
+        unsafe {
+            addr = duxrt_sock_last_sender()
+        }
+        return new Datagram(data, addr)
+    }
+
+    # Return local address as "ip:port"
+    str local_addr() {
+        str r = ""
+        unsafe {
+            r = duxrt_sock_local_addr(this._sock)
+        }
+        return r
+    }
+
+    # Join an IPv4 multicast group
+    void join_multicast(str group) {
+        unsafe {
+            duxrt_sock_join_multicast(this._sock, group)
+        }
+    }
+
+    # Leave an IPv4 multicast group
+    void leave_multicast(str group) {
+        unsafe {
+            duxrt_sock_leave_multicast(this._sock, group)
+        }
+    }
+
+    void close() {
+        if this._sock != null {
+            unsafe {
+                duxrt_sock_close(this._sock)
+            }
+            this._sock = null
+        }
+    }
+
+    ~UdpSocket() {
+        if this._sock != null {
+            unsafe {
+                duxrt_sock_close(this._sock)
+            }
+        }
+    }
+}
+
+# Create a UdpSocket bound to an ephemeral port on all interfaces.
+UdpSocket udp_ephemeral() {
+    return new UdpSocket("0.0.0.0", 0)
+}

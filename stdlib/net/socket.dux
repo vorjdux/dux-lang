@@ -1,0 +1,294 @@
+namespace socket {
+    extern "C" ptr  duxrt_sock_new(int af, int sock_type, int proto) ;
+    extern "C" void duxrt_sock_close(ptr s) ;
+    extern "C" int  duxrt_sock_bind_ip(ptr s, str addr, int port) ;
+    extern "C" int  duxrt_sock_bind_unix(ptr s, str path) ;
+    extern "C" int  duxrt_sock_connect_ip(ptr s, str addr, int port) ;
+    extern "C" int  duxrt_sock_connect_unix(ptr s, str path) ;
+    extern "C" int  duxrt_sock_listen(ptr s, int backlog) ;
+    extern "C" ptr  duxrt_sock_accept(ptr s) ;
+    extern "C" long duxrt_sock_send_str(ptr s, str data, int flags) ;
+    extern "C" str  duxrt_sock_recv_str(ptr s, long max_bytes, int flags) ;
+    extern "C" long duxrt_sock_sendto_ip(ptr s, str data, str addr, int port) ;
+    extern "C" str  duxrt_sock_recvfrom_str(ptr s, long max_bytes) ;
+    extern "C" str  duxrt_sock_last_sender() ;
+    extern "C" int  duxrt_sock_setsockopt_int(ptr s, int level, int optname, int val) ;
+    extern "C" int  duxrt_sock_getsockopt_int(ptr s, int level, int optname) ;
+    extern "C" int  duxrt_sock_shutdown(ptr s, int how) ;
+    extern "C" int  duxrt_sock_set_nonblocking(ptr s, int enable) ;
+    extern "C" int  duxrt_sock_set_timeout_ms(ptr s, int direction, long ms) ;
+    extern "C" int  duxrt_sock_fd(ptr s) ;
+    extern "C" str  duxrt_sock_last_error() ;
+    extern "C" str  duxrt_sock_peer_addr(ptr s) ;
+    extern "C" str  duxrt_sock_local_addr(ptr s) ;
+    extern "C" int  duxrt_sock_join_multicast(ptr s, str group) ;
+    extern "C" int  duxrt_sock_leave_multicast(ptr s, str group) ;
+
+    # Get last socket error message
+    str last_error() {
+        str e = ""
+        unsafe {
+            e = duxrt_sock_last_error()
+        }
+        return e
+    }
+
+    # Create a raw socket handle (caller manages lifecycle)
+    ptr new_raw(int af, int sock_type, int proto) {
+        ptr s = null
+        unsafe {
+            s = duxrt_sock_new(af, sock_type, proto)
+        }
+        return s
+    }
+
+    # Close a raw socket handle
+    void close_raw(ptr s) {
+        unsafe {
+            duxrt_sock_close(s)
+        }
+    }
+}
+
+# Socket — RAII wrapper around a raw BSD socket file descriptor.
+class Socket {
+    ptr _handle
+
+    Socket(int af, int sock_type, int proto) {
+        unsafe {
+            this._handle = duxrt_sock_new(af, sock_type, proto)
+        }
+    }
+
+    bool is_open() {
+        return this._handle != null
+    }
+
+    # Bind to IP address + port ("0.0.0.0" = any, 0 = ephemeral)
+    int bind(str addr, int port) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_bind_ip(this._handle, addr, port)
+        }
+        return r
+    }
+
+    # Bind to a Unix domain socket path
+    int bind_unix(str path) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_bind_unix(this._handle, path)
+        }
+        return r
+    }
+
+    # Connect to remote IP:port
+    int connect(str addr, int port) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_connect_ip(this._handle, addr, port)
+        }
+        return r
+    }
+
+    # Connect to a Unix domain socket path
+    int connect_unix(str path) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_connect_unix(this._handle, path)
+        }
+        return r
+    }
+
+    # Start listening for incoming connections
+    int listen(int backlog) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_listen(this._handle, backlog)
+        }
+        return r
+    }
+
+    # Accept next incoming connection; returns new Socket wrapping the fd
+    Socket accept() {
+        ptr h = null
+        unsafe {
+            h = duxrt_sock_accept(this._handle)
+        }
+        Socket s = new Socket(0, 0, 0)
+        s._handle = h
+        return s
+    }
+
+    # Send data; returns bytes sent (-1 on error)
+    long send(str data, int flags) {
+        long r = 0
+        unsafe {
+            r = duxrt_sock_send_str(this._handle, data, flags)
+        }
+        return r
+    }
+
+    # Receive up to max_bytes; returns received string (empty string on error/EOF)
+    str recv(long max_bytes, int flags) {
+        str r = ""
+        unsafe {
+            r = duxrt_sock_recv_str(this._handle, max_bytes, flags)
+        }
+        return r
+    }
+
+    # UDP: send datagram to host:port; returns bytes sent
+    long send_to(str data, str addr, int port) {
+        long r = 0
+        unsafe {
+            r = duxrt_sock_sendto_ip(this._handle, data, addr, port)
+        }
+        return r
+    }
+
+    # UDP: receive one datagram; use last_sender() to get the sender address
+    str recvfrom(long max_bytes) {
+        str r = ""
+        unsafe {
+            r = duxrt_sock_recvfrom_str(this._handle, max_bytes)
+        }
+        return r
+    }
+
+    # Return sender address from last recvfrom() as "ip:port"
+    str last_sender() {
+        str r = ""
+        unsafe {
+            r = duxrt_sock_last_sender()
+        }
+        return r
+    }
+
+    # Set an integer socket option
+    int set_opt(int level, int optname, int value) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_setsockopt_int(this._handle, level, optname, value)
+        }
+        return r
+    }
+
+    # Get an integer socket option
+    int get_opt(int level, int optname) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_getsockopt_int(this._handle, level, optname)
+        }
+        return r
+    }
+
+    # Shutdown the socket (SHUT_RD=0, SHUT_WR=1, SHUT_RDWR=2)
+    int shutdown(int how) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_shutdown(this._handle, how)
+        }
+        return r
+    }
+
+    # Set non-blocking mode (enable=true) or blocking (enable=false)
+    int set_nonblocking(bool enable) {
+        int e = 0
+        if enable {
+            e = 1
+        }
+        int r = 0
+        unsafe {
+            r = duxrt_sock_set_nonblocking(this._handle, e)
+        }
+        return r
+    }
+
+    # Set recv (direction=0) or send (direction=1) timeout in milliseconds
+    int set_timeout(int direction, long ms) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_set_timeout_ms(this._handle, direction, ms)
+        }
+        return r
+    }
+
+    # Return the raw file descriptor (for use with select/poll/epoll)
+    int fd() {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_fd(this._handle)
+        }
+        return r
+    }
+
+    # Return peer address as "ip:port" string
+    str peer_addr() {
+        str r = ""
+        unsafe {
+            r = duxrt_sock_peer_addr(this._handle)
+        }
+        return r
+    }
+
+    # Return local address as "ip:port" string
+    str local_addr() {
+        str r = ""
+        unsafe {
+            r = duxrt_sock_local_addr(this._handle)
+        }
+        return r
+    }
+
+    # Join an IPv4 multicast group
+    int join_multicast(str group) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_join_multicast(this._handle, group)
+        }
+        return r
+    }
+
+    # Leave an IPv4 multicast group
+    int leave_multicast(str group) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_leave_multicast(this._handle, group)
+        }
+        return r
+    }
+
+    ~Socket() {
+        if this._handle != null {
+            unsafe {
+                duxrt_sock_close(this._handle)
+            }
+        }
+    }
+}
+
+# Convenience constructors
+Socket tcp4() {
+    return new Socket(2, 1, 6)
+}
+
+Socket tcp6() {
+    return new Socket(10, 1, 6)
+}
+
+Socket udp4() {
+    return new Socket(2, 2, 17)
+}
+
+Socket udp6() {
+    return new Socket(10, 2, 17)
+}
+
+Socket unix_stream() {
+    return new Socket(1, 1, 0)
+}
+
+Socket unix_dgram() {
+    return new Socket(1, 2, 0)
+}

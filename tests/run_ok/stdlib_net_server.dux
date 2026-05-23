@@ -1,0 +1,44 @@
+import net.server
+
+int main() {
+    # Test ServerResponse creation and helpers
+    ServerResponse r1 = ok("Hello!")
+    if r1.status == 200 {
+        print("ok response ok")
+    }
+
+    ServerResponse r2 = not_found()
+    if r2.status == 404 {
+        print("not_found ok")
+    }
+
+    ServerResponse r3 = server_error("boom")
+    if r3.status == 500 {
+        print("server_error ok")
+    }
+
+    ServerResponse r4 = json_response("{\"k\":\"v\"}")
+    if r4.status == 200 {
+        print("json response ok")
+    }
+
+    # Test to_wire() produces a non-empty HTTP response
+    str wire = r1.to_wire()
+    if len(wire) > 0 {
+        print("to_wire ok")
+    }
+
+    # Test HttpServer creation on an ephemeral port
+    HttpServer srv = new HttpServer(0, 5)
+    if srv.is_running() {
+        print("server ok")
+    }
+
+    str la = srv.local_addr()
+    if len(la) > 0 {
+        print("server addr ok")
+    }
+
+    print("server test ok")
+    return 0
+}

@@ -1,0 +1,7 @@
+tcp4 ok
+set_opt ok
+fd ok
+local_addr ok
+udp4 ok
+unix ok
+socket ok
