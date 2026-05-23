@@ -1,0 +1,49 @@
+import net.http
+
+int main() {
+    # Test HttpClient creation
+    HttpClient c = new HttpClient()
+    c.timeout(5000)
+    c.user_agent("dux-test/0.1")
+    print("client ok")
+
+    # Test Request creation
+    Request req = new Request("GET", "http://example.com/")
+    req.header("Accept", "text/html")
+    req.content_type("text/plain")
+    print("request ok")
+
+    # Test Response creation with null raw (no actual HTTP request)
+    Response resp = new Response(null)
+    if !resp.ok() {
+        print("null resp ok")
+    }
+
+    # Test status helpers
+    if is_success(200) {
+        print("200 success ok")
+    }
+    if is_redirect(301) {
+        print("301 redirect ok")
+    }
+    if is_client_err(404) {
+        print("404 client_err ok")
+    }
+    if is_server_err(500) {
+        print("500 server_err ok")
+    }
+
+    # Test Headers (put/fetch instead of set/get — reserved keywords in Dux)
+    Headers h = new Headers()
+    h.put("X-Test", "hello")
+    if h.has("X-Test") {
+        print("headers ok")
+    }
+    str v = h.fetch("X-Test")
+    if v == "hello" {
+        print("header get ok")
+    }
+
+    print("http ok")
+    return 0
+}

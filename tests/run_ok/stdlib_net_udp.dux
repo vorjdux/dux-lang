@@ -1,0 +1,18 @@
+import net.udp
+
+int main() {
+    # Create a UdpSocket bound to an ephemeral port
+    UdpSocket s = new UdpSocket("127.0.0.1", 0)
+    if s.is_open() {
+        print("udp socket ok")
+    }
+
+    # Check local address
+    str la = s.local_addr()
+    if len(la) > 0 {
+        print("local_addr ok")
+    }
+
+    print("udp ok")
+    return 0
+}
