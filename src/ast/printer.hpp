@@ -202,6 +202,37 @@ private:
         out_ << pad() << "}\n";
     }
 
+    void visit(const MatchStmt& n) override {
+        out_ << pad() << "match (";
+        n.expr->accept(*this);
+        out_ << ") {\n";
+        indent();
+        for (auto& arm : n.arms) {
+            out_ << pad();
+            switch (arm.pattern.kind) {
+            case MatchPattern::Kind::Wildcard:
+                out_ << "_";
+                break;
+            case MatchPattern::Kind::EnumVariant:
+                out_ << arm.pattern.enum_name << '.' << arm.pattern.variant_name;
+                break;
+            case MatchPattern::Kind::IntLit:
+                out_ << arm.pattern.int_value;
+                break;
+            case MatchPattern::Kind::BoolLit:
+                out_ << (arm.pattern.bool_value ? "true" : "false");
+                break;
+            }
+            out_ << " => {\n";
+            indent();
+            for (auto& s : arm.body) s->accept(*this);
+            dedent();
+            out_ << pad() << "}\n";
+        }
+        dedent();
+        out_ << pad() << "}\n";
+    }
+
     void visit(const TryCatchStmt& n) override {
         out_ << pad() << "try\n";
         indent(); n.try_body->accept(*this); dedent();
@@ -345,6 +376,25 @@ private:
             out_ << n.params[i].type.name << ' ' << n.params[i].name;
         }
         out_ << ")\n";
+    }
+
+    void visit(const EnumDecl& n) override {
+        out_ << pad() << "enum " << n.name << " {\n";
+        indent();
+        for (const auto& v : n.variants) {
+            out_ << pad() << v.name;
+            if (!v.payload.empty()) {
+                out_ << '(';
+                for (std::size_t i = 0; i < v.payload.size(); ++i) {
+                    if (i) out_ << ", ";
+                    out_ << v.payload[i].name;
+                }
+                out_ << ')';
+            }
+            out_ << '\n';
+        }
+        dedent();
+        out_ << pad() << "}\n";
     }
 
     void visit(const Program& n) override {

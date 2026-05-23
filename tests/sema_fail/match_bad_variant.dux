@@ -1,0 +1,17 @@
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+void main() {
+    int c = Color.Red
+    match c {
+        Color.Purple => {
+            println("purple")
+        }
+        _ => {
+            println("other")
+        }
+    }
+}
