@@ -980,11 +980,21 @@ match_arm
 match_pattern
     : IDENT DOT IDENT
         {
-            /* EnumName.Variant */
+            /* EnumName.Variant  (no payload binding) */
             MatchPattern p; p.loc = sl(@$, driver);
             p.kind = MatchPattern::Kind::EnumVariant;
             p.enum_name    = $1;
             p.variant_name = $3;
+            $$ = std::move(p);
+        }
+    | IDENT DOT IDENT LPAREN ident_list RPAREN
+        {
+            /* EnumName.Variant(binding1, binding2, ...)  — payload destructure */
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::EnumVariant;
+            p.enum_name    = $1;
+            p.variant_name = $3;
+            p.bindings     = std::move($5);
             $$ = std::move(p);
         }
     | INT_LIT
@@ -1010,13 +1020,13 @@ match_pattern
         }
     | IDENT
         {
-            /* bare identifier: "_" is wildcard, any other name is also wildcard for now
-               (binding variables deferred to a future milestone) */
+            /* bare identifier — wildcard */
             MatchPattern p; p.loc = sl(@$, driver);
             p.kind = MatchPattern::Kind::Wildcard;
             $$ = std::move(p);
         }
     ;
+
 
 /* -- Try / catch ------------------------------------------------------- */
 try_stmt
