@@ -1,0 +1,6 @@
+empty ok
+open ok
+try_recv empty ok
+closed ok
+try_recv closed ok
+chan ok

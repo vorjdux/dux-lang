@@ -1,0 +1,45 @@
+namespace pool {
+    extern "C" ptr  duxrt_pool_new(int n) ;
+    extern "C" void duxrt_pool_submit(ptr pool, ptr fn_ptr, ptr arg) ;
+    extern "C" void duxrt_pool_wait(ptr pool) ;
+    extern "C" void duxrt_pool_shutdown(ptr pool) ;
+    extern "C" void duxrt_pool_free(ptr pool) ;
+}
+
+# ThreadPool — fixed-size pool of worker threads with an unbounded task queue.
+class ThreadPool {
+    ptr _pool
+    int _size
+
+    ThreadPool(int n) {
+        this._size = n
+        unsafe {
+            this._pool = duxrt_pool_new(n)
+        }
+    }
+
+    # Submit a function pointer as a fire-and-forget task.
+    void submit(ptr fn_ptr) {
+        unsafe {
+            duxrt_pool_submit(this._pool, fn_ptr, null)
+        }
+    }
+
+    # Block until all queued tasks have finished.
+    void wait() {
+        unsafe {
+            duxrt_pool_wait(this._pool)
+        }
+    }
+
+    int size() {
+        return this._size
+    }
+
+    ~ThreadPool() {
+        unsafe {
+            duxrt_pool_shutdown(this._pool)
+            duxrt_pool_free(this._pool)
+        }
+    }
+}

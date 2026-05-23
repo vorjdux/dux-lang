@@ -1,0 +1,28 @@
+import thread.chan
+
+int main() {
+    Chan ch = new Chan(0)
+    long n0 = ch.pending()
+    if n0 == 0 {
+        print("empty ok")
+    }
+    bool closed0 = ch.is_closed()
+    if !closed0 {
+        print("open ok")
+    }
+    int tr = ch.try_recv()
+    if tr == 0 {
+        print("try_recv empty ok")
+    }
+    ch.close()
+    bool closed1 = ch.is_closed()
+    if closed1 {
+        print("closed ok")
+    }
+    int tr2 = ch.try_recv()
+    if tr2 == -1 {
+        print("try_recv closed ok")
+    }
+    print("chan ok")
+    return 0
+}

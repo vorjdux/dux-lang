@@ -1,0 +1,36 @@
+import data.bytes
+
+int main() {
+    ByteBuffer buf = new ByteBuffer(16)
+    buf.write_u8(66)
+    buf.write_u32_be(1000)
+    buf.write_u32_le(255)
+
+    long n = buf.len()
+    if n == 9 {
+        print("len ok")
+    }
+
+    int b0 = buf.read_u8(0)
+    if b0 == 66 {
+        print("u8 ok")
+    }
+
+    long v_be = buf.read_u32_be(1)
+    if v_be == 1000 {
+        print("u32_be ok")
+    }
+
+    long v_le = buf.read_u32_le(5)
+    if v_le == 255 {
+        print("u32_le ok")
+    }
+
+    str hex = buf.to_hex()
+    if len(hex) == 18 {
+        print("hex ok")
+    }
+
+    print("bytes typed ok")
+    return 0
+}

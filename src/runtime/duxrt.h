@@ -296,6 +296,23 @@ void*    duxrt_once_new(void);
 void     duxrt_once_call(void* o, void* fn);
 void     duxrt_once_free(void* o);
 
+/* ── Thread pool ─────────────────────────────────────────────────────────── */
+void*   duxrt_pool_new(int32_t n_threads);
+void    duxrt_pool_submit(void* pool, void* fn_ptr, void* arg);
+void    duxrt_pool_wait(void* pool);
+void    duxrt_pool_shutdown(void* pool);
+void    duxrt_pool_free(void* pool);
+
+/* ── Channel ─────────────────────────────────────────────────────────────── */
+void*   duxrt_chan_new(int64_t cap);
+void    duxrt_chan_send(void* ch, void* val);
+void*   duxrt_chan_recv(void* ch);        /* blocks; NULL = closed+empty */
+int32_t duxrt_chan_try_recv(void* ch, void** out); /* 1=got, 0=empty, -1=closed */
+void    duxrt_chan_close(void* ch);
+int32_t duxrt_chan_is_closed(void* ch);
+int64_t duxrt_chan_len(void* ch);
+void    duxrt_chan_free(void* ch);
+
 /* ── Process ─────────────────────────────────────────────────────────────── */
 int64_t  duxrt_process_run(DuxStr* cmd);
 DuxStr*  duxrt_process_capture(DuxStr* cmd);
@@ -303,6 +320,14 @@ int64_t  duxrt_process_pid(void);
 int64_t  duxrt_process_ppid(void);
 int64_t  duxrt_process_wait(int64_t pid);
 int64_t  duxrt_process_spawn(DuxStr* cmd, DuxList* args_list);
+
+/* ── Process handle API ─────────────────────────────────────────────────── */
+void*   duxrt_proc_spawn(DuxList* argv, int32_t cap_out, int32_t cap_err);
+int32_t duxrt_proc_wait(void* proc);
+DuxStr* duxrt_proc_stdout(void* proc);
+DuxStr* duxrt_proc_stderr(void* proc);
+int32_t duxrt_proc_kill(void* proc, int32_t sig);
+void    duxrt_proc_free(void* proc);
 
 /* ── Signals ─────────────────────────────────────────────────────────────── */
 int64_t  duxrt_signal_sigint(void);
@@ -317,6 +342,9 @@ int32_t  duxrt_signal_ignore(int64_t sig);
 int32_t  duxrt_signal_reset(int64_t sig);
 int32_t  duxrt_signal_raise(int64_t sig);
 int32_t  duxrt_signal_kill(int64_t pid, int64_t sig);
+void     duxrt_signal_register(int32_t signum, void* fn);
+void     duxrt_signal_block(int32_t signum);
+void     duxrt_signal_unblock(int32_t signum);
 
 /* ── Bytes ───────────────────────────────────────────────────────────────── */
 void*    duxrt_bytes_new(int64_t cap);
@@ -326,7 +354,27 @@ int64_t  duxrt_bytes_len(void* b);
 int64_t  duxrt_bytes_get(void* b, int64_t i);
 void     duxrt_bytes_set(void* b, int64_t i, int64_t val);
 void     duxrt_bytes_push(void* b, int64_t val);
+void     duxrt_bytes_append(void* dst, void* src);
 void     duxrt_bytes_free(void* b);
+/* Typed endian-aware write */
+void    duxrt_bytes_write_u8(void* b, int32_t v);
+void    duxrt_bytes_write_u16_le(void* b, int32_t v);
+void    duxrt_bytes_write_u16_be(void* b, int32_t v);
+void    duxrt_bytes_write_u32_le(void* b, int64_t v);
+void    duxrt_bytes_write_u32_be(void* b, int64_t v);
+void    duxrt_bytes_write_u64_le(void* b, int64_t v);
+void    duxrt_bytes_write_u64_be(void* b, int64_t v);
+/* Typed endian-aware read */
+int32_t duxrt_bytes_read_u8(void* b, int64_t off);
+int32_t duxrt_bytes_read_u16_le(void* b, int64_t off);
+int32_t duxrt_bytes_read_u16_be(void* b, int64_t off);
+int64_t duxrt_bytes_read_u32_le(void* b, int64_t off);
+int64_t duxrt_bytes_read_u32_be(void* b, int64_t off);
+int64_t duxrt_bytes_read_u64_le(void* b, int64_t off);
+int64_t duxrt_bytes_read_u64_be(void* b, int64_t off);
+/* Utilities */
+DuxStr* duxrt_bytes_hex(void* b);
+void*   duxrt_bytes_slice(void* b, int64_t start, int64_t end_pos);
 
 /* ── JSON ────────────────────────────────────────────────────────────────── */
 void*    duxrt_json_parse(DuxStr* input);
