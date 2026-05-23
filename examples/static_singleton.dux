@@ -1,0 +1,39 @@
+# Static singleton — demonstrates lazy initialization with class-level static fields.
+# Config loads once from a static flag and is reused on subsequent calls.
+
+class Config {
+    static const int DEFAULT_TIMEOUT_MS = 5000
+    static const int MAX_RETRIES        = 3
+    static bool      _loaded            = false
+    static int       _timeout_ms        = 0
+    static int       _max_retries       = 0
+
+    static void load() {
+        if !Config._loaded {
+            Config._timeout_ms  = Config.DEFAULT_TIMEOUT_MS
+            Config._max_retries = Config.MAX_RETRIES
+            Config._loaded      = true
+            println("Config loaded")
+        }
+    }
+
+    static int timeout() {
+        Config.load()
+        return Config._timeout_ms
+    }
+
+    static int retries() {
+        Config.load()
+        return Config._max_retries
+    }
+}
+
+void main() {
+    # First access triggers initialization
+    println(Config.timeout())    # prints "Config loaded" then 5000
+    println(Config.retries())    # 3, no "Config loaded" again
+
+    # Constants are always available
+    println(Config.DEFAULT_TIMEOUT_MS)
+    println(Config.MAX_RETRIES)
+}

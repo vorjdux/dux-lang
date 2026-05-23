@@ -269,8 +269,8 @@ void Sema::check_func(const ast::FunctionDecl& f, TypeId /*class_type*/) {
     TypeId ret = type_from_te(f.return_type);
     scopes_.push();
 
-    // Define 'this' if inside a class
-    if (!current_class_name_.empty()) {
+    // Define 'this' and 'super' if inside an instance method (not static)
+    if (!current_class_name_.empty() && !f.is_static) {
         Symbol th;
         th.name = "this";
         th.kind = SymKind::Var;
@@ -713,6 +713,9 @@ TypeId Sema::check_expr(const ast::Expr& e) {
             result = sym->type;
         }
     } else if (dynamic_cast<const ast::ThisExpr*>(&e)) {
+        // 'this' is not available in static methods
+        if (!scopes_.lookup("this"))
+            err(e.loc, "'this' cannot be used in a static method");
         result = current_class_type_;
     } else if (dynamic_cast<const ast::SuperExpr*>(&e)) {
         result = types_.info(current_class_type_).parent;
