@@ -1,0 +1,40 @@
+import net.socket
+
+int main() {
+    # Test socket creation for TCP
+    Socket s = tcp4()
+    if s.is_open() {
+        print("tcp4 ok")
+    }
+
+    # Test socket option setting (SO_REUSEADDR)
+    int r = s.set_opt(1, 2, 1)
+    if r == 0 {
+        print("set_opt ok")
+    }
+
+    # Test fd accessor
+    int fd = s.fd()
+    if fd >= 0 {
+        print("fd ok")
+    }
+
+    # Test local_addr before bind (may return empty)
+    str la = s.local_addr()
+    print("local_addr ok")
+
+    # Test UDP socket creation
+    Socket u = udp4()
+    if u.is_open() {
+        print("udp4 ok")
+    }
+
+    # Test Unix stream socket creation
+    Socket ux = unix_stream()
+    if ux.is_open() {
+        print("unix ok")
+    }
+
+    print("socket ok")
+    return 0
+}

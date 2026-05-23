@@ -1,0 +1,136 @@
+namespace tls {
+    extern "C" ptr  duxrt_tls_ctx_new_client() ;
+    extern "C" ptr  duxrt_tls_ctx_new_server(str cert_path, str key_path) ;
+    extern "C" void duxrt_tls_ctx_free(ptr ctx) ;
+    extern "C" ptr  duxrt_tls_connect(ptr ctx, str host, int port) ;
+    extern "C" ptr  duxrt_tls_accept(ptr ctx, int tcp_fd) ;
+    extern "C" long duxrt_tls_send(ptr tls, str data) ;
+    extern "C" str  duxrt_tls_recv(ptr tls, long cap) ;
+    extern "C" str  duxrt_tls_peer_cert_subject(ptr tls) ;
+    extern "C" void duxrt_tls_close(ptr tls) ;
+    extern "C" str  duxrt_tls_last_error() ;
+
+    # Get the last TLS error message
+    str last_error() {
+        str r = ""
+        unsafe {
+            r = duxrt_tls_last_error()
+        }
+        return r
+    }
+}
+
+# TlsConfig — server-side TLS configuration (certificate + private key).
+class TlsConfig {
+    ptr _ctx
+
+    TlsConfig(str cert_path, str key_path) {
+        unsafe {
+            this._ctx = duxrt_tls_ctx_new_server(cert_path, key_path)
+        }
+    }
+
+    bool is_valid() {
+        return this._ctx != null
+    }
+
+    ~TlsConfig() {
+        if this._ctx != null {
+            unsafe {
+                duxrt_tls_ctx_free(this._ctx)
+            }
+        }
+    }
+}
+
+# TlsStream — an established TLS connection (client or server side).
+class TlsStream {
+    ptr  _tls
+    bool _closed
+
+    TlsStream(ptr raw_tls) {
+        this._tls    = raw_tls
+        this._closed = false
+    }
+
+    bool is_open() {
+        return this._tls != null
+    }
+
+    # Send data; returns bytes sent (-1 on error)
+    long send_bytes(str data) {
+        long r = 0
+        unsafe {
+            r = duxrt_tls_send(this._tls, data)
+        }
+        return r
+    }
+
+    # Receive up to cap bytes; returns received string (empty on error/EOF)
+    str recv_bytes(long cap) {
+        str r = ""
+        unsafe {
+            r = duxrt_tls_recv(this._tls, cap)
+        }
+        return r
+    }
+
+    # Return peer certificate subject (empty string if not available)
+    str peer_cert_subject() {
+        str r = ""
+        unsafe {
+            r = duxrt_tls_peer_cert_subject(this._tls)
+        }
+        return r
+    }
+
+    # Perform a TLS shutdown and close the underlying connection
+    void close() {
+        if !this._closed {
+            if this._tls != null {
+                unsafe {
+                    duxrt_tls_close(this._tls)
+                }
+            }
+            this._closed = true
+        }
+    }
+
+    ~TlsStream() {
+        if !this._closed {
+            if this._tls != null {
+                unsafe {
+                    duxrt_tls_close(this._tls)
+                }
+            }
+        }
+    }
+}
+
+# Connect to host:port with TLS (client side, with certificate verification).
+# Returns a TlsStream; call is_open() to check for errors.
+TlsStream tls_connect(str host, int port) {
+    ptr ctx = null
+    unsafe {
+        ctx = duxrt_tls_ctx_new_client()
+    }
+    if ctx == null {
+        return new TlsStream(null)
+    }
+    ptr tls_ptr = null
+    unsafe {
+        tls_ptr = duxrt_tls_connect(ctx, host, port)
+        duxrt_tls_ctx_free(ctx)
+    }
+    return new TlsStream(tls_ptr)
+}
+
+# Wrap an accepted TCP file descriptor in a server-side TLS session.
+# cfg must be a valid TlsConfig with certificate and key loaded.
+TlsStream tls_accept_fd(TlsConfig cfg, int tcp_fd) {
+    ptr tls_ptr = null
+    unsafe {
+        tls_ptr = duxrt_tls_accept(cfg._ctx, tcp_fd)
+    }
+    return new TlsStream(tls_ptr)
+}

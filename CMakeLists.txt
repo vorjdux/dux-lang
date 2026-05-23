@@ -67,6 +67,9 @@ add_library(duxrt STATIC
     src/runtime/bytes_rt.c
     src/runtime/json_rt.c
     src/runtime/regex_rt.c
+    src/runtime/socket_rt.c
+    src/runtime/net_tls.c
+    src/runtime/net_http.c
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)
@@ -79,7 +82,10 @@ target_compile_options(duxrt PRIVATE
 # duxrt must NOT be instrumented with sanitizers: user programs link against
 # it and are not compiled with sanitizer runtimes.
 
-target_link_libraries(duxrt PUBLIC m stdc++ pthread)  # math functions + C++ EH ABI + pthreads
+# OpenSSL for net.tls
+find_package(OpenSSL REQUIRED)
+
+target_link_libraries(duxrt PUBLIC m stdc++ pthread OpenSSL::SSL OpenSSL::Crypto)  # math + C++ EH ABI + pthreads + TLS
 
 # Record absolute path so the compiler driver can find it at runtime
 set(DUXRT_LIB_PATH "$<TARGET_FILE:duxrt>")
