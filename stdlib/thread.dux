@@ -10,6 +10,7 @@ namespace thread {
     extern "C" ptr  duxrt_thread_spawn(ptr func, ptr arg) ;
     extern "C" int  duxrt_thread_join(ptr t) ;
     extern "C" int  duxrt_thread_detach(ptr t) ;
+    extern "C" void duxrt_thread_free(ptr t) ;
 
     extern "C" ptr  duxrt_mutex_new() ;
     extern "C" void duxrt_mutex_lock(ptr m) ;
@@ -83,6 +84,15 @@ class Thread(object) {
     }
 
     ~Thread() {
+        # Free the handle if join/detach were not called (RT-3 fix).
+        # join() and detach() already free the C handle and null _handle,
+        # so this only fires when neither was called.
+        if this._handle != null {
+            unsafe {
+                duxrt_thread_free(this._handle)
+            }
+            this._handle = null
+        }
     }
 }
 

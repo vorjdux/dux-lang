@@ -298,6 +298,7 @@ void*    duxrt_thread_self(void);
 void*    duxrt_thread_spawn(void* fn, void* arg);
 int32_t  duxrt_thread_join(void* handle);
 int32_t  duxrt_thread_detach(void* handle);
+void     duxrt_thread_free(void* handle);   /* detach + free (use when join/detach not called) */
 void*    duxrt_mutex_create(void);
 void*    duxrt_mutex_new(void);        /* alias for mutex_create */
 void     duxrt_mutex_lock(void* m);
@@ -481,7 +482,8 @@ DuxStr* duxrt_http_format_response(int32_t status, DuxStr* status_text,
 
 /* ── Future (async/await Phase 2) ───────────────────────────────────────── */
 void*   duxrt_future_new(void);
-void    duxrt_future_free(void* fut);
+void    duxrt_future_retain(void* fut);     /* increment ref count */
+void    duxrt_future_free(void* fut);       /* release ref; free when count == 0 */
 void    duxrt_future_set(void* fut, void* result);
 void*   duxrt_future_await(void* fut);
 void    duxrt_future_spawn_detached(void* fn, void* env);

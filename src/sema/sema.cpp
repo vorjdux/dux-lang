@@ -623,7 +623,60 @@ void Sema::check_match(const ast::MatchStmt& s) {
         check_stmts(arm.body);
         scopes_.pop();
     }
-    (void)expr_t;
+
+    /* E-2: validate that the scrutinee type is consistent with the patterns.
+     * We only flag *definite* mismatches — types that can never hold an enum
+     * value (str, double, list, dict …).  int, long, object, and unknown are
+     * all permitted as enum holders because Dux stores simple enum values as
+     * i32 and payload enums as object/ptr.                                   */
+    if (expr_t != TR::TID_UNKNOWN) {
+        bool has_enum_arm = false, has_int_arm = false, has_bool_arm = false;
+        for (const auto& arm : s.arms) {
+            switch (arm.pattern.kind) {
+            case ast::MatchPattern::Kind::EnumVariant: has_enum_arm  = true; break;
+            case ast::MatchPattern::Kind::IntLit:      has_int_arm   = true; break;
+            case ast::MatchPattern::Kind::BoolLit:     has_bool_arm  = true; break;
+            default: break;
+            }
+        }
+
+        /* Types that are definitely not enum-compatible */
+        auto is_non_enum = [](TypeId t) {
+            return t == TR::TID_STR    || t == TR::TID_DOUBLE ||
+                   t == TR::TID_REAL   || t == TR::TID_LIST   ||
+                   t == TR::TID_DICT;
+        };
+        /* Types that are definitely not bool-compatible */
+        auto is_non_bool = [](TypeId t) {
+            return t == TR::TID_STR    || t == TR::TID_DOUBLE ||
+                   t == TR::TID_REAL   || t == TR::TID_LIST   ||
+                   t == TR::TID_DICT;
+        };
+
+        if (has_enum_arm && is_non_enum(expr_t))
+            err(s.expr->loc,
+                "match expression type cannot hold an enum value "
+                "but patterns use enum variants");
+        if (has_bool_arm && is_non_bool(expr_t))
+            err(s.expr->loc,
+                "match expression type cannot hold a bool "
+                "but patterns use boolean literals");
+
+        /* Cross-check: when scrutinee is explicitly an enum type, all enum arms
+         * must reference that same enum (not a different one). */
+        bool expr_is_enum = types_.info(expr_t).kind == TypeKind::Enum;
+        if (has_enum_arm && expr_is_enum) {
+            for (const auto& arm : s.arms) {
+                if (arm.pattern.kind != ast::MatchPattern::Kind::EnumVariant) continue;
+                Symbol* esym = scopes_.lookup(arm.pattern.enum_name);
+                if (esym && types_.info(esym->type).kind == TypeKind::Enum &&
+                    esym->type != expr_t)
+                    err(arm.loc,
+                        "pattern enum '" + arm.pattern.enum_name +
+                        "' does not match scrutinee enum type");
+            }
+        }
+    }
 }
 
 void Sema::check_try_catch(const ast::TryCatchStmt& s) {
