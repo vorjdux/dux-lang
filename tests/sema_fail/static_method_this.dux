@@ -1,0 +1,11 @@
+class Foo {
+    int x = 0
+
+    static void bad() {
+        this.x = 1
+    }
+}
+
+void main() {
+    Foo.bad()
+}

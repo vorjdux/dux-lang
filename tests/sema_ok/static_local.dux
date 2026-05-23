@@ -1,0 +1,11 @@
+int counter() {
+    static int count = 0
+    count += 1
+    return count
+}
+
+void main() {
+    int a = counter()
+    int b = counter()
+    int c = counter()
+}

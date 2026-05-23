@@ -1,0 +1,28 @@
+class Widget {
+    static int _count = 0
+    int _id
+
+    Widget(int id) {
+        this._id = id
+        Widget._count += 1
+    }
+
+    ~Widget() {
+        Widget._count -= 1
+    }
+
+    static int count() {
+        return Widget._count
+    }
+}
+
+void main() {
+    println(Widget.count())      # 0
+    Widget a = new Widget(1)
+    Widget b = new Widget(2)
+    println(Widget.count())      # 2
+    delete a
+    println(Widget.count())      # 1
+    delete b
+    println(Widget.count())      # 0
+}
