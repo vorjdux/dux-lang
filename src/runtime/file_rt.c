@@ -37,6 +37,9 @@ DuxList* duxrt_file_read_lines(DuxStr* path) {
         if (n > 0 && line[n - 1] == '\n') { line[n - 1] = '\0'; n--; }
         duxrt_list_push(list, duxrt_str_new(line, (int64_t)n));
     }
+    if (ferror(f)) {
+        fputs("duxrt: read error in duxrt_file_read_lines\n", stderr);
+    }
     free(line);
     fclose(f);
     return list;
