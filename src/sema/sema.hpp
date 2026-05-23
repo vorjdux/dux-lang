@@ -31,6 +31,7 @@ private:
     void hoist_top(const ast::DeclList& decls);
     void hoist_class(const ast::ClassDecl& c);
     void hoist_interface(const ast::InterfaceDecl& i);
+    void hoist_enum(const ast::EnumDecl& e);
     void hoist_namespace(const ast::NamespaceDecl& ns);
     void hoist_extern(const ast::ExternDecl& e);
 

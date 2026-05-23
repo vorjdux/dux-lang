@@ -102,6 +102,8 @@ void Sema::hoist_top(const ast::DeclList& decls) {
             hoist_class(*c);
         else if (auto* i = dynamic_cast<const ast::InterfaceDecl*>(dp.get()))
             hoist_interface(*i);
+        else if (auto* e = dynamic_cast<const ast::EnumDecl*>(dp.get()))
+            hoist_enum(*e);
         else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(dp.get()))
             hoist_namespace(*ns);
         else if (auto* f = dynamic_cast<const ast::FunctionDecl*>(dp.get())) {
@@ -121,6 +123,43 @@ void Sema::hoist_top(const ast::DeclList& decls) {
         else if (auto* ext = dynamic_cast<const ast::ExternDecl*>(dp.get()))
             hoist_extern(*ext);
     }
+}
+
+void Sema::hoist_enum(const ast::EnumDecl& e) {
+    // Register the enum type
+    TypeId id = types_.intern(e.name, TypeKind::Enum);
+    TypeInfo& ti = types_.info(id);
+    ti.variants.clear();
+
+    // Register each variant and its tag constant in the global scope
+    int32_t tag = 0;
+    for (const auto& v : e.variants) {
+        EnumVariantInfo vi;
+        vi.name = v.name;
+        vi.tag  = tag++;
+        for (const auto& pt : v.payload)
+            vi.payload.push_back(types_.from_type_expr(pt));
+        ti.variants.push_back(vi);
+
+        // Register "EnumName.VariantName" as a const int symbol
+        Symbol s;
+        s.name     = e.name + "." + v.name;
+        s.kind     = SymKind::Var;
+        s.type     = id;   // type is the enum itself
+        s.is_const = true;
+        s.loc      = v.loc;
+        scopes_.global_scope().define(s.name, s);
+    }
+
+    // Register the enum type itself as a symbol
+    Symbol s;
+    s.name = e.name;
+    s.kind = SymKind::Class;   // treat like class for lookup purposes
+    s.type = id;
+    s.decl = const_cast<ast::EnumDecl*>(&e);
+    s.loc  = e.loc;
+    if (!scopes_.define(s.name, s))
+        err(e.loc, "enum '" + e.name + "' already declared");
 }
 
 void Sema::hoist_extern(const ast::ExternDecl& e) {
@@ -196,6 +235,7 @@ void Sema::check_decl(const ast::Decl& d) {
     else if (auto* i  = dynamic_cast<const ast::InterfaceDecl*>(&d)) check_interface(*i);
     else if (auto* ns = dynamic_cast<const ast::NamespaceDecl*>(&d)) check_namespace(*ns);
     else if (auto* im = dynamic_cast<const ast::ImportDecl*>(&d))    check_import(*im);
+    // EnumDecl: already fully processed in hoist_enum (pass 1)
     // ExternDecl: already hoisted in pass 1; nothing to check in pass 2
 }
 
@@ -767,6 +807,25 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
 }
 
 TypeId Sema::check_member(const ast::MemberExpr& e) {
+    // Enum variant access: `Color.Red`
+    // The object is an identifier resolving to an enum type symbol.
+    if (auto* id = dynamic_cast<const ast::IdentExpr*>(e.object.get())) {
+        Symbol* sym = scopes_.lookup(id->name);
+        if (sym && sym->kind == SymKind::Class &&
+            types_.info(sym->type).kind == TypeKind::Enum) {
+            TypeId enum_tid = sym->type;
+            const TypeInfo& ti = types_.info(enum_tid);
+            for (const auto& v : ti.variants) {
+                if (v.name == e.member) {
+                    e.object->type_id = enum_tid;
+                    return enum_tid;
+                }
+            }
+            err(e.loc, "enum '" + id->name + "' has no variant '" + e.member + "'");
+            return TR::TID_UNKNOWN;
+        }
+    }
+
     TypeId obj_t = check_expr(*e.object);
 
     // Try to find the member in the class type info scope

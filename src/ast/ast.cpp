@@ -46,6 +46,7 @@ void InterfaceDecl::accept(Visitor& v) const { v.visit(*this); }
 void ImportDecl::accept(Visitor& v)    const { v.visit(*this); }
 void NamespaceDecl::accept(Visitor& v) const { v.visit(*this); }
 void ExternDecl::accept(Visitor& v)    const { v.visit(*this); }
+void EnumDecl::accept(Visitor& v)      const { v.visit(*this); }
 
 void Program::accept(Visitor& v)       const { v.visit(*this); }
 

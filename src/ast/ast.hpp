@@ -341,6 +341,20 @@ struct ExternDecl final : Decl {
     void accept(Visitor& v) const override;
 };
 
+// ─── Enum declaration ─────────────────────────────────────────────────────────
+
+struct EnumVariant {
+    std::string            name;
+    std::vector<TypeExpr>  payload;   // empty = simple (i32) variant
+    SourceLoc              loc;
+};
+
+struct EnumDecl final : Decl {
+    std::string              name;
+    std::vector<EnumVariant> variants;
+    void accept(Visitor& v) const override;
+};
+
 // ─── Program ─────────────────────────────────────────────────────────────────
 
 struct Program final : Node {
@@ -398,6 +412,7 @@ struct Visitor {
     virtual void visit(const ImportDecl&)    = 0;
     virtual void visit(const NamespaceDecl&) = 0;
     virtual void visit(const ExternDecl&)    = 0;
+    virtual void visit(const EnumDecl&)      = 0;
 
     virtual void visit(const Program&)       = 0;
 };
