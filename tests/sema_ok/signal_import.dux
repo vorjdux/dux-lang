@@ -1,0 +1,9 @@
+import sys.signal
+
+fn main() {
+    let sigpipe = signal.sigpipe()
+    let ok = signal.ignore(sigpipe)
+    let ok2 = signal.reset(sigpipe)
+    let s2 = signal.sigterm()
+    let s3 = signal.sigusr1()
+}

@@ -181,6 +181,21 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── Signal handling (sys.signal module) ─────────────────────────────────── */
+int64_t duxrt_signal_sigint(void);
+int64_t duxrt_signal_sigterm(void);
+int64_t duxrt_signal_sighup(void);
+int64_t duxrt_signal_sigusr1(void);
+int64_t duxrt_signal_sigusr2(void);
+int64_t duxrt_signal_sigchld(void);
+int64_t duxrt_signal_sigpipe(void);
+int64_t duxrt_signal_sigalrm(void);
+int     duxrt_signal_handle(int64_t signum, void (*handler)(void));
+int     duxrt_signal_ignore(int64_t signum);
+int     duxrt_signal_reset(int64_t signum);
+int     duxrt_signal_raise(int64_t signum);
+int     duxrt_signal_kill(int64_t pid, int64_t signum);
+
 /* ── Process management (sys.process module) ─────────────────────────────── */
 int64_t  duxrt_process_run(DuxStr* cmd);
 DuxStr*  duxrt_process_capture(DuxStr* cmd);

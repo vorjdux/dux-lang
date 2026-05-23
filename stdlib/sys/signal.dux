@@ -1,0 +1,23 @@
+// sys.signal — POSIX signal handling
+//
+// Import with:
+//   import sys.signal
+//
+// Signal number constants (each returns an int):
+//   let s = signal.sigint()   // SIGINT (2)
+//   let s = signal.sigterm()  // SIGTERM (15)
+//   let s = signal.sighup()   // SIGHUP (1)
+//   let s = signal.sigusr1()  // SIGUSR1
+//   let s = signal.sigusr2()  // SIGUSR2
+//   let s = signal.sigchld()  // SIGCHLD
+//   let s = signal.sigpipe()  // SIGPIPE
+//   let s = signal.sigalrm()  // SIGALRM
+//
+// Signal management:
+//   signal.ignore(signal.sigpipe())   // ignore a signal
+//   signal.reset(signal.sigint())     // restore default handler
+//   signal.raise(signal.sigusr1())    // send signal to self
+//   signal.kill(pid, signal.sigterm()) // send signal to another process
+//
+// Note: signal.handle(signum, fn_ptr) requires a function pointer;
+//       use via unsafe extern for custom handlers.

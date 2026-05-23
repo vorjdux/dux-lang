@@ -1,0 +1,16 @@
+import sys.signal
+
+fn main() {
+    let pipe_sig = signal.sigpipe()
+    if pipe_sig > 0 {
+        println("sigpipe ok")
+    }
+    let ok = signal.ignore(pipe_sig)
+    if ok {
+        println("ignored")
+    }
+    let ok2 = signal.reset(pipe_sig)
+    if ok2 {
+        println("reset")
+    }
+}

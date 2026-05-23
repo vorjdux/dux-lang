@@ -1,0 +1,6 @@
+import sys.signal
+
+fn main() {
+    let s = signal.sigint()
+    let ok = signal.ignore(s)
+}

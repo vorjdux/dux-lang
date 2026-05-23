@@ -619,6 +619,20 @@ using StdlibMod = std::unordered_map<std::string, StdlibFn>;
 
 static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
     static const std::unordered_map<std::string, StdlibMod> tbl = {
+        {"signal", {
+            {"sigint",  {"duxrt_signal_sigint",  TR::TID_LONG, {}}},
+            {"sigterm", {"duxrt_signal_sigterm", TR::TID_LONG, {}}},
+            {"sighup",  {"duxrt_signal_sighup",  TR::TID_LONG, {}}},
+            {"sigusr1", {"duxrt_signal_sigusr1", TR::TID_LONG, {}}},
+            {"sigusr2", {"duxrt_signal_sigusr2", TR::TID_LONG, {}}},
+            {"sigchld", {"duxrt_signal_sigchld", TR::TID_LONG, {}}},
+            {"sigpipe", {"duxrt_signal_sigpipe", TR::TID_LONG, {}}},
+            {"sigalrm", {"duxrt_signal_sigalrm", TR::TID_LONG, {}}},
+            {"ignore",  {"duxrt_signal_ignore",  TR::TID_BOOL, {TR::TID_LONG}}},
+            {"reset",   {"duxrt_signal_reset",   TR::TID_BOOL, {TR::TID_LONG}}},
+            {"raise",   {"duxrt_signal_raise",   TR::TID_BOOL, {TR::TID_LONG}}},
+            {"kill",    {"duxrt_signal_kill",    TR::TID_BOOL, {TR::TID_LONG, TR::TID_LONG}}},
+        }},
         {"process", {
             {"run",     {"duxrt_process_run",     TR::TID_LONG,   {TR::TID_STR}}},
             {"capture", {"duxrt_process_capture", TR::TID_STR,    {TR::TID_STR}}},
