@@ -76,3 +76,12 @@ json/src/json/zjson
 */**/docker-data
 rest/src/rest/zsysd
 */**/__pycache__/
+
+# Core dumps and profiling artifacts
+core
+vgcore.*
+callgrind.out.*
+massif.out.*
+cachegrind.out.*
+perf.data
+perf.data.old
