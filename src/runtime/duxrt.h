@@ -181,6 +181,14 @@ int  duxrt_try_enter(void** exception_out); /* returns 0 in try, 1 in catch */
 void duxrt_try_exit(void);
 void duxrt_throw(DuxException* e);          /* longjmp to nearest try frame */
 
+/* ── Random number generation (math.random module) ──────────────────────── */
+void    duxrt_random_seed(int64_t seed);
+double  duxrt_random(void);
+int64_t duxrt_random_int(int64_t lo, int64_t hi);
+double  duxrt_random_double(double lo, double hi);
+int     duxrt_random_bool(double p);
+void    duxrt_random_shuffle(DuxList* lst);
+
 /* ── Byte buffer (data.bytes module) ────────────────────────────────────── */
 typedef struct DuxBytes {
     int64_t  len;

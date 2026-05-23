@@ -1,0 +1,8 @@
+import math.random
+
+fn main() {
+    random.seed(12345)
+    let f = random.float()
+    let i = random.integer(0, 99)
+    let u = random.uniform(0.0, 100.0)
+}

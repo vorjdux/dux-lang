@@ -1,0 +1,6 @@
+import math.random
+
+fn main() {
+    random.seed(42)
+    let f = random.float()
+}

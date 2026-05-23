@@ -1,0 +1,27 @@
+import math.random
+
+fn main() {
+    random.seed(42)
+    let i = random.integer(1, 10)
+    if i >= 1 {
+        if i <= 10 {
+            println("in range")
+        }
+    }
+    let f = random.float()
+    if f >= 0.0 {
+        if f < 1.0 {
+            println("in unit")
+        }
+    }
+    let b = random.chance(1.0)
+    if b {
+        println("certain")
+    }
+    let n = random.chance(0.0)
+    if n {
+        println("impossible")
+    } else {
+        println("impossible ok")
+    }
+}

@@ -1,0 +1,15 @@
+// math.random — pseudorandom number generation (xoshiro256**)
+//
+// Import with:
+//   import math.random
+//
+// Usage:
+//   random.seed(42)              // seed the PRNG (int)
+//   let f = random.float()       // uniform double in [0, 1)
+//   let i = random.integer(1, 6) // uniform int in [lo, hi] (inclusive)
+//   let u = random.uniform(0.0, 1.0) // uniform double in [lo, hi)
+//   let b = random.chance(0.5)   // true with probability p
+//   random.shuffle(my_list)      // shuffle a list in-place
+//
+// Note: 'int', 'double', 'bool' are reserved words;
+//       use 'integer', 'uniform', 'chance' instead.

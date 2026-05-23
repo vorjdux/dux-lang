@@ -619,6 +619,14 @@ using StdlibMod = std::unordered_map<std::string, StdlibFn>;
 
 static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
     static const std::unordered_map<std::string, StdlibMod> tbl = {
+        {"random", {
+            {"seed",    {"duxrt_random_seed",    TR::TID_VOID,   {TR::TID_LONG}}},
+            {"float",   {"duxrt_random",         TR::TID_DOUBLE, {}}},
+            {"integer", {"duxrt_random_int",     TR::TID_LONG,   {TR::TID_LONG, TR::TID_LONG}}},
+            {"uniform", {"duxrt_random_double",  TR::TID_DOUBLE, {TR::TID_DOUBLE, TR::TID_DOUBLE}}},
+            {"chance",  {"duxrt_random_bool",    TR::TID_BOOL,   {TR::TID_DOUBLE}}},
+            {"shuffle", {"duxrt_random_shuffle", TR::TID_VOID,   {TR::TID_LIST}}},
+        }},
         {"math", {
             {"sqrt",  {"duxrt_math_sqrt",   TR::TID_DOUBLE, {TR::TID_DOUBLE}}},
             {"pow",   {"duxrt_math_pow",    TR::TID_DOUBLE, {TR::TID_DOUBLE, TR::TID_DOUBLE}}},
