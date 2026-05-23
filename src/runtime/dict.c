@@ -30,6 +30,7 @@ DuxDict* duxrt_dict_new(void) {
     if (!d) abort();
     d->len  = 0;
     d->cap  = DICT_INIT_CAP;
+    d->tomb = 0;
     d->entries = (DuxDictEntry*)calloc((size_t)DICT_INIT_CAP, sizeof(DuxDictEntry));
     if (!d->entries) abort();
     return d;
@@ -63,6 +64,7 @@ static void dict_grow(DuxDict* d) {
     DuxDictEntry* old_ents = d->entries;
     d->cap    *= 2;
     d->len     = 0;
+    d->tomb    = 0;   /* tombstones are cleared on resize */
     d->entries = (DuxDictEntry*)calloc((size_t)d->cap, sizeof(DuxDictEntry));
     if (!d->entries) abort();
     for (int64_t i = 0; i < old_cap; ++i) {
@@ -75,7 +77,7 @@ static void dict_grow(DuxDict* d) {
 
 void duxrt_dict_set(DuxDict* d, const char* key, void* val) {
     if (!d || !key) return;
-    if (d->len * DICT_LOAD_DEN >= d->cap * DICT_LOAD_NUM)
+    if ((d->len + d->tomb) * DICT_LOAD_DEN >= d->cap * DICT_LOAD_NUM)
         dict_grow(d);
     char* k = strdup(key);
     if (!k) abort();
@@ -119,6 +121,7 @@ void duxrt_dict_del(DuxDict* d, const char* key) {
             d->entries[idx].key = TOMBSTONE;  /* mark deleted; preserve probe chain */
             d->entries[idx].val = NULL;
             d->len--;
+            d->tomb++;
             return;
         }
         idx = (idx + 1) & (d->cap - 1);

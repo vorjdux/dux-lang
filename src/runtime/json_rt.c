@@ -153,7 +153,7 @@ DuxStr* duxrt_json_stringify(void* handle) {
     buf[pos++] = '{';
     int first = 1;
     for (int64_t i = 0; i < d->cap; i++) {
-        if (!d->entries[i].key) continue;
+        if (!d->entries[i].key || d->entries[i].key == (char*)(uintptr_t)1) continue;
         const char* k = d->entries[i].key;
         DuxStr* vs = (DuxStr*)d->entries[i].val;
         const char* v = vs ? duxrt_str_cstr(vs) : "";

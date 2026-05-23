@@ -34,14 +34,20 @@ static void* thread_runner(void* arg) {
     return NULL;
 }
 
+typedef struct {
+    pthread_t tid;
+    int       joined;
+} DuxThread;
+
 void* duxrt_thread_spawn(void* fn, void* arg) {
-    pthread_t* t = (pthread_t*)malloc(sizeof(pthread_t));
+    DuxThread* t = (DuxThread*)malloc(sizeof(DuxThread));
     if (!t) return NULL;
+    t->joined = 0;
     ThreadArgs* ta = (ThreadArgs*)malloc(sizeof(ThreadArgs));
     if (!ta) { free(t); return NULL; }
     ta->fn  = (void (*)(void*))fn;
     ta->arg = arg;
-    if (pthread_create(t, NULL, thread_runner, ta) != 0) {
+    if (pthread_create(&t->tid, NULL, thread_runner, ta) != 0) {
         free(ta); free(t); return NULL;
     }
     return t;
@@ -49,17 +55,19 @@ void* duxrt_thread_spawn(void* fn, void* arg) {
 
 int32_t duxrt_thread_join(void* handle) {
     if (!handle) return -1;
-    pthread_t* t = (pthread_t*)handle;
-    int r = pthread_join(*t, NULL);
-    free(t);
+    DuxThread* t = (DuxThread*)handle;
+    if (t->joined) return -1;
+    int r = pthread_join(t->tid, NULL);
+    if (r == 0) t->joined = 1;
     return r == 0 ? 0 : -1;
 }
 
 int32_t duxrt_thread_detach(void* handle) {
     if (!handle) return -1;
-    pthread_t* t = (pthread_t*)handle;
-    int r = pthread_detach(*t);
-    free(t);
+    DuxThread* t = (DuxThread*)handle;
+    if (t->joined) return -1;
+    int r = pthread_detach(t->tid);
+    if (r == 0) t->joined = 1;
     return r == 0 ? 0 : -1;
 }
 
@@ -161,19 +169,16 @@ void duxrt_cond_free(void* c) {
 /* ── Once ────────────────────────────────────────────────────────────────── */
 
 typedef struct {
-    pthread_once_t once;
-    void (*fn)(void);
+    pthread_mutex_t mu;
+    int             done;
+    void           (*fn)(void);
 } DuxOnce;
-
-/* pthread_once requires a static/global function — we store the fn ptr in TLS */
-static __thread void (*once_fn_)(void) = NULL;
-static void once_trampoline(void) { if (once_fn_) once_fn_(); }
 
 void* duxrt_once_new(void) {
     DuxOnce* o = (DuxOnce*)malloc(sizeof(DuxOnce));
     if (!o) return NULL;
-    pthread_once_t init = PTHREAD_ONCE_INIT;
-    o->once = init;
+    pthread_mutex_init(&o->mu, NULL);
+    o->done = 0;
     o->fn   = NULL;
     return o;
 }
@@ -181,10 +186,18 @@ void* duxrt_once_new(void) {
 void duxrt_once_call(void* handle, void* fn) {
     DuxOnce* o = (DuxOnce*)handle;
     if (!o || !fn) return;
-    once_fn_ = (void (*)(void))fn;
-    pthread_once(&o->once, once_trampoline);
+    pthread_mutex_lock(&o->mu);
+    if (!o->done) {
+        o->fn = (void (*)(void))fn;
+        o->fn();
+        o->done = 1;
+    }
+    pthread_mutex_unlock(&o->mu);
 }
 
 void duxrt_once_free(void* handle) {
-    free(handle);
+    if (!handle) return;
+    DuxOnce* o = (DuxOnce*)handle;
+    pthread_mutex_destroy(&o->mu);
+    free(o);
 }

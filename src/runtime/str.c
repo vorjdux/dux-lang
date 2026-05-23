@@ -35,13 +35,13 @@ DuxStr* duxrt_str_new(const char* src, int64_t len) {
 }
 
 DuxStr* duxrt_str_retain(DuxStr* s) {
-    if (s && s->refcount != -1) s->refcount++;
+    if (s && atomic_load(&s->refcount) != -1) atomic_fetch_add(&s->refcount, 1);
     return s;
 }
 
 void duxrt_str_release(DuxStr* s) {
-    if (!s || s->refcount == -1) return;   /* null or immortal */
-    if (--s->refcount == 0) {
+    if (!s || atomic_load(&s->refcount) == -1) return;   /* null or immortal */
+    if (atomic_fetch_sub(&s->refcount, 1) == 1) {
         if (s->ext) free(s->ext);          /* long strings: free external buffer */
         free(s);                            /* always: free the header */
     }
