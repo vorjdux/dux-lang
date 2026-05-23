@@ -8,15 +8,15 @@ class Temperature {
     }
 
     public:
-    real celsius() get {
+    real celsius() __get__ {
         return this.celsius_
     }
 
-    void celsius(real value) set {
+    void celsius(real value) __set__ {
         this.celsius_ = value
     }
 
-    real fahrenheit() get {
+    real fahrenheit() __get__ {
         return this.celsius_ * 1.8 + 32.0
     }
 }
