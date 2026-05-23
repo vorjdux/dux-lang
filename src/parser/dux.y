@@ -90,6 +90,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_AUTO "auto"
 %token KW_AND KW_OR KW_NOT
 %token KW_UNSAFE KW_EXTERN
+%token KW_ASYNC KW_AWAIT
 
 /* Type keywords */
 %token KW_VOID KW_INT KW_LONG KW_REAL KW_DOUBLE KW_STR
@@ -276,7 +277,9 @@ dotted_name
     | KW_STR                    { $$ = "str"; }
     | KW_LIST                   { $$ = "list"; }
     | KW_DICT                   { $$ = "dict"; }
+    | KW_ASYNC                  { $$ = "async"; }
     | dotted_name DOT IDENT     { $$ = $1 + '.' + $3; }
+    | dotted_name DOT KW_ASYNC  { $$ = $1 + ".async"; }
     ;
 
 /* =====================================================================
@@ -563,6 +566,21 @@ func_decl
             f->params       = std::move($5);
             f->modifier     = $7;
             f->body         = std::move(*$8);
+            $$ = std::move(f);
+        }
+    | KW_ASYNC type_expr IDENT opt_type_params LPAREN param_list RPAREN block
+        {
+            auto f          = mk<FunctionDecl>();
+            f->loc          = sl(@$, driver);
+            f->return_type  = $2;
+            f->name         = $3;
+            for (const auto& [pname, bname] : $4) {
+                f->type_params.push_back(pname);
+                if (!bname.empty()) f->type_bounds.push_back(TypeBound{pname, bname});
+            }
+            f->params       = std::move($6);
+            f->body         = std::move(*$8);
+            f->is_async     = true;
             $$ = std::move(f);
         }
     | KW_STATIC type_expr IDENT LPAREN param_list RPAREN opt_func_modifier block
@@ -1238,6 +1256,13 @@ unary_expr
     | PLUSPLUS   unary_expr  { auto e = mk<UnaryExpr>(); e->loc = sl(@$, driver); e->op = "++"; e->prefix = true; e->operand = std::move($2); $$ = std::move(e); }
     | MINUSMINUS unary_expr  { auto e = mk<UnaryExpr>(); e->loc = sl(@$, driver); e->op = "--"; e->prefix = true; e->operand = std::move($2); $$ = std::move(e); }
     | KW_NOT     unary_expr  { auto e = mk<UnaryExpr>(); e->loc = sl(@$, driver); e->op = "!"; e->prefix = true; e->operand = std::move($2); $$ = std::move(e); }
+    | KW_AWAIT   unary_expr
+        {
+            auto e = mk<AwaitExpr>();
+            e->loc = sl(@$, driver);
+            e->operand = std::move($2);
+            $$ = std::move(e);
+        }
     | postfix_expr  { $$ = std::move($1); }
     ;
 

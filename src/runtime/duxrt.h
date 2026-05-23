@@ -479,6 +479,13 @@ void    duxrt_http_req_free(void* req);
 DuxStr* duxrt_http_format_response(int32_t status, DuxStr* status_text,
                                     void* headers_dict, DuxStr* body);
 
+/* ── Future (async/await Phase 2) ───────────────────────────────────────── */
+void*   duxrt_future_new(void);
+void    duxrt_future_free(void* fut);
+void    duxrt_future_set(void* fut, void* result);
+void*   duxrt_future_await(void* fut);
+void    duxrt_future_spawn_detached(void* fn, void* env);
+
 /* ── Async scheduler (Phase 1) ───────────────────────────────────────────── */
 void    duxrt_async_sleep_ms(int64_t ms);
 void    duxrt_async_yield(void);
