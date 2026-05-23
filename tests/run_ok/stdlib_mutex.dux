@@ -1,15 +1,14 @@
-import thread.mutex
+import thread
 
 int main() {
-    ptr m = mutex.create()
-    mutex.lock(m)
-    mutex.unlock(m)
-    bool try_ok = mutex.trylock(m)
-    if try_ok {
+    Mutex m = new Mutex()
+    m.lock()
+    m.unlock()
+    bool ok = m.try_lock()
+    if ok {
         print("trylock ok")
-        mutex.unlock(m)
+        m.unlock()
     }
-    mutex.free(m)
     print("mutex ok")
     return 0
 }
