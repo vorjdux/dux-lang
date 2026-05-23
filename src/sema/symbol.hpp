@@ -21,6 +21,7 @@ struct Symbol {
     ast::Node*   decl{nullptr};  // non-owning back-pointer
     ast::SourceLoc loc;
     bool         is_const{false};
+    bool         is_async{false};  // function declared with 'async' modifier
 };
 
 class Scope {

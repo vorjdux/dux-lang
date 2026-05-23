@@ -1,0 +1,39 @@
+import async.task
+
+# Async function that returns a string
+async str make_greeting(str name) {
+    task.sleep_ms(1)
+    return "Hello, " + name
+}
+
+# Async function that returns an integer
+async int double_val(int x) {
+    task.sleep_ms(1)
+    return x + x
+}
+
+# Async void function (fire-and-forget, still awaitable for sync)
+async void do_work() {
+    task.sleep_ms(1)
+}
+
+int main() {
+    # Await a str-returning async function
+    str greeting = await make_greeting("World")
+    if greeting == "Hello, World" {
+        print("greeting ok")
+    }
+
+    # Await an int-returning async function
+    int result = await double_val(21)
+    if result == 42 {
+        print("double ok")
+    }
+
+    # Await a void async function
+    await do_work()
+    print("void ok")
+
+    print("async_await ok")
+    return 0
+}

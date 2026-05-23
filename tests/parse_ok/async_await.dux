@@ -1,0 +1,14 @@
+# Parse-only test for async/await syntax
+async str fetch(str url) {
+    return "data"
+}
+
+async void fire() {
+    int x = 1
+}
+
+int main() {
+    str s = await fetch("http://example.com")
+    await fire()
+    return 0
+}

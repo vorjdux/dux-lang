@@ -26,6 +26,7 @@ private:
     TypeId      current_class_type_{TypeRegistry::TID_UNKNOWN};
     bool        in_loop_{false};
     bool        in_unsafe_{false};  // inside unsafe { } block — ptr casts allowed
+    bool        in_await_{false};   // inside an await expression — async calls allowed
     int         error_count_{0};
 
     // ── Hoisting (pass 1) ──────────────────────────────────────────────────
