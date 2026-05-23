@@ -208,6 +208,30 @@ struct SwitchStmt final : Stmt {
     void accept(Visitor& v) const override;
 };
 
+// ─── Match statement (enum/value pattern matching) ───────────────────────────
+
+struct MatchPattern {
+    enum class Kind { Wildcard, EnumVariant, IntLit, BoolLit };
+    Kind        kind{Kind::Wildcard};
+    std::string enum_name;    // for EnumVariant: "Color"
+    std::string variant_name; // for EnumVariant: "Red"
+    long long   int_value{0}; // for IntLit
+    bool        bool_value{false}; // for BoolLit
+    SourceLoc   loc;
+};
+
+struct MatchArm {
+    MatchPattern pattern;
+    StmtList     body;
+    SourceLoc    loc;
+};
+
+struct MatchStmt final : Stmt {
+    ExprPtr                expr;
+    std::vector<MatchArm>  arms;
+    void accept(Visitor& v) const override;
+};
+
 struct TryCatchStmt final : Stmt {
     StmtPtr                    try_body;
     bool                       catch_all{false};
@@ -396,6 +420,7 @@ struct Visitor {
     virtual void visit(const ForInStmt&)     = 0;
     virtual void visit(const ForCStmt&)      = 0;
     virtual void visit(const SwitchStmt&)    = 0;
+    virtual void visit(const MatchStmt&)     = 0;
     virtual void visit(const TryCatchStmt&)  = 0;
     virtual void visit(const ReturnStmt&)    = 0;
     virtual void visit(const BreakStmt&)     = 0;

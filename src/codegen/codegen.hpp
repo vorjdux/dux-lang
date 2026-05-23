@@ -201,6 +201,7 @@ private:
     void gen_for_in(const ast::ForInStmt& s);
     void gen_for_c(const ast::ForCStmt& s);
     void gen_switch(const ast::SwitchStmt& s);
+    void gen_match(const ast::MatchStmt& s);
     void gen_try_catch(const ast::TryCatchStmt& s);
     void gen_return(const ast::ReturnStmt& s);
     void gen_var_decl(const ast::VarDeclStmt& s);

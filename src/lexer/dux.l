@@ -112,6 +112,7 @@ ALNUM   [a-zA-Z0-9_]
 "while"      { need_semi = false; return yy::parser::make_KW_WHILE(loc);     }
 "do"         { need_semi = false; return yy::parser::make_KW_DO(loc);        }
 "switch"     { need_semi = false; return yy::parser::make_KW_SWITCH(loc);    }
+"match"      { need_semi = false; return yy::parser::make_KW_MATCH(loc);     }
 "case"       { need_semi = false; return yy::parser::make_KW_CASE(loc);      }
 "default"    { need_semi = false; return yy::parser::make_KW_DEFAULT(loc);   }
 "try"        { need_semi = false; return yy::parser::make_KW_TRY(loc);       }
