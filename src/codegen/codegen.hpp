@@ -179,7 +179,13 @@ private:
     std::string     current_namespace_;  // set while generating a namespace body
     std::string     pending_label_;   // label from &label before a loop stmt
     int             lambda_counter_{0};  // counter for unique lambda names
+    int             async_counter_{0};   // counter for unique async body/thunk names
     std::unordered_map<std::string, ast::TypeExpr> fn_var_types_; // fn-typed vars/params
+
+    // Async codegen state:
+    // Non-null while generating an async body function; holds the LLVM Value
+    // for the DuxFuture* first parameter so gen_return can route through it.
+    llvm::Value*    current_async_future_{nullptr};
 
     // ── Type lowering (#14) ──────────────────────────────────────────────
     llvm::Type* lower_type(TypeId tid);
@@ -260,6 +266,10 @@ private:
     llvm::Value* gen_list(const ast::ListExpr& e);
     llvm::Value* gen_dict(const ast::DictExpr& e);
     llvm::Value* gen_lambda(const ast::LambdaExpr& e);
+    llvm::Value* gen_await(const ast::AwaitExpr& e);
+
+    // Async helpers
+    void         gen_async_func(const ast::FunctionDecl& f, const std::string& mangled);
 
     // ── Helpers ──────────────────────────────────────────────────────────
     llvm::Value* load_var(const std::string& name, const ast::SourceLoc& loc);

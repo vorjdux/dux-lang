@@ -318,6 +318,12 @@ struct LambdaExpr final : Expr {
     void accept(Visitor& v) const override;
 };
 
+// AwaitExpr — "await <expr>" — waits for an async function call to complete.
+struct AwaitExpr final : Expr {
+    ExprPtr operand;
+    void accept(Visitor& v) const override;
+};
+
 struct Decorator {
     std::string name;   // "doc" or "doc::markdown"
     ExprList    args;
@@ -347,6 +353,7 @@ struct FunctionDecl final : Decl {
     bool                       is_ctor{false};
     bool                       is_dtor{false};
     bool                       is_static{false};
+    bool                       is_async{false};
     std::vector<InitEntry>     init_list;
     void accept(Visitor& v) const override;
 };
@@ -457,6 +464,7 @@ struct Visitor {
     virtual void visit(const ListExpr&)      = 0;
     virtual void visit(const DictExpr&)      = 0;
     virtual void visit(const LambdaExpr&)    = 0;
+    virtual void visit(const AwaitExpr&)     = 0;
 
     virtual void visit(const BlockStmt&)     = 0;
     virtual void visit(const ExprStmt&)      = 0;

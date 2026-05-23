@@ -290,14 +290,23 @@ std::string Codegen::mangle(const std::string& cls, const std::string& method) {
 
 Function* Codegen::declare_function(const ast::FunctionDecl& f,
                                     const std::string& mangled) {
+    // Return the existing declaration if already in module.
+    if (Function* existing = mod_->getFunction(mangled)) return existing;
+
     // Build LLVM function type
     std::vector<llvm::Type*> param_types;
     for (const auto& p : f.params)
         param_types.push_back(lower_type_expr(p.type));
 
-    TypeId ret_tid = types_.from_type_expr(f.return_type);
-    llvm::Type* ret_type = lower_type(ret_tid == TR::TID_UNKNOWN
-                                     ? TR::TID_VOID : ret_tid);
+    // Async launchers always return ptr (a DuxFuture*); the declared Dux
+    // return type is the value eventually obtained via 'await'.
+    llvm::Type* ret_type;
+    if (f.is_async) {
+        ret_type = ptr_type();
+    } else {
+        TypeId ret_tid = types_.from_type_expr(f.return_type);
+        ret_type = lower_type(ret_tid == TR::TID_UNKNOWN ? TR::TID_VOID : ret_tid);
+    }
 
     auto* ft = llvm::FunctionType::get(ret_type, param_types, false);
     auto* fn = Function::Create(ft, Function::ExternalLinkage, mangled, *mod_);
@@ -419,6 +428,12 @@ void Codegen::gen_func(const ast::FunctionDecl& f, const std::string& mangled,
     if (!f.body) return;
     if (f.modifier && (*f.modifier == "get" || *f.modifier == "set")) {
         // get/set modifiers compile as regular methods
+    }
+
+    // Async functions get their own three-function lowering.
+    if (f.is_async) {
+        gen_async_func(f, mangled);
+        return;
     }
 
     Function* fn = mod_->getFunction(mangled);
@@ -1580,6 +1595,40 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
 }
 
 void Codegen::gen_return(const ast::ReturnStmt& s) {
+    // ── Async body return: store result in future, then ret void ────────────
+    if (current_async_future_) {
+        Value* val = nullptr;
+        if (s.value) {
+            val = gen_expr(**s.value);
+            TypeId val_tid = type_id_of(**s.value);
+            val = coerce(val, val_tid, current_ret_type_);
+            if (current_ret_type_ == TR::TID_STR)
+                val = maybe_retain_str(val);
+        }
+        // Box result as void* for the future
+        Value* boxed;
+        if (val && val->getType()->isPointerTy()) {
+            boxed = val;
+        } else if (val && val->getType()->isIntegerTy()) {
+            Value* ext = builder_->CreateZExt(val, llvm::Type::getInt64Ty(*ctx_));
+            boxed = builder_->CreateIntToPtr(ext, ptr_type());
+        } else if (val && val->getType()->isFloatingPointTy()) {
+            Value* bits = builder_->CreateBitCast(val, llvm::Type::getInt64Ty(*ctx_));
+            boxed = builder_->CreateIntToPtr(bits, ptr_type());
+        } else {
+            boxed = llvm::ConstantPointerNull::get(
+                llvm::cast<llvm::PointerType>(ptr_type()));
+        }
+        Function* set_fn = get_or_declare_rt("duxrt_future_set",
+            llvm::Type::getVoidTy(*ctx_), {ptr_type(), ptr_type()});
+        builder_->CreateCall(set_fn, {current_async_future_, boxed});
+        emit_all_scope_cleanups();
+        emit_all_str_releases();
+        builder_->CreateRetVoid();
+        return;
+    }
+
+    // ── Normal return ────────────────────────────────────────────────────────
     Value* val = nullptr;
     if (s.value) {
         val = gen_expr(**s.value);
@@ -1816,6 +1865,7 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
     if (auto* p = dynamic_cast<const ast::ListExpr*>(&e))    return gen_list(*p);
     if (auto* p = dynamic_cast<const ast::DictExpr*>(&e))    return gen_dict(*p);
     if (auto* lam = dynamic_cast<const ast::LambdaExpr*>(&e)) return gen_lambda(*lam);
+    if (auto* aw  = dynamic_cast<const ast::AwaitExpr*>(&e))  return gen_await(*aw);
 
     return llvm::ConstantPointerNull::get(
         llvm::cast<llvm::PointerType>(ptr_type()));
@@ -2623,6 +2673,305 @@ Value* Codegen::gen_lambda(const ast::LambdaExpr& e) {
     }
 
     return raw;
+}
+
+// ─── Await expression ─────────────────────────────────────────────────────────
+
+Value* Codegen::gen_await(const ast::AwaitExpr& e) {
+    // Generate the operand, which must resolve to a DuxFuture* (ptr).
+    // Async launchers always return ptr, so gen_call / gen_expr produces ptr.
+    Value* fut = gen_expr(*e.operand);
+
+    // Call duxrt_future_await(fut) → void* (the result boxed as ptr)
+    Function* await_fn = get_or_declare_rt("duxrt_future_await",
+        ptr_type(), {ptr_type()});
+    Value* raw = emit_call(await_fn, {fut});
+
+    // Free the future now that we've consumed it
+    Function* free_fn = get_or_declare_rt("duxrt_future_free",
+        llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+    emit_call(free_fn, {fut});
+
+    // Unbox the raw result to the declared return type of the async function.
+    TypeId expected = e.type_id;
+    if (expected <= 0 || expected == TR::TID_VOID || expected == TR::TID_OBJECT)
+        return raw;   // void or ptr-compatible — already the right type
+    if (expected == TR::TID_STR)
+        return raw;   // DuxStr* stored directly as ptr
+    if (expected == TR::TID_INT) {
+        Value* i64 = builder_->CreatePtrToInt(raw, llvm::Type::getInt64Ty(*ctx_));
+        return builder_->CreateTrunc(i64, llvm::Type::getInt32Ty(*ctx_));
+    }
+    if (expected == TR::TID_LONG)
+        return builder_->CreatePtrToInt(raw, llvm::Type::getInt64Ty(*ctx_));
+    if (expected == TR::TID_BOOL) {
+        Value* i64 = builder_->CreatePtrToInt(raw, llvm::Type::getInt64Ty(*ctx_));
+        return builder_->CreateTrunc(i64, llvm::Type::getInt1Ty(*ctx_));
+    }
+    if (expected == TR::TID_DOUBLE) {
+        Value* i64  = builder_->CreatePtrToInt(raw, llvm::Type::getInt64Ty(*ctx_));
+        return builder_->CreateBitCast(i64, llvm::Type::getDoubleTy(*ctx_));
+    }
+    // Class / list / dict — all stored as ptr
+    return raw;
+}
+
+// ─── Async function codegen ───────────────────────────────────────────────────
+//
+// Given: async T f(T1 p1, ..., TN pN) { body }
+//
+// Emits three LLVM functions:
+//
+// 1. __async_body_{seq}(ptr __fut, T1 p1, ...) -> void
+//    Executes the original body.  'return val' calls duxrt_future_set and
+//    returns void (handled by the modified gen_return via current_async_future_).
+//
+// 2. __async_thunk_{seq}(ptr raw) -> ptr   [pthread-compatible]
+//    Unpacks the env array, calls the body, frees the env, returns null.
+//
+// 3. {mangled}(T1 p1, ..., TN pN) -> ptr   [the public launcher]
+//    Creates a DuxFuture*, allocates an env array, fills it, spawns the
+//    detached thread via duxrt_future_spawn_detached, and returns the future.
+
+void Codegen::gen_async_func(const ast::FunctionDecl& f, const std::string& mangled) {
+    if (!f.body) return;
+
+    int seq = async_counter_++;
+    std::string body_name  = "__async_body_"  + std::to_string(seq);
+    std::string thunk_name = "__async_thunk_" + std::to_string(seq);
+
+    // Original param LLVM types
+    std::vector<llvm::Type*> orig_param_types;
+    for (const auto& p : f.params)
+        orig_param_types.push_back(lower_type_expr(p.type));
+
+    TypeId      declared_ret_tid = types_.from_type_expr(f.return_type);
+
+    // ── 1. Body function: void __async_body_{seq}(ptr __fut, p1, ...) ───────
+    {
+        std::vector<llvm::Type*> body_params;
+        body_params.push_back(ptr_type()); // __fut
+        for (auto* t : orig_param_types) body_params.push_back(t);
+
+        auto* body_fty = llvm::FunctionType::get(
+            llvm::Type::getVoidTy(*ctx_), body_params, false);
+        auto* body_fn = Function::Create(body_fty, Function::InternalLinkage,
+                                         body_name, *mod_);
+
+        // Set personality function for EH
+        if (!body_fn->hasPersonalityFn()) {
+            auto* pft = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_), true);
+            auto* pf  = llvm::cast<llvm::Constant>(
+                mod_->getOrInsertFunction("__gxx_personality_v0", pft).getCallee());
+            body_fn->setPersonalityFn(pf);
+        }
+
+        // Save outer codegen state (same pattern as gen_lambda)
+        auto* outer_bb      = builder_->GetInsertBlock();
+        auto  outer_env     = env_;
+        auto  outer_str     = str_scopes_;
+        auto  outer_cleanup = cleanup_scopes_;
+        auto  outer_vcls    = var_class_;
+        auto  outer_fn_var  = fn_var_types_;
+        std::string outer_class     = current_class_;
+        TypeId      outer_ret       = current_ret_type_;
+        auto        outer_lp        = lp_stack_;
+        llvm::Function* outer_fn    = current_fn_;
+        llvm::Value*    outer_afut  = current_async_future_;
+
+        // Set up body state
+        current_fn_           = body_fn;
+        current_ret_type_     = declared_ret_tid;
+        current_class_        = "";
+        lp_stack_.clear();
+        env_.clear(); str_scopes_.clear(); cleanup_scopes_.clear();
+        var_class_.clear(); fn_var_types_.clear();
+
+        auto* body_entry = BasicBlock::Create(*ctx_, "entry", body_fn);
+        builder_->SetInsertPoint(body_entry);
+        env_push();
+
+        auto arg_it = body_fn->arg_begin();
+        // Bind __fut
+        Value* fut_alloca = make_alloca(ptr_type(), "__fut.addr");
+        builder_->CreateStore(&*arg_it, fut_alloca);
+        current_async_future_ = builder_->CreateLoad(ptr_type(), fut_alloca, "__fut");
+        ++arg_it;
+
+        // Bind params
+        for (const auto& p : f.params) {
+            llvm::Type* pt = lower_type_expr(p.type);
+            Value* alloca  = make_alloca(pt, p.name);
+            builder_->CreateStore(&*arg_it, alloca);
+            env_define(p.name, alloca);
+            ++arg_it;
+        }
+
+        for (const auto& p : f.params)
+            if (p.type.name == "__fn") fn_var_types_[p.name] = p.type;
+
+        // Generate the body
+        gen_stmts(f.body->body);
+
+        // Fallthrough: signal future with null and return void
+        if (!builder_->GetInsertBlock()->getTerminator()) {
+            // Signal future (void return or missing return)
+            Function* set_fn = get_or_declare_rt("duxrt_future_set",
+                llvm::Type::getVoidTy(*ctx_), {ptr_type(), ptr_type()});
+            Value* null_val = llvm::ConstantPointerNull::get(
+                llvm::cast<llvm::PointerType>(ptr_type()));
+            builder_->CreateCall(set_fn, {current_async_future_, null_val});
+            emit_all_scope_cleanups();
+            emit_all_str_releases();
+            builder_->CreateRetVoid();
+        }
+
+        // Pop scope stacks
+        if (!cleanup_scopes_.empty()) cleanup_scopes_.pop_back();
+        if (!str_scopes_.empty())     str_scopes_.pop_back();
+        if (!env_.empty())            env_.pop_back();
+
+        // Restore outer state
+        builder_->SetInsertPoint(outer_bb);
+        env_            = std::move(outer_env);
+        str_scopes_     = std::move(outer_str);
+        cleanup_scopes_ = std::move(outer_cleanup);
+        var_class_      = std::move(outer_vcls);
+        fn_var_types_   = std::move(outer_fn_var);
+        current_class_        = outer_class;
+        current_ret_type_     = outer_ret;
+        lp_stack_             = std::move(outer_lp);
+        current_fn_           = outer_fn;
+        current_async_future_ = outer_afut;
+    }
+
+    // ── 2. Thunk: ptr __async_thunk_{seq}(ptr raw) -> ptr ───────────────────
+    //
+    // env layout (array of ptr-sized slots):
+    //   [0]  = DuxFuture* (future)
+    //   [1+] = original params (coerced to ptr via inttoptr if needed)
+    {
+        Function* body_fn = mod_->getFunction(body_name);
+        auto* thunk_fty = llvm::FunctionType::get(ptr_type(), {ptr_type()}, false);
+        auto* thunk_fn  = Function::Create(thunk_fty, Function::InternalLinkage,
+                                            thunk_name, *mod_);
+        auto* thunk_entry = BasicBlock::Create(*ctx_, "entry", thunk_fn);
+        builder_->SetInsertPoint(thunk_entry);
+
+        Value* raw = &*thunk_fn->arg_begin();
+        raw->setName("env");
+
+        // Load future (slot 0)
+        Value* fut_slot = builder_->CreateConstGEP1_64(ptr_type(), raw, 0, "fut.slot");
+        Value* fut_val  = builder_->CreateLoad(ptr_type(), fut_slot, "fut");
+
+        // Load params (slots 1..N)
+        std::vector<Value*> body_args;
+        body_args.push_back(fut_val);
+        for (std::size_t i = 0; i < f.params.size(); ++i) {
+            Value* slot = builder_->CreateConstGEP1_64(ptr_type(), raw,
+                          (int64_t)(i + 1), f.params[i].name + ".slot");
+            Value* as_ptr = builder_->CreateLoad(ptr_type(), slot,
+                            f.params[i].name + ".raw");
+            // Unbox if the original param type is not a pointer
+            llvm::Type* orig_t = orig_param_types[i];
+            Value* unboxed;
+            if (orig_t->isPointerTy()) {
+                unboxed = as_ptr;
+            } else if (orig_t->isIntegerTy()) {
+                Value* i64 = builder_->CreatePtrToInt(as_ptr, llvm::Type::getInt64Ty(*ctx_));
+                unboxed = builder_->CreateTrunc(i64, orig_t);
+            } else if (orig_t->isDoubleTy()) {
+                Value* i64 = builder_->CreatePtrToInt(as_ptr, llvm::Type::getInt64Ty(*ctx_));
+                unboxed = builder_->CreateBitCast(i64, orig_t);
+            } else {
+                unboxed = as_ptr;
+            }
+            body_args.push_back(unboxed);
+        }
+
+        // Call the body
+        if (body_fn)
+            builder_->CreateCall(body_fn, body_args);
+
+        // Free the env array
+        Function* free_rt = get_or_declare_rt("free",
+            llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+        builder_->CreateCall(free_rt, {raw});
+
+        builder_->CreateRet(llvm::ConstantPointerNull::get(
+            llvm::cast<llvm::PointerType>(ptr_type())));
+
+        // Restore insert point to original (thunk is fully generated inline)
+        // Nothing to restore — we don't save/restore outer BB for the thunk
+        // because we haven't moved to a new BB in the outer function yet.
+        // Actually the thunk is a separate function; the outer builder_ context
+        // is fine since we re-set it after the body function above.
+    }
+
+    // ── 3. Launcher: ptr {mangled}(original_params...) -> ptr ───────────────
+    {
+        Function* launcher = mod_->getFunction(mangled);
+        if (!launcher) {
+            // Forward-declaration was not done (e.g. class method) — create it now
+            std::vector<llvm::Type*> p_types;
+            if (!current_class_.empty()) p_types.push_back(ptr_type()); // this
+            for (auto* t : orig_param_types) p_types.push_back(t);
+            auto* fty = llvm::FunctionType::get(ptr_type(), p_types, false);
+            launcher  = Function::Create(fty, Function::ExternalLinkage, mangled, *mod_);
+        }
+        if (!launcher->empty()) return; // already generated
+
+        auto* entry = BasicBlock::Create(*ctx_, "entry", launcher);
+        builder_->SetInsertPoint(entry);
+
+        // Create a DuxFuture*
+        Function* future_new = get_or_declare_rt("duxrt_future_new",
+            ptr_type(), {});
+        Value* fut = builder_->CreateCall(future_new, {}, "fut");
+
+        // Allocate env array: (N+1) slots × 8 bytes each
+        std::size_t n_slots = f.params.size() + 1;
+        Value* sz = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*ctx_),
+                                            (int64_t)(n_slots * 8));
+        Value* env = rt_malloc(sz);
+
+        // Store future at slot 0
+        Value* fut_slot = builder_->CreateConstGEP1_64(ptr_type(), env, 0, "fut.env.slot");
+        builder_->CreateStore(fut, fut_slot);
+
+        // Store each param at slots 1..N
+        auto arg_it = launcher->arg_begin();
+        for (std::size_t i = 0; i < f.params.size(); ++i) {
+            Value* arg    = &*arg_it++;
+            Value* slot   = builder_->CreateConstGEP1_64(ptr_type(), env,
+                            (int64_t)(i + 1), f.params[i].name + ".env.slot");
+            // Box if not already a pointer
+            Value* boxed;
+            if (arg->getType()->isPointerTy()) {
+                boxed = arg;
+            } else if (arg->getType()->isIntegerTy()) {
+                Value* ext = builder_->CreateZExt(arg, llvm::Type::getInt64Ty(*ctx_));
+                boxed = builder_->CreateIntToPtr(ext, ptr_type());
+            } else if (arg->getType()->isDoubleTy()) {
+                Value* bits = builder_->CreateBitCast(arg, llvm::Type::getInt64Ty(*ctx_));
+                boxed = builder_->CreateIntToPtr(bits, ptr_type());
+            } else {
+                boxed = llvm::ConstantPointerNull::get(
+                    llvm::cast<llvm::PointerType>(ptr_type()));
+            }
+            builder_->CreateStore(boxed, slot);
+        }
+
+        // Spawn detached thread
+        Function* thunk_fn = mod_->getFunction(thunk_name);
+        Function* spawn_fn = get_or_declare_rt("duxrt_future_spawn_detached",
+            llvm::Type::getVoidTy(*ctx_), {ptr_type(), ptr_type()});
+        builder_->CreateCall(spawn_fn, {thunk_fn, env});
+
+        // Return the future
+        builder_->CreateRet(fut);
+    }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

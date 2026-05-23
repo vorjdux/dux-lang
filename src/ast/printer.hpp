@@ -116,6 +116,11 @@ private:
         if (n.body) n.body->accept(*this);
     }
 
+    void visit(const AwaitExpr& n) override {
+        out_ << "await ";
+        if (n.operand) n.operand->accept(*this);
+    }
+
     // ── Statements ───────────────────────────────────────────────────────────
     void visit(const BlockStmt& n) override {
         out_ << pad() << "{\n";
