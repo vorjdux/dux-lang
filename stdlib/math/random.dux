@@ -1,0 +1,58 @@
+namespace random {
+    extern "C" void   duxrt_random_seed(long seed) ;
+    extern "C" double duxrt_random() ;
+    extern "C" long   duxrt_random_int(long lo, long hi) ;
+    extern "C" double duxrt_random_double(double lo, double hi) ;
+    extern "C" int    duxrt_random_bool(double p) ;
+    extern "C" void   duxrt_random_shuffle(list lst) ;
+
+    # Seed the PRNG.
+    void seed(long s) {
+        unsafe {
+            duxrt_random_seed(s)
+        }
+    }
+
+    # Random float in [0, 1).
+    double float() {
+        double r = 0.0
+        unsafe {
+            r = duxrt_random()
+        }
+        return r
+    }
+
+    # Random integer in [lo, hi).
+    long integer(long lo, long hi) {
+        long r = 0
+        unsafe {
+            r = duxrt_random_int(lo, hi)
+        }
+        return r
+    }
+
+    # Random float in [lo, hi).
+    double uniform(double lo, double hi) {
+        double r = 0.0
+        unsafe {
+            r = duxrt_random_double(lo, hi)
+        }
+        return r
+    }
+
+    # Random bool with probability p of true.
+    bool chance(double p) {
+        int r = 0
+        unsafe {
+            r = duxrt_random_bool(p)
+        }
+        return r != 0
+    }
+
+    # Shuffle a list in place.
+    void shuffle(list lst) {
+        unsafe {
+            duxrt_random_shuffle(lst)
+        }
+    }
+}

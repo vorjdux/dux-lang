@@ -25,6 +25,7 @@ private:
     std::string current_class_name_;
     TypeId      current_class_type_{TypeRegistry::TID_UNKNOWN};
     bool        in_loop_{false};
+    bool        in_unsafe_{false};  // inside unsafe { } block — ptr casts allowed
     int         error_count_{0};
 
     // ── Hoisting (pass 1) ──────────────────────────────────────────────────

@@ -1,0 +1,32 @@
+namespace args {
+    extern "C" long duxrt_args_count() ;
+    extern "C" str  duxrt_args_at(long i) ;
+    extern "C" list duxrt_args_all() ;
+
+    # Number of command-line arguments (including program name).
+    long count() {
+        long r = 0
+        unsafe {
+            r = duxrt_args_count()
+        }
+        return r
+    }
+
+    # Get argument at index i.
+    str at(long i) {
+        str r = ""
+        unsafe {
+            r = duxrt_args_at(i)
+        }
+        return r
+    }
+
+    # All arguments as a list.
+    list all() {
+        list r = []
+        unsafe {
+            r = duxrt_args_all()
+        }
+        return r
+    }
+}

@@ -1,0 +1,17 @@
+import thread.thread
+import thread.mutex
+
+int main() {
+    long id = thread.id()
+    if id > 0 {
+        print("thread id ok")
+    }
+    thread.sleep_ms(1)
+    print("sleep ok")
+    ptr m = mutex.create()
+    mutex.lock(m)
+    mutex.unlock(m)
+    mutex.free(m)
+    print("mutex ok")
+    return 0
+}

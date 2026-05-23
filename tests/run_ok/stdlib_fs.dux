@@ -1,0 +1,19 @@
+import io.fs
+
+int main() {
+    str cwd = fs.cwd()
+    bool cwd_exists = fs.exists(cwd)
+    if cwd_exists {
+        print("cwd exists")
+    }
+    bool cwd_is_dir = fs.is_dir(cwd)
+    if cwd_is_dir {
+        print("cwd is dir")
+    }
+    bool missing = fs.exists("/nonexistent/path/xyz")
+    if missing {
+        print("should not print")
+    }
+    print("fs ok")
+    return 0
+}

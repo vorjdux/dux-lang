@@ -1,0 +1,115 @@
+namespace signal {
+    extern "C" long duxrt_signal_sigint() ;
+    extern "C" long duxrt_signal_sigterm() ;
+    extern "C" long duxrt_signal_sighup() ;
+    extern "C" long duxrt_signal_sigusr1() ;
+    extern "C" long duxrt_signal_sigusr2() ;
+    extern "C" long duxrt_signal_sigchld() ;
+    extern "C" long duxrt_signal_sigpipe() ;
+    extern "C" long duxrt_signal_sigalrm() ;
+    extern "C" int duxrt_signal_ignore(long sig) ;
+    extern "C" int duxrt_signal_reset(long sig) ;
+    extern "C" int duxrt_signal_raise(long sig) ;
+    extern "C" int duxrt_signal_kill(long pid, long sig) ;
+
+    # Signal number constants.
+    long SIGINT() {
+        long r = 0
+        unsafe {
+            r = duxrt_signal_sigint()
+        }
+        return r
+    }
+
+    long SIGTERM() {
+        long r = 0
+        unsafe {
+            r = duxrt_signal_sigterm()
+        }
+        return r
+    }
+
+    long SIGHUP() {
+        long r = 0
+        unsafe {
+            r = duxrt_signal_sighup()
+        }
+        return r
+    }
+
+    long SIGUSR1() {
+        long r = 0
+        unsafe {
+            r = duxrt_signal_sigusr1()
+        }
+        return r
+    }
+
+    long SIGUSR2() {
+        long r = 0
+        unsafe {
+            r = duxrt_signal_sigusr2()
+        }
+        return r
+    }
+
+    long SIGCHLD() {
+        long r = 0
+        unsafe {
+            r = duxrt_signal_sigchld()
+        }
+        return r
+    }
+
+    long SIGPIPE() {
+        long r = 0
+        unsafe {
+            r = duxrt_signal_sigpipe()
+        }
+        return r
+    }
+
+    long SIGALRM() {
+        long r = 0
+        unsafe {
+            r = duxrt_signal_sigalrm()
+        }
+        return r
+    }
+
+    # Ignore the given signal. Returns true on success.
+    bool ignore(long sig) {
+        int r = 0
+        unsafe {
+            r = duxrt_signal_ignore(sig)
+        }
+        return r != 0
+    }
+
+    # Reset signal to default handler. Returns true on success.
+    bool reset(long sig) {
+        int r = 0
+        unsafe {
+            r = duxrt_signal_reset(sig)
+        }
+        return r != 0
+    }
+
+    # Raise a signal in the current process.
+    bool raise(long sig) {
+        int r = 0
+        unsafe {
+            r = duxrt_signal_raise(sig)
+        }
+        return r != 0
+    }
+
+    # Send signal to process. Returns true on success.
+    bool kill(long pid, long sig) {
+        int r = 0
+        unsafe {
+            r = duxrt_signal_kill(pid, sig)
+        }
+        return r != 0
+    }
+}

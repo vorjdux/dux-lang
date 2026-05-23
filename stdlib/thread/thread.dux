@@ -1,0 +1,50 @@
+namespace thread {
+    extern "C" void duxrt_thread_sleep_ms(long ms) ;
+    extern "C" long duxrt_thread_id() ;
+    extern "C" ptr  duxrt_thread_spawn(ptr fn, ptr arg) ;
+    extern "C" int  duxrt_thread_join(ptr h) ;
+    extern "C" int  duxrt_thread_detach(ptr h) ;
+
+    # Sleep for ms milliseconds.
+    void sleep_ms(long ms) {
+        unsafe {
+            duxrt_thread_sleep_ms(ms)
+        }
+    }
+
+    # Current thread ID.
+    long id() {
+        long r = 0
+        unsafe {
+            r = duxrt_thread_id()
+        }
+        return r
+    }
+
+    # Spawn a new thread running fn. Returns a thread handle.
+    ptr spawn(ptr fn) {
+        ptr r = null
+        unsafe {
+            r = duxrt_thread_spawn(fn, null)
+        }
+        return r
+    }
+
+    # Wait for thread to finish. Returns 0 on success.
+    bool join(ptr handle) {
+        int r = 0
+        unsafe {
+            r = duxrt_thread_join(handle)
+        }
+        return r == 0
+    }
+
+    # Detach thread (runs independently). Returns true on success.
+    bool detach(ptr handle) {
+        int r = 0
+        unsafe {
+            r = duxrt_thread_detach(handle)
+        }
+        return r == 0
+    }
+}

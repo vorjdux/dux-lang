@@ -624,8 +624,10 @@ void Codegen::process_import(const ast::ImportDecl& imp) {
             for (auto tid : sf.params) ptypes.push_back(lower_type(tid));
             get_or_declare_rt(sf.rt_sym, lower_type(sf.ret), ptypes);
         }
+    } else {
+        // Still track the import so try_stdlib_call can route to Dux-compiled fns
+        stdlib_imports_.insert(mod);
     }
-    // File-based imports would be handled here in a future pass
 }
 
 Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
@@ -638,7 +640,23 @@ Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
     if (!stdlib_imports_.count(mod)) return nullptr;
 
     auto it_mod = stdlib_table().find(mod);
-    if (it_mod == stdlib_table().end()) return nullptr;
+    if (it_mod == stdlib_table().end()) {
+        // Module in stdlib_imports_ but not in table — try Dux-compiled namespace fn
+        std::string mangled = mangle(mod, mem->member);
+        if (Function* ns_fn = mod_->getFunction(mangled);
+            ns_fn && ns_fn->arg_size() == e.args.size()) {
+            std::vector<Value*> args;
+            auto param_it = ns_fn->arg_begin();
+            for (const auto& a : e.args) {
+                Value* v = gen_expr(*a);
+                if (param_it != ns_fn->arg_end())
+                    v = coerce_to_llvm_type(v, (param_it++)->getType());
+                args.push_back(v);
+            }
+            return builder_->CreateCall(ns_fn, args);
+        }
+        return nullptr;
+    }
 
     auto it_fn = it_mod->second.find(mem->member);
     if (it_fn == it_mod->second.end()) return nullptr;
@@ -1326,6 +1344,18 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
         return builder_->CreateCall(strcat_fn, {L, R});
     }
 
+    // String equality/inequality — use runtime comparison (not pointer equality)
+    if ((op == "==" || op == "!=") && (lt == TR::TID_STR || rt == TR::TID_STR)) {
+        auto* eq_fn = get_or_declare_rt("duxrt_str_eq",
+            llvm::Type::getInt32Ty(*ctx_), {ptr_type(), ptr_type()});
+        Value* eq = builder_->CreateCall(eq_fn, {L, R});
+        if (op == "!=")
+            eq = builder_->CreateICmpEQ(eq, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
+        else
+            eq = builder_->CreateICmpNE(eq, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
+        return eq;
+    }
+
     // Arithmetic
     if (op == "+")  return is_fp ? builder_->CreateFAdd(L, R) : builder_->CreateAdd(L, R);
     if (op == "-")  return is_fp ? builder_->CreateFSub(L, R) : builder_->CreateSub(L, R);
@@ -1466,6 +1496,23 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
 
     // Member call: obj.method(args)
     if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e.callee.get())) {
+        // Before evaluating the object expression, check if this is a namespace
+        // call (e.g. math.square) by looking for a mangled function in the module.
+        if (auto* id = dynamic_cast<const ast::IdentExpr*>(mem->object.get())) {
+            std::string ns_mangled = mangle(id->name, mem->member);
+            if (Function* ns_fn = mod_->getFunction(ns_mangled)) {
+                std::vector<Value*> args;
+                auto param_it = ns_fn->arg_begin();
+                for (const auto& a : e.args) {
+                    Value* v = gen_expr(*a);
+                    if (param_it != ns_fn->arg_end())
+                        v = coerce_to_llvm_type(v, (param_it++)->getType());
+                    args.push_back(v);
+                }
+                return builder_->CreateCall(ns_fn, args);
+            }
+        }
+
         Value* obj = gen_expr(*mem->object);
         TypeId obj_tid = type_id_of(*mem->object);
         std::string cls_name = types_.name_of(obj_tid);

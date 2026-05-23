@@ -4,6 +4,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -22,6 +23,9 @@
 #endif
 #ifndef DUXRT_INCLUDE_DIR
 #define DUXRT_INCLUDE_DIR ""
+#endif
+#ifndef DUXSTDLIB_DIR
+#define DUXSTDLIB_DIR ""
 #endif
 
 namespace {
@@ -125,6 +129,53 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
     return true;
 }
 
+// Recursively load .dux stdlib files for each import in `prog`, prepending
+// their declarations to prog->decls so codegen sees them first.
+// `loaded` tracks which module paths have already been loaded (avoids cycles).
+void merge_stdlib_imports(dux::ast::Program* prog,
+                          std::unordered_set<std::string>& loaded) {
+    const std::string stdlib_dir = DUXSTDLIB_DIR;
+    if (stdlib_dir.empty()) return;
+
+    // Collect import paths present in this program's decls (snapshot to avoid
+    // iterator invalidation as we prepend).
+    std::vector<std::string> import_paths;
+    for (const auto& dp : prog->decls) {
+        if (auto* imp = dynamic_cast<const dux::ast::ImportDecl*>(dp.get())) {
+            if (!imp->path.empty())
+                import_paths.push_back(imp->path);
+        }
+    }
+
+    for (const std::string& path : import_paths) {
+        if (loaded.count(path)) continue;
+        loaded.insert(path);
+
+        // Convert dotted path to file path: "io.path" → "io/path.dux"
+        std::string rel = path;
+        for (char& c : rel)
+            if (c == '.') c = '/';
+        std::filesystem::path fpath = std::filesystem::path(stdlib_dir) / (rel + ".dux");
+        if (!std::filesystem::exists(fpath)) continue;
+
+        Driver sub;
+        if (sub.parse(fpath.string()) != 0 || !sub.result) continue;
+
+        // Recursively handle imports inside the stdlib file first
+        merge_stdlib_imports(sub.result.get(), loaded);
+
+        // Prepend the stdlib file's decls to the main program
+        dux::ast::DeclList prefix;
+        prefix.reserve(sub.result->decls.size());
+        for (auto& d : sub.result->decls)
+            prefix.push_back(std::move(d));
+        prefix.reserve(prefix.size() + prog->decls.size());
+        for (auto& d : prog->decls)
+            prefix.push_back(std::move(d));
+        prog->decls = std::move(prefix);
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -148,6 +199,12 @@ int main(int argc, char** argv) {
     if (rc != 0) return EXIT_FAILURE;
 
     if (!driver.result) return EXIT_FAILURE;
+
+    // Load stdlib .dux files for any imports in the program
+    {
+        std::unordered_set<std::string> loaded;
+        merge_stdlib_imports(driver.result.get(), loaded);
+    }
 
     // Always run sema when codegen / compile is requested
     bool need_sema = opts.check || opts.emit_ir || opts.emit_obj || opts.compile;

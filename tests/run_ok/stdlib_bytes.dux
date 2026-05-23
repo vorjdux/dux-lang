@@ -1,0 +1,20 @@
+import data.bytes
+
+int main() {
+    ptr b = bytes.create(8)
+    bytes.push(b, 72)
+    bytes.push(b, 105)
+    long l = bytes.len(b)
+    if l == 2 {
+        print("len ok")
+    }
+    long v = bytes.at(b, 0)
+    if v == 72 {
+        print("at ok")
+    }
+    str s = bytes.to_str(b)
+    print(s)
+    bytes.free(b)
+    print("bytes ok")
+    return 0
+}

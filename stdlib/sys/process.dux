@@ -1,0 +1,62 @@
+namespace process {
+    extern "C" long duxrt_process_run(str cmd) ;
+    extern "C" str  duxrt_process_capture(str cmd) ;
+    extern "C" long duxrt_process_pid() ;
+    extern "C" long duxrt_process_ppid() ;
+    extern "C" long duxrt_process_wait(long pid) ;
+    extern "C" long duxrt_process_spawn(str cmd, list args) ;
+
+    # Run a shell command, wait for it, return exit code.
+    long run(str cmd) {
+        long r = 0
+        unsafe {
+            r = duxrt_process_run(cmd)
+        }
+        return r
+    }
+
+    # Run a shell command and capture stdout as a string.
+    str capture(str cmd) {
+        str r = ""
+        unsafe {
+            r = duxrt_process_capture(cmd)
+        }
+        return r
+    }
+
+    # Current process ID.
+    long pid() {
+        long r = 0
+        unsafe {
+            r = duxrt_process_pid()
+        }
+        return r
+    }
+
+    # Parent process ID.
+    long ppid() {
+        long r = 0
+        unsafe {
+            r = duxrt_process_ppid()
+        }
+        return r
+    }
+
+    # Wait for process to finish, return exit code.
+    long wait(long pid) {
+        long r = 0
+        unsafe {
+            r = duxrt_process_wait(pid)
+        }
+        return r
+    }
+
+    # Spawn a process without waiting (returns PID).
+    long spawn(str cmd, list args) {
+        long r = 0
+        unsafe {
+            r = duxrt_process_spawn(cmd, args)
+        }
+        return r
+    }
+}
