@@ -1,0 +1,63 @@
+import io.fs
+import option
+import result
+
+int main() {
+    # stat_opt on non-existent path returns Option.None
+    Option s1 = fs.stat_opt("/tmp/dux_definitely_no_such_path_xyz")
+    match s1 {
+        Option.None => {
+            print("stat none ok")
+        }
+        Option.Some(v) => {
+            print("bad")
+        }
+    }
+
+    # stat_opt on existing directory returns Option.Some(Stat)
+    Option s2 = fs.stat_opt("/tmp")
+    match s2 {
+        Option.Some(info) => {
+            print("stat some ok")
+        }
+        Option.None => {
+            print("bad: /tmp missing")
+        }
+    }
+
+    # list_dir_result on missing path returns Err
+    Result lr = fs.list_dir_result("/tmp/dux_no_such_dir_xyz987")
+    match lr {
+        Result.Err(msg) => {
+            print("listdir err ok")
+        }
+        Result.Ok(e) => {
+            print("bad")
+        }
+    }
+
+    # list_dir_result on /tmp returns Ok
+    Result lr2 = fs.list_dir_result("/tmp")
+    match lr2 {
+        Result.Ok(entries) => {
+            print("listdir ok")
+        }
+        Result.Err(msg) => {
+            print("bad:" + msg)
+        }
+    }
+
+    # cwd_result returns Ok on normal systems
+    Result cwd = fs.cwd_result()
+    match cwd {
+        Result.Ok(path) => {
+            print("cwd ok")
+        }
+        Result.Err(msg) => {
+            print("cwd err:" + msg)
+        }
+    }
+
+    print("fs option ok")
+    return 0
+}

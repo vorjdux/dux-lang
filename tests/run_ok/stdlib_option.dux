@@ -1,0 +1,44 @@
+import option
+
+int main() {
+    # Some holds a value
+    Option s = Option.Some("hello")
+    match s {
+        Option.Some(v) => {
+            print("some:" + v)
+        }
+        Option.None => {
+            print("bad")
+        }
+    }
+
+    # None carries nothing
+    Option n = Option.None
+    match n {
+        Option.None => {
+            print("none ok")
+        }
+        Option.Some(v) => {
+            print("bad")
+        }
+    }
+
+    # is_some / is_none predicates
+    if option_is_some(s) {
+        print("is_some ok")
+    }
+    if option_is_none(n) {
+        print("is_none ok")
+    }
+
+    # unwrap extracts value
+    object val = option_unwrap(s)
+    print("unwrap:" + val)
+
+    # unwrap_or returns default for None
+    object def = option_unwrap_or(n, "default")
+    print("unwrap_or:" + def)
+
+    print("option ok")
+    return 0
+}
