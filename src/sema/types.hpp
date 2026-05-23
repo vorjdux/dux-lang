@@ -12,7 +12,13 @@ using TypeId = int32_t;
 enum class TypeKind {
     Unknown, Void, Bool, Int, Long, Real, Double,
     Str, List, Dict, Tuple, Object, Null,
-    Class, Interface, Function,
+    Class, Interface, Function, Enum,
+};
+
+struct EnumVariantInfo {
+    std::string          name;
+    int32_t              tag;            // i32 discriminant (0-based)
+    std::vector<TypeId>  payload;        // empty = simple variant
 };
 
 struct TypeInfo {
@@ -22,6 +28,8 @@ struct TypeInfo {
     std::vector<TypeId> ifaces;          // implemented interfaces
     TypeId      return_type{-1};         // for function types
     std::vector<TypeId> param_types;     // for function types
+    // For enum types:
+    std::vector<EnumVariantInfo> variants;
 };
 
 class TypeRegistry {

@@ -1,0 +1,14 @@
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+void main() {
+    int r = Color.Red
+    int g = Color.Green
+    int b = Color.Blue
+    println(r)
+    println(g)
+    println(b)
+}

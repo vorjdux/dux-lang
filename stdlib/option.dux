@@ -1,0 +1,32 @@
+# stdlib/option.dux — Option type
+#
+# Represents an optional value: either Some (containing a value) or None.
+# Note: full generic parameterization (Option<T>) requires the generics
+# milestone. Until then, payload is carried as `object`.
+
+enum Option {
+    None,
+    Some
+}
+
+# Helper: wrap a value as Some (returns the Some discriminant)
+# The actual value must be tracked alongside in user code until
+# generics land.
+int option_some() {
+    return Option.Some
+}
+
+# Helper: return the None discriminant
+int option_none() {
+    return Option.None
+}
+
+# Check if an option is Some
+bool option_is_some(int opt) {
+    return opt == Option.Some
+}
+
+# Check if an option is None
+bool option_is_none(int opt) {
+    return opt == Option.None
+}

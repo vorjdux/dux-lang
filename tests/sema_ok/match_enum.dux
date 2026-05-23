@@ -1,0 +1,20 @@
+enum Status {
+    Ok,
+    Err,
+    Pending
+}
+
+void main() {
+    int s = Status.Ok
+    match s {
+        Status.Ok => {
+            println("ok")
+        }
+        Status.Err => {
+            println("error")
+        }
+        _ => {
+            println("pending")
+        }
+    }
+}
