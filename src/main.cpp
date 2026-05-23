@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <iostream>
 #include <span>
+#include <unordered_set>
 #include <string>
 #include <string_view>
 #include <unordered_set>

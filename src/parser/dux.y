@@ -70,7 +70,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token <bool>        BOOL_LIT   "bool literal"
 
 /* Keywords */
-%token KW_NAMESPACE KW_IMPORT KW_CLASS KW_INTERFACE KW_ENUM
+%token KW_NAMESPACE KW_IMPORT KW_FROM KW_AS KW_CLASS KW_INTERFACE KW_ENUM
 %token KW_PUBLIC KW_PRIVATE KW_PROTECTED
 %token KW_NEW KW_DELETE KW_THIS KW_SUPER KW_NULL
 %token KW_RETURN KW_BREAK KW_CONTINUE
@@ -143,6 +143,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 /* Access */
 %type <AccessMod>                        access_mod
 %type <std::string>                      dotted_name
+%type <std::vector<std::string>>         ident_list
 /* Statements */
 %type <StmtList>                         stmt_list block_body
 %type <StmtPtr>  stmt simple_stmt
@@ -234,6 +235,14 @@ namespace_decl
             n->stmts  = std::move($4->stmts);
             $$ = std::move(n);
         }
+    | KW_NAMESPACE dotted_name SEMI
+        {
+            auto n              = mk<NamespaceDecl>();
+            n->loc              = sl(@$, driver);
+            n->name             = $2;
+            n->is_package_decl  = true;
+            $$ = std::move(n);
+        }
     ;
 
 /* Accumulate namespace body items into a temporary Program node */
@@ -269,6 +278,53 @@ import_decl
             n->path = $2;
             $$ = std::move(n);
         }
+    | KW_IMPORT dotted_name KW_AS IDENT SEMI
+        {
+            auto n    = mk<ImportDecl>();
+            n->loc    = sl(@$, driver);
+            n->path   = $2;
+            n->alias  = $4;
+            $$ = std::move(n);
+        }
+    | KW_IMPORT dotted_name DCOLON LBRACE ident_list RBRACE SEMI
+        {
+            auto n     = mk<ImportDecl>();
+            n->loc     = sl(@$, driver);
+            n->path    = $2;
+            n->symbols = std::move($5);
+            $$ = std::move(n);
+        }
+    | KW_IMPORT dotted_name DCOLON LBRACE ident_list RBRACE KW_AS IDENT SEMI
+        {
+            auto n     = mk<ImportDecl>();
+            n->loc     = sl(@$, driver);
+            n->path    = $2;
+            n->symbols = std::move($5);
+            n->alias   = $8;
+            $$ = std::move(n);
+        }
+    | KW_IMPORT dotted_name DCOLON STAR SEMI
+        {
+            auto n  = mk<ImportDecl>();
+            n->loc  = sl(@$, driver);
+            n->path = $2;
+            n->symbols = {"*"};
+            $$ = std::move(n);
+        }
+    | KW_IMPORT LBRACE ident_list RBRACE KW_FROM dotted_name SEMI
+        {
+            auto n              = mk<ImportDecl>();
+            n->loc              = sl(@$, driver);
+            n->path             = $6;
+            n->symbols          = std::move($3);
+            n->global_scope     = true;
+            $$ = std::move(n);
+        }
+    ;
+
+ident_list
+    : IDENT                        { $$.push_back($1); }
+    | ident_list COMMA IDENT       { $1.push_back($3); $$ = std::move($1); }
     ;
 
 /* =====================================================================
@@ -289,18 +345,18 @@ class_decl
     ;
 
 opt_base_list
-    : %empty
-    | LPAREN base_list RPAREN         { $$ = std::move($2); }
+    : %empty                             { $$ = std::vector<BaseClass>(); }
+    | LPAREN base_list RPAREN            { $$ = std::move($2); }
     ;
 
 class_body_or_semi
-    : SEMI
-    | LBRACE class_body RBRACE        { $$ = std::move($2); }
+    : SEMI                               { $$ = std::vector<ClassMember>(); }
+    | LBRACE class_body RBRACE           { $$ = std::move($2); }
     ;
 
 base_list
-    : %empty
-    | base_list_ne                    { $$ = std::move($1); }
+    : %empty                             { $$ = std::vector<BaseClass>(); }
+    | base_list_ne                       { $$ = std::move($1); }
     ;
 
 base_list_ne
@@ -322,7 +378,7 @@ class_ref
     ;
 
 class_body
-    : %empty
+    : %empty          { $$ = std::vector<ClassMember>(); }
     | class_members   { $$ = std::move($1); }
     ;
 
@@ -380,7 +436,7 @@ interface_decl
     ;
 
 interface_members
-    : %empty
+    : %empty                              { $$ = std::vector<ClassMember>(); }
     | interface_members SEMI              { $$ = std::move($1); }
     | interface_members interface_member
         { $1.push_back(std::move($2)); $$ = std::move($1); }
@@ -472,17 +528,6 @@ func_decl
             f->body         = std::move(*$7);
             $$ = std::move(f);
         }
-    | type_expr IDENT LPAREN param_list RPAREN opt_func_modifier block SEMI
-        {
-            auto f          = mk<FunctionDecl>();
-            f->loc          = sl(@$, driver);
-            f->return_type  = $1;
-            f->name         = $2;
-            f->params       = std::move($4);
-            f->modifier     = $6;
-            f->body         = std::move(*$7);
-            $$ = std::move(f);
-        }
     ;
 
 opt_func_modifier
@@ -509,21 +554,10 @@ ctor_decl
             f->is_ctor   = true;
             $$ = std::move(f);
         }
-    | IDENT LPAREN param_list RPAREN opt_init_list block SEMI
-        {
-            auto f       = mk<FunctionDecl>();
-            f->loc       = sl(@$, driver);
-            f->name      = $1;
-            f->params    = std::move($3);
-            f->init_list = std::move($5);
-            f->body      = std::move(*$6);
-            f->is_ctor   = true;
-            $$ = std::move(f);
-        }
     ;
 
 opt_init_list
-    : %empty
+    : %empty          { $$ = std::vector<InitEntry>(); }
     | COLON init_list { $$ = std::move($2); }
     ;
 
@@ -541,15 +575,6 @@ init_entry
 
 dtor_decl
     : TILDE IDENT LPAREN RPAREN block
-        {
-            auto f     = mk<FunctionDecl>();
-            f->loc     = sl(@$, driver);
-            f->name    = $2;
-            f->body    = std::move(*$5);
-            f->is_dtor = true;
-            $$ = std::move(f);
-        }
-    | TILDE IDENT LPAREN RPAREN block SEMI
         {
             auto f     = mk<FunctionDecl>();
             f->loc     = sl(@$, driver);
@@ -584,7 +609,7 @@ field_decl
    ===================================================================== */
 
 decorators
-    : %empty
+    : %empty                { $$ = std::vector<Decorator>(); }
     | decorators decorator  { $1.push_back(std::move($2)); $$ = std::move($1); }
     ;
 
@@ -611,7 +636,7 @@ decorator_name
    ===================================================================== */
 
 param_list
-    : %empty
+    : %empty          { $$ = std::vector<Param>(); }
     | param_list_ne   { $$ = std::move($1); }
     ;
 
@@ -701,8 +726,7 @@ block
     ;
 
 block_body
-    : %empty      { $$ = StmtList{}; }
-    | stmt_list   { $$ = std::move($1); }
+    : stmt_list   { $$ = std::move($1); }
     ;
 
 /* -- If ---------------------------------------------------------------- */
@@ -781,7 +805,7 @@ switch_stmt
     ;
 
 switch_cases
-    : %empty
+    : %empty                          { $$ = std::vector<SwitchCase>(); }
     | switch_cases switch_case        { $1.push_back(std::move($2)); $$ = std::move($1); }
     ;
 
@@ -902,6 +926,8 @@ break_stmt
 continue_stmt
     : KW_CONTINUE SEMI
         { auto s = mk<ContinueStmt>(); s->loc = sl(@$, driver); $$ = std::move(s); }
+    | KW_CONTINUE AMP IDENT SEMI
+        { auto s = mk<ContinueStmt>(); s->loc = sl(@$, driver); s->label = $3; $$ = std::move(s); }
     ;
 
 /* -- Assert ------------------------------------------------------------ */
@@ -941,16 +967,10 @@ extern_decl
 
 /* -- Variable declaration ---------------------------------------------- */
 var_decl_stmt
-    : KW_CONST type_expr var_decl_items SEMI
+    : type_expr var_decl_items SEMI
         {
             auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $2; v->is_const = true; v->decls = std::move($3);
-            $$ = std::move(v);
-        }
-    | type_expr var_decl_items SEMI
-        {
-            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $1; v->decls = std::move($2);
+            v->type = $1; v->is_const = $1.is_const; v->decls = std::move($2);
             $$ = std::move(v);
         }
     ;
@@ -1102,7 +1122,7 @@ dict_lit
     ;
 
 dict_pairs
-    : %empty
+    : %empty                              { $$ = PairList(); }
     | expr COLON expr                     { $$.emplace_back(std::move($1), std::move($3)); }
     | dict_pairs COMMA expr COLON expr    { $1.emplace_back(std::move($3), std::move($5)); $$ = std::move($1); }
     | dict_pairs COMMA                    { $$ = std::move($1); }

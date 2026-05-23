@@ -208,6 +208,7 @@ void Sema::hoist_interface(const ast::InterfaceDecl& i) {
 }
 
 void Sema::hoist_namespace(const ast::NamespaceDecl& ns) {
+    if (ns.is_package_decl) return;
     Symbol s;
     s.name = ns.name;
     s.kind = SymKind::Namespace;
@@ -391,6 +392,7 @@ void Sema::check_interface(const ast::InterfaceDecl& i) {
 }
 
 void Sema::check_namespace(const ast::NamespaceDecl& ns) {
+    if (ns.is_package_decl) return;
     scopes_.push();
     hoist_top(ns.decls);
     for (const auto& d : ns.decls) check_decl(*d);
@@ -399,16 +401,27 @@ void Sema::check_namespace(const ast::NamespaceDecl& ns) {
 }
 
 void Sema::check_import(const ast::ImportDecl& imp) {
-    // Simplified: register the module name as an object-typed symbol.
-    // Full resolution (loading files) is M5 work.
+    static const std::unordered_set<std::string> kStdlib = {"math", "str", "io"};
+
+    // Extract both first and last components of the dotted path.
     std::string first = imp.path.substr(0, imp.path.find('.'));
-    if (!first.empty() && !scopes_.lookup(first)) {
-        Symbol s;
-        s.name = first;
-        s.kind = SymKind::Namespace;
-        s.type = TR::TID_OBJECT;
-        scopes_.define(first, s);
+    std::string last  = imp.path.substr(
+        imp.path.rfind('.') == std::string::npos ? 0 : imp.path.rfind('.') + 1);
+
+    if (kStdlib.count(last) && imp.path.find('.') == std::string::npos) {
+        // Stdlib: register the module name so member-call resolution works.
+        if (!first.empty() && !scopes_.lookup(first)) {
+            Symbol s;
+            s.name = first;
+            s.kind = SymKind::Namespace;
+            s.type = TR::TID_OBJECT;
+            scopes_.define(first, s);
+        }
     }
+    // User file imports: the import resolver already injected a NamespaceDecl
+    // (full import) or individual FunctionDecl/ClassDecl nodes (selective import)
+    // into prog.decls before sema ran.  hoist_top() will pick them up normally;
+    // nothing extra is needed here.
 }
 
 // ─── Statements ──────────────────────────────────────────────────────────────
@@ -679,8 +692,6 @@ TypeId Sema::check_expr(const ast::Expr& e) {
         result = check_list(*lst_e);
     } else if (auto* dct_e  = dynamic_cast<const ast::DictExpr*>(&e)) {
         result = check_dict(*dct_e);
-    } else if (dynamic_cast<const ast::FormatExpr*>(&e)) {
-        result = TR::TID_STR;
     }
     // else: unknown Expr subtype — leave as TID_UNKNOWN
 

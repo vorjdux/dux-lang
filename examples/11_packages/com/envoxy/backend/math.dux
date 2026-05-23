@@ -1,0 +1,29 @@
+namespace com.envoxy.backend.math
+
+int clamp(int value, int lo, int hi) {
+    if (value < lo) {
+        return lo
+    }
+    if (value > hi) {
+        return hi
+    }
+    return value
+}
+
+int abs_val(int n) {
+    if (n < 0) {
+        return 0 - n
+    }
+    return n
+}
+
+int gcd(int a, int b) {
+    a = abs_val(a)
+    b = abs_val(b)
+    while (b != 0) {
+        int t = b
+        b = a % b
+        a = t
+    }
+    return a
+}

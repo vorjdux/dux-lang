@@ -17,7 +17,6 @@ void CallExpr::accept(Visitor& v)      const { v.visit(*this); }
 void MemberExpr::accept(Visitor& v)    const { v.visit(*this); }
 void IndexExpr::accept(Visitor& v)     const { v.visit(*this); }
 void NewExpr::accept(Visitor& v)       const { v.visit(*this); }
-void FormatExpr::accept(Visitor& v)    const { v.visit(*this); }
 void ListExpr::accept(Visitor& v)      const { v.visit(*this); }
 void DictExpr::accept(Visitor& v)      const { v.visit(*this); }
 

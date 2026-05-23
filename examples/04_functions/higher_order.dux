@@ -1,0 +1,59 @@
+# Functions that take other functions as arguments via function calls,
+# or that build results using helper functions.
+
+int apply_twice(int n) {
+    return n * 2
+}
+
+int apply_thrice(int n) {
+    return n * 3
+}
+
+int compose(int x, int times) {
+    int result = x
+    for int i in range(times) {
+        result = result * 2
+    }
+    return result
+}
+
+int sum_range(int lo, int hi) {
+    int total = 0
+    for int i in lo..=hi {
+        total = total + i
+    }
+    return total
+}
+
+int product_range(int lo, int hi) {
+    int total = 1
+    for int i in lo..=hi {
+        total = total * i
+    }
+    return total
+}
+
+str map_to_str(int val) {
+    if (val < 0) {
+        return "neg"
+    }
+    if (val == 0) {
+        return "zero"
+    }
+    return "pos"
+}
+
+void main() {
+    println(apply_twice(5))    # 10
+    println(apply_thrice(5))   # 15
+    println(compose(1, 8))     # 256  (1 * 2^8)
+
+    println(sum_range(1, 10))     # 55
+    println(product_range(1, 6))  # 720  (6!)
+
+    # Map concept — applying a transform to each value
+    for int i in -2..=2 {
+        println(map_to_str(i))
+    }
+    # neg, neg, zero, pos, pos
+}

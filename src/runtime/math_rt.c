@@ -7,7 +7,10 @@ double  duxrt_math_pow(double x, double y)  { return pow(x, y); }
 double  duxrt_math_floor(double x)          { return floor(x); }
 double  duxrt_math_ceil(double x)           { return ceil(x); }
 double  duxrt_math_abs_d(double x)          { return fabs(x); }
-int64_t duxrt_math_abs_i(int64_t x)        { return x < 0 ? -x : x; }
+int64_t duxrt_math_abs_i(int64_t x) {
+    if (x == INT64_MIN) return INT64_MAX;
+    return x < 0 ? -x : x;
+}
 double  duxrt_math_min_d(double a, double b){ return a < b ? a : b; }
 double  duxrt_math_max_d(double a, double b){ return a > b ? a : b; }
 int64_t duxrt_math_min_i(int64_t a, int64_t b){ return a < b ? a : b; }

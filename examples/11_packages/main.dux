@@ -1,0 +1,33 @@
+# Package-style imports
+#
+# Files declare their logical namespace at the top:
+#   namespace com.envoxy.backend.utils
+#
+# Dotted path maps to filesystem:
+#   com.envoxy.backend.utils  →  com/envoxy/backend/utils.dux
+#
+# Import forms:
+#   import path              full namespace  →  utils.fn()
+#   import path as alias     full + alias    →  alias.fn()
+#   import path::{a, b}     selective       →  utils.fn()
+#   import path::{a} as u   selective+alias →  u.fn()
+#   import path::*           glob            →  utils.fn()
+
+# Full namespace import — access via last path component
+import com.envoxy.backend.utils
+
+# Full namespace import with alias
+import com.envoxy.backend.math as m
+
+void main() {
+    # Full import: utils.*
+    println(utils.greet("world"))        # Hello, world!
+    println(utils.add(10, 32))           # 42
+    println(utils.max_of(7, 13))         # 13
+    println(utils.repeat_str("ab", 3))   # ababab
+
+    # Aliased import: m.*
+    println(m.clamp(25, 0, 20))          # 20
+    println(m.abs_val(-99))              # 99
+    println(m.gcd(48, 18))              # 6
+}
