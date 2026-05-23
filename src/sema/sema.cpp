@@ -425,6 +425,7 @@ void Sema::check_stmt(const ast::Stmt& s) {
     if (auto* fi = dynamic_cast<const ast::ForInStmt*>(&s))     { check_for_in(*fi);  return; }
     if (auto* fc = dynamic_cast<const ast::ForCStmt*>(&s))      { check_for_c(*fc);   return; }
     if (auto* sw = dynamic_cast<const ast::SwitchStmt*>(&s))    { check_switch(*sw);  return; }
+    if (auto* mx = dynamic_cast<const ast::MatchStmt*>(&s))     { check_match(*mx);   return; }
     if (auto* tc = dynamic_cast<const ast::TryCatchStmt*>(&s))  { check_try_catch(*tc);return;}
     if (auto* r  = dynamic_cast<const ast::ReturnStmt*>(&s))    { check_return(*r);   return; }
     if (auto* br = dynamic_cast<const ast::BreakStmt*>(&s))     {
@@ -524,6 +525,35 @@ void Sema::check_switch(const ast::SwitchStmt& s) {
         scopes_.pop();
     }
     in_loop_ = saved;
+}
+
+void Sema::check_match(const ast::MatchStmt& s) {
+    TypeId expr_t = check_expr(*s.expr);
+
+    for (const auto& arm : s.arms) {
+        // Validate enum variant patterns against the matched expression type
+        if (arm.pattern.kind == ast::MatchPattern::Kind::EnumVariant) {
+            // Verify the enum exists and has this variant
+            Symbol* enum_sym = scopes_.lookup(arm.pattern.enum_name);
+            if (!enum_sym ||
+                types_.info(enum_sym->type).kind != TypeKind::Enum) {
+                err(arm.loc, "'" + arm.pattern.enum_name + "' is not an enum type");
+            } else {
+                bool found = false;
+                for (const auto& v : types_.info(enum_sym->type).variants) {
+                    if (v.name == arm.pattern.variant_name) { found = true; break; }
+                }
+                if (!found)
+                    err(arm.loc, "enum '" + arm.pattern.enum_name +
+                        "' has no variant '" + arm.pattern.variant_name + "'");
+            }
+        }
+        // Type-check the arm body
+        scopes_.push();
+        check_stmts(arm.body);
+        scopes_.pop();
+    }
+    (void)expr_t;
 }
 
 void Sema::check_try_catch(const ast::TryCatchStmt& s) {

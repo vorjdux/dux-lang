@@ -53,6 +53,7 @@ private:
     void check_for_in(const ast::ForInStmt& s);
     void check_for_c(const ast::ForCStmt& s);
     void check_switch(const ast::SwitchStmt& s);
+    void check_match(const ast::MatchStmt& s);
     void check_try_catch(const ast::TryCatchStmt& s);
     void check_return(const ast::ReturnStmt& s);
     void check_var_decl(const ast::VarDeclStmt& s);

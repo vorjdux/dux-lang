@@ -76,6 +76,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_RETURN KW_BREAK KW_CONTINUE
 %token KW_IF KW_ELSE KW_FOR KW_WHILE KW_DO
 %token KW_SWITCH KW_CASE KW_DEFAULT
+%token KW_MATCH
 %token KW_TRY KW_CATCH KW_IN
 %token KW_CONST KW_STATIC
 %token KW_GET KW_SET
@@ -146,12 +147,16 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <StmtList>                         stmt_list block_body
 %type <StmtPtr>  stmt simple_stmt
 %type <StmtPtr>  if_stmt while_stmt do_while_stmt for_stmt
-%type <StmtPtr>  switch_stmt try_stmt return_stmt break_stmt
+%type <StmtPtr>  switch_stmt match_stmt try_stmt return_stmt break_stmt
 %type <StmtPtr>  continue_stmt assert_stmt delete_stmt unsafe_stmt
 %type <std::unique_ptr<BlockStmt>>       block
 %type <std::vector<SwitchCase>>          switch_cases
 %type <SwitchCase>                       switch_case
 %type <std::optional<std::string>>       opt_label
+/* Match statement */
+%type <std::vector<MatchArm>>            match_arms
+%type <MatchArm>                         match_arm
+%type <MatchPattern>                     match_pattern
 /* Variable declarations */
 %type <StmtPtr>                          var_decl_stmt
 %type <VarItemList>                      var_decl_items
@@ -667,6 +672,7 @@ stmt
     | do_while_stmt       { $$ = std::move($1); }
     | for_stmt            { $$ = std::move($1); }
     | switch_stmt         { $$ = std::move($1); }
+    | match_stmt          { $$ = std::move($1); }
     | try_stmt            { $$ = std::move($1); }
     | return_stmt         { $$ = std::move($1); }
     | break_stmt          { $$ = std::move($1); }
@@ -784,6 +790,80 @@ switch_case
         { SwitchCase c; c.value = std::move($2); c.body = std::move($4); $$ = std::move(c); }
     | KW_DEFAULT COLON stmt_list
         { SwitchCase c; c.body = std::move($3); $$ = std::move(c); }
+    ;
+
+/* -- Match statement --------------------------------------------------- */
+
+match_stmt
+    : KW_MATCH expr LBRACE match_arms RBRACE
+        {
+            auto s = mk<MatchStmt>(); s->loc = sl(@$, driver);
+            s->expr = std::move($2); s->arms = std::move($4);
+            $$ = std::move(s);
+        }
+    ;
+
+match_arms
+    : %empty              { $$ = std::vector<MatchArm>{}; }
+    | match_arms match_arm
+        { $1.push_back(std::move($2)); $$ = std::move($1); }
+    | match_arms SEMI     { $$ = std::move($1); }  /* absorb auto-semicolons */
+    ;
+
+match_arm
+    : match_pattern FAT_ARROW block
+        {
+            MatchArm arm; arm.loc = sl(@$, driver);
+            arm.pattern = std::move($1); arm.body = std::move($3->body);
+            $$ = std::move(arm);
+        }
+    | match_pattern FAT_ARROW block SEMI
+        {
+            MatchArm arm; arm.loc = sl(@$, driver);
+            arm.pattern = std::move($1); arm.body = std::move($3->body);
+            $$ = std::move(arm);
+        }
+    ;
+
+match_pattern
+    : IDENT DOT IDENT
+        {
+            /* EnumName.Variant */
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::EnumVariant;
+            p.enum_name    = $1;
+            p.variant_name = $3;
+            $$ = std::move(p);
+        }
+    | INT_LIT
+        {
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::IntLit;
+            p.int_value = $1;
+            $$ = std::move(p);
+        }
+    | KW_NULL
+        {
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::IntLit;
+            p.int_value = 0;
+            $$ = std::move(p);
+        }
+    | BOOL_LIT
+        {
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::BoolLit;
+            p.bool_value = $1;
+            $$ = std::move(p);
+        }
+    | IDENT
+        {
+            /* bare identifier: "_" is wildcard, any other name is also wildcard for now
+               (binding variables deferred to a future milestone) */
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::Wildcard;
+            $$ = std::move(p);
+        }
     ;
 
 /* -- Try / catch ------------------------------------------------------- */

@@ -711,6 +711,7 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
     if (auto* fi = dynamic_cast<const ast::ForInStmt*>(&s))    { gen_for_in(*fi);  return; }
     if (auto* fc = dynamic_cast<const ast::ForCStmt*>(&s))     { gen_for_c(*fc);   return; }
     if (auto* sw = dynamic_cast<const ast::SwitchStmt*>(&s))   { gen_switch(*sw);  return; }
+    if (auto* mx = dynamic_cast<const ast::MatchStmt*>(&s))    { gen_match(*mx);   return; }
     if (auto* tc = dynamic_cast<const ast::TryCatchStmt*>(&s)) { gen_try_catch(*tc);return;}
     if (auto* r  = dynamic_cast<const ast::ReturnStmt*>(&s))   { gen_return(*r);   return; }
     if (auto* br = dynamic_cast<const ast::BreakStmt*>(&s)) {
@@ -1054,6 +1055,86 @@ void Codegen::gen_switch(const ast::SwitchStmt& s) {
     }
 
     loop_stack_.pop_back();
+    builder_->SetInsertPoint(exit_bb);
+}
+
+void Codegen::gen_match(const ast::MatchStmt& s) {
+    Function* fn = builder_->GetInsertBlock()->getParent();
+    Value* match_val = gen_expr(*s.expr);
+
+    // Ensure match value is an integer (enums are i32)
+    if (!match_val->getType()->isIntegerTy()) {
+        match_val = builder_->CreateFPToSI(match_val,
+                                           llvm::Type::getInt32Ty(*ctx_));
+    }
+
+    auto* exit_bb = BasicBlock::Create(*ctx_, "match.end", fn);
+    BasicBlock* default_bb = exit_bb; // default goes to exit unless overridden
+
+    // Collect non-wildcard arms for switch, find wildcard arm
+    const ast::MatchArm* wildcard_arm = nullptr;
+    std::vector<std::pair<long long, const ast::MatchArm*>> case_arms;
+
+    for (const auto& arm : s.arms) {
+        switch (arm.pattern.kind) {
+        case ast::MatchPattern::Kind::Wildcard:
+            wildcard_arm = &arm;
+            break;
+        case ast::MatchPattern::Kind::EnumVariant: {
+            // Look up the tag value for this variant
+            auto it = enum_types_.find(arm.pattern.enum_name);
+            if (it != enum_types_.end()) {
+                const sema::TypeInfo& ti = types_.info(it->second);
+                for (const auto& v : ti.variants) {
+                    if (v.name == arm.pattern.variant_name) {
+                        case_arms.emplace_back(v.tag, &arm);
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+        case ast::MatchPattern::Kind::IntLit:
+            case_arms.emplace_back(arm.pattern.int_value, &arm);
+            break;
+        case ast::MatchPattern::Kind::BoolLit:
+            case_arms.emplace_back(arm.pattern.bool_value ? 1LL : 0LL, &arm);
+            break;
+        }
+    }
+
+    // Build wildcard block if any
+    if (wildcard_arm) {
+        default_bb = BasicBlock::Create(*ctx_, "match.wildcard", fn);
+    }
+
+    auto* sw = builder_->CreateSwitch(match_val, default_bb,
+                                      static_cast<unsigned>(case_arms.size()));
+
+    // Emit case arms
+    for (const auto& [tag, arm] : case_arms) {
+        auto* case_bb = BasicBlock::Create(*ctx_, "match.arm", fn);
+        auto* case_val = llvm::ConstantInt::get(
+            llvm::Type::getInt32Ty(*ctx_), static_cast<uint64_t>(tag));
+        sw->addCase(case_val, case_bb);
+        builder_->SetInsertPoint(case_bb);
+        env_push();
+        gen_stmts(arm->body);
+        env_pop();
+        if (!builder_->GetInsertBlock()->getTerminator())
+            builder_->CreateBr(exit_bb);
+    }
+
+    // Emit wildcard arm
+    if (wildcard_arm) {
+        builder_->SetInsertPoint(default_bb);
+        env_push();
+        gen_stmts(wildcard_arm->body);
+        env_pop();
+        if (!builder_->GetInsertBlock()->getTerminator())
+            builder_->CreateBr(exit_bb);
+    }
+
     builder_->SetInsertPoint(exit_bb);
 }
 

@@ -30,6 +30,7 @@ void DoWhileStmt::accept(Visitor& v)   const { v.visit(*this); }
 void ForInStmt::accept(Visitor& v)     const { v.visit(*this); }
 void ForCStmt::accept(Visitor& v)      const { v.visit(*this); }
 void SwitchStmt::accept(Visitor& v)    const { v.visit(*this); }
+void MatchStmt::accept(Visitor& v)     const { v.visit(*this); }
 void TryCatchStmt::accept(Visitor& v)  const { v.visit(*this); }
 void ReturnStmt::accept(Visitor& v)    const { v.visit(*this); }
 void BreakStmt::accept(Visitor& v)     const { v.visit(*this); }
