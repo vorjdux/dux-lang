@@ -6,6 +6,16 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* _Atomic is C11; in C++ mode use a compatibility shim so this header
+ * can be included from both C and C++ translation units.                */
+#ifdef __cplusplus
+#  include <atomic>
+#  define DUXRT_ATOMIC(T) std::atomic<T>
+#else
+#  include <stdatomic.h>
+#  define DUXRT_ATOMIC(T) _Atomic T
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -56,7 +66,7 @@ void  duxrt_print_double(double v);
 #define DUXSTR_INLINE_MAX  63   /* strings <= 63 bytes are stored inline (FAM) */
 
 typedef struct DuxStr {
-    int32_t  refcount;
+    DUXRT_ATOMIC(int32_t)  refcount;
     int32_t  len;    /* int32_t: no padding after refcount → header = 16 bytes */
     char*    ext;    /* NULL  → data inline in FAM below (short strings)
                         non-NULL → separate heap buffer    (long strings)  */
@@ -135,6 +145,7 @@ typedef struct DuxDictEntry {
 typedef struct DuxDict {
     int64_t       len;
     int64_t       cap;
+    int64_t       tomb;
     DuxDictEntry* entries;
 } DuxDict;
 

@@ -985,10 +985,17 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
         if (loop_stack_.empty()) return;
         if (br->label) {
             for (auto it = loop_stack_.rbegin(); it != loop_stack_.rend(); ++it)
-                if (it->label == *br->label) { builder_->CreateBr(it->exit); return; }
+                if (it->label == *br->label) {
+                    emit_all_scope_cleanups();
+                    emit_all_str_releases();
+                    builder_->CreateBr(it->exit);
+                    return;
+                }
             err(br->loc, "label '" + *br->label + "' not found for break");
             return;
         }
+        emit_all_scope_cleanups();
+        emit_all_str_releases();
         builder_->CreateBr(loop_stack_.back().exit);
         return;
     }
@@ -996,10 +1003,17 @@ void Codegen::gen_stmt(const ast::Stmt& s) {
         if (loop_stack_.empty()) return;
         if (co->label) {
             for (auto it = loop_stack_.rbegin(); it != loop_stack_.rend(); ++it)
-                if (it->label == *co->label) { builder_->CreateBr(it->header); return; }
+                if (it->label == *co->label) {
+                    emit_all_scope_cleanups();
+                    emit_all_str_releases();
+                    builder_->CreateBr(it->header);
+                    return;
+                }
             err(co->loc, "label '" + *co->label + "' not found for continue");
             return;
         }
+        emit_all_scope_cleanups();
+        emit_all_str_releases();
         builder_->CreateBr(loop_stack_.back().header);
         return;
     }
@@ -1364,7 +1378,10 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
     }
 
     auto* exit_bb = BasicBlock::Create(*ctx_, "match.end", fn);
-    BasicBlock* default_bb = exit_bb; // default goes to exit unless overridden
+
+    // No wildcard: generate an unreachable trap for non-exhaustive match
+    auto* trap_bb = BasicBlock::Create(*ctx_, "match.trap", fn);
+    BasicBlock* default_bb = nullptr;
 
     // Collect non-wildcard arms for switch, find wildcard arm
     const ast::MatchArm* wildcard_arm = nullptr;
@@ -1398,9 +1415,11 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
         }
     }
 
-    // Build wildcard block if any
+    // Build wildcard block if any; otherwise fall through to trap
     if (wildcard_arm) {
         default_bb = BasicBlock::Create(*ctx_, "match.wildcard", fn);
+    } else {
+        default_bb = trap_bb;
     }
 
     auto* sw = builder_->CreateSwitch(match_val, default_bb,
@@ -1430,6 +1449,14 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
             builder_->CreateBr(exit_bb);
     }
 
+    // Emit trap block (reached when match is not exhaustive)
+    builder_->SetInsertPoint(trap_bb);
+    {
+        auto* trap_fn = llvm::Intrinsic::getDeclaration(mod_.get(), llvm::Intrinsic::trap);
+        builder_->CreateCall(trap_fn, {});
+        builder_->CreateUnreachable();
+    }
+
     builder_->SetInsertPoint(exit_bb);
 }
 
@@ -1453,7 +1480,10 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
     auto* try_body_block = dynamic_cast<ast::BlockStmt*>(s.try_body.get());
     gen_stmts(try_body_block->body);
 
-    lp_stack_.pop_back();
+    // Do NOT pop lp_stack_ yet — the LP block cleanup code below calls
+    // emit_all_scope_cleanups(), which must emit invoke (not plain call)
+    // so that a throw inside a defer/dtor is covered by the landingpad
+    // itself (R-3 fix: lp_stack_ stays live until after LP cleanup).
 
     // Save the normal-path exit block before switching to the LP.
     auto* try_exit_bb = builder_->GetInsertBlock();
@@ -1470,8 +1500,9 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
                            llvm::cast<llvm::PointerType>(ptr_type())));
 
     // RAII + defer cleanup on the unwind path (objects still in scope).
-    emit_all_scope_cleanups();
+    emit_all_scope_cleanups();  // still have lp in stack so nested throws are covered
     emit_all_str_releases();
+    lp_stack_.pop_back();       // NOW pop, after cleanup is done (R-3 fix)
 
     // __cxa_begin_catch: resolve the thrown object.
     Value* exc_lp_ptr = builder_->CreateExtractValue(lp_inst, {0u}, "exc.lp");
@@ -1500,14 +1531,16 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
             builder_->CreateLoad(ptr_type(), exc_slot, "exc.v"), cv_alloca);
         env_define(*s.catch_var, cv_alloca);
     }
+    // Register __cxa_end_catch as a cleanup so it fires even when the catch
+    // body exits via return or rethrow (EH-3 fix).
+    llvm::Function* end_catch_fn = get_or_declare_rt(
+        "__cxa_end_catch", llvm::Type::getVoidTy(*ctx_), {});
+    cleanup_scopes_.back().push_back(
+        {nullptr, "", nullptr, end_catch_fn});
     gen_stmt(*s.catch_body);
-    if (!builder_->GetInsertBlock()->getTerminator()) {
-        auto* end_catch = get_or_declare_rt("__cxa_end_catch",
-                              llvm::Type::getVoidTy(*ctx_), {});
-        builder_->CreateCall(end_catch, {});
+    env_pop();  // env_pop fires emit_scope_cleanup which calls __cxa_end_catch
+    if (!builder_->GetInsertBlock()->getTerminator())
         builder_->CreateBr(end_bb);
-    }
-    env_pop();
 
     builder_->SetInsertPoint(end_bb);
 }
@@ -2802,7 +2835,7 @@ void Codegen::emit_dtor(Value* alloca, const std::string& class_name) {
     builder_->CreateCondBr(is_null, end_bb, call_bb);
 
     builder_->SetInsertPoint(call_bb);
-    builder_->CreateCall(dtor_fn, {obj_ptr});
+    emit_call(dtor_fn, {obj_ptr});
     builder_->CreateCall(free_fn, {obj_ptr});
     // Null out the slot so a second emit_dtor call is a no-op.
     builder_->CreateStore(null_v, alloca);
@@ -2814,10 +2847,13 @@ void Codegen::emit_dtor(Value* alloca, const std::string& class_name) {
 void Codegen::emit_scope_cleanup(const ScopeCleanup& c) {
     auto* bb = builder_->GetInsertBlock();
     if (!bb || bb->getTerminator()) return;
-    if (c.defer_body)
+    if (c.fn_to_call) {
+        emit_call(c.fn_to_call, {});
+    } else if (c.defer_body) {
         gen_stmts(*c.defer_body);
-    else
+    } else {
         emit_dtor(c.alloca, c.class_name);
+    }
 }
 
 void Codegen::emit_all_scope_cleanups() {
