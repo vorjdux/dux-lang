@@ -1,23 +1,48 @@
-// math — standard mathematics module
-// Usage: import math
+# math — standard mathematics module
+# Usage: import math
 
-// Trigonometry
+# ── Constants ────────────────────────────────────────────────────────────────
+const double PI  = 3.14159265358979323846
+const double E   = 2.71828182845904523536
+const double TAU = 6.28318530717958647692   # 2 * PI
+const double INF = 1.0 / 0.0               # positive infinity
+
+# ── Trigonometry ─────────────────────────────────────────────────────────────
 double sin(double x)
 double cos(double x)
+double tan(double x)
+double asin(double x)
+double acos(double x)
+double atan(double x)
+double atan2(double y, double x)
 
-// Roots and powers
+# ── Roots and powers ─────────────────────────────────────────────────────────
 double sqrt(double x)
 double pow(double base, double exp)
+double exp(double x)
+double exp2(double x)
 
-// Rounding
+# ── Rounding ─────────────────────────────────────────────────────────────────
 double floor(double x)
 double ceil(double x)
+double round(double x)
+double trunc(double x)
 
-// Logarithms
+# ── Logarithms ───────────────────────────────────────────────────────────────
 double log(double x)
 double log2(double x)
+double log10(double x)
 
-// Absolute value and extrema
+# ── Absolute value and extrema ────────────────────────────────────────────────
 double abs(double x)
 double min(double a, double b)
 double max(double a, double b)
+double clamp(double x, double lo, double hi)
+int    clamp_i(int x, int lo, int hi)
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+double hypot(double x, double y)
+double fmod(double x, double y)
+int    sign(double x)     # -1, 0, or 1
+bool   is_nan(double x)
+bool   is_inf(double x)
