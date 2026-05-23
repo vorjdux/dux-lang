@@ -6,7 +6,7 @@ int main() {
         print("has PATH")
     }
     env.store("DUX_TEST_VAR", "hello_dux")
-    str val = env.get("DUX_TEST_VAR")
+    str val = env.get_or("DUX_TEST_VAR", "")
     print(val)
     bool has_var = env.has("DUX_TEST_VAR")
     if has_var {

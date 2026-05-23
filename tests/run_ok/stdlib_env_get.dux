@@ -3,7 +3,7 @@ import option
 
 int main() {
     # PATH is always set on any POSIX system
-    Option p = env.fetch("PATH")
+    Option p = env.get("PATH")
     match p {
         Option.Some(v) => {
             print("path ok")
@@ -14,7 +14,7 @@ int main() {
     }
 
     # Non-existent variable returns None
-    Option missing = env.fetch("DUX_DEFINITELY_NOT_SET_XYZ987")
+    Option missing = env.get("DUX_DEFINITELY_NOT_SET_XYZ987")
     match missing {
         Option.None => {
             print("none ok")
@@ -26,7 +26,7 @@ int main() {
 
     # Set a variable, fetch it as Option, remove it
     env.store("DUX_FETCH_TEST", "world")
-    Option fetched = env.fetch("DUX_FETCH_TEST")
+    Option fetched = env.get("DUX_FETCH_TEST")
     match fetched {
         Option.Some(v) => {
             print("fetched:" + v)
@@ -38,11 +38,11 @@ int main() {
     env.remove("DUX_FETCH_TEST")
 
     # After removal it is None
-    Option gone = env.fetch("DUX_FETCH_TEST")
+    Option gone = env.get("DUX_FETCH_TEST")
     if option_is_none(gone) {
         print("removed ok")
     }
 
-    print("env fetch ok")
+    print("env get ok")
     return 0
 }
