@@ -1,0 +1,25 @@
+# Static ID generator — demonstrates class-level static fields and static methods.
+# IdGenerator keeps a shared counter across all calls to next().
+
+class IdGenerator {
+    static int _next = 1
+
+    static int next() {
+        int id = IdGenerator._next
+        IdGenerator._next += 1
+        return id
+    }
+
+    static void reset() {
+        IdGenerator._next = 1
+    }
+}
+
+void main() {
+    println(IdGenerator.next())   # 1
+    println(IdGenerator.next())   # 2
+    println(IdGenerator.next())   # 3
+
+    IdGenerator.reset()
+    println(IdGenerator.next())   # 1 again
+}
