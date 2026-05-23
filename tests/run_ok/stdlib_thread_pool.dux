@@ -1,0 +1,12 @@
+import thread.pool
+
+int main() {
+    ThreadPool p = new ThreadPool(2)
+    if p.size() == 2 {
+        print("size ok")
+    }
+    p.wait()
+    print("wait ok")
+    print("pool ok")
+    return 0
+}

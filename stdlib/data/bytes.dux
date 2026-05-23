@@ -9,6 +9,23 @@ namespace bytes {
     extern "C" void duxrt_bytes_append(ptr dst, ptr src) ;
     extern "C" void duxrt_bytes_free(ptr b) ;
 
+    extern "C" void duxrt_bytes_write_u8(ptr b, int v) ;
+    extern "C" void duxrt_bytes_write_u16_le(ptr b, int v) ;
+    extern "C" void duxrt_bytes_write_u16_be(ptr b, int v) ;
+    extern "C" void duxrt_bytes_write_u32_le(ptr b, long v) ;
+    extern "C" void duxrt_bytes_write_u32_be(ptr b, long v) ;
+    extern "C" void duxrt_bytes_write_u64_le(ptr b, long v) ;
+    extern "C" void duxrt_bytes_write_u64_be(ptr b, long v) ;
+    extern "C" int  duxrt_bytes_read_u8(ptr b, long off) ;
+    extern "C" int  duxrt_bytes_read_u16_le(ptr b, long off) ;
+    extern "C" int  duxrt_bytes_read_u16_be(ptr b, long off) ;
+    extern "C" long duxrt_bytes_read_u32_le(ptr b, long off) ;
+    extern "C" long duxrt_bytes_read_u32_be(ptr b, long off) ;
+    extern "C" long duxrt_bytes_read_u64_le(ptr b, long off) ;
+    extern "C" long duxrt_bytes_read_u64_be(ptr b, long off) ;
+    extern "C" str  duxrt_bytes_hex(ptr b) ;
+    extern "C" ptr  duxrt_bytes_slice(ptr b, long start, long end_pos) ;
+
     # Create a new byte buffer with optional initial capacity.
     ptr create(long cap) {
         ptr r = null
@@ -79,6 +96,145 @@ namespace bytes {
     void free(ptr b) {
         unsafe {
             duxrt_bytes_free(b)
+        }
+    }
+}
+
+# ByteBuffer — typed, endian-aware byte buffer class.
+class ByteBuffer {
+    ptr _buf
+
+    ByteBuffer(int capacity) {
+        unsafe {
+            this._buf = duxrt_bytes_new(capacity)
+        }
+    }
+
+    long len() {
+        long n = 0
+        unsafe {
+            n = duxrt_bytes_len(this._buf)
+        }
+        return n
+    }
+
+    void write_u8(int v) {
+        unsafe {
+            duxrt_bytes_write_u8(this._buf, v)
+        }
+    }
+
+    void write_u16_le(int v) {
+        unsafe {
+            duxrt_bytes_write_u16_le(this._buf, v)
+        }
+    }
+
+    void write_u16_be(int v) {
+        unsafe {
+            duxrt_bytes_write_u16_be(this._buf, v)
+        }
+    }
+
+    void write_u32_le(long v) {
+        unsafe {
+            duxrt_bytes_write_u32_le(this._buf, v)
+        }
+    }
+
+    void write_u32_be(long v) {
+        unsafe {
+            duxrt_bytes_write_u32_be(this._buf, v)
+        }
+    }
+
+    void write_u64_le(long v) {
+        unsafe {
+            duxrt_bytes_write_u64_le(this._buf, v)
+        }
+    }
+
+    void write_u64_be(long v) {
+        unsafe {
+            duxrt_bytes_write_u64_be(this._buf, v)
+        }
+    }
+
+    int read_u8(long off) {
+        int r = 0
+        unsafe {
+            r = duxrt_bytes_read_u8(this._buf, off)
+        }
+        return r
+    }
+
+    int read_u16_le(long off) {
+        int r = 0
+        unsafe {
+            r = duxrt_bytes_read_u16_le(this._buf, off)
+        }
+        return r
+    }
+
+    int read_u16_be(long off) {
+        int r = 0
+        unsafe {
+            r = duxrt_bytes_read_u16_be(this._buf, off)
+        }
+        return r
+    }
+
+    long read_u32_le(long off) {
+        long r = 0
+        unsafe {
+            r = duxrt_bytes_read_u32_le(this._buf, off)
+        }
+        return r
+    }
+
+    long read_u32_be(long off) {
+        long r = 0
+        unsafe {
+            r = duxrt_bytes_read_u32_be(this._buf, off)
+        }
+        return r
+    }
+
+    long read_u64_le(long off) {
+        long r = 0
+        unsafe {
+            r = duxrt_bytes_read_u64_le(this._buf, off)
+        }
+        return r
+    }
+
+    long read_u64_be(long off) {
+        long r = 0
+        unsafe {
+            r = duxrt_bytes_read_u64_be(this._buf, off)
+        }
+        return r
+    }
+
+    str to_hex() {
+        str h = ""
+        unsafe {
+            h = duxrt_bytes_hex(this._buf)
+        }
+        return h
+    }
+
+    str to_str() {
+        str s = ""
+        unsafe {
+            s = duxrt_bytes_to_str(this._buf)
+        }
+        return s
+    }
+
+    ~ByteBuffer() {
+        unsafe {
+            duxrt_bytes_free(this._buf)
         }
     }
 }

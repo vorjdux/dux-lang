@@ -1,0 +1,26 @@
+import sys.process
+
+int main() {
+    # Test capture with process.output()
+    list argv = ["echo", "hello_proc"]
+    str out = process.output(argv)
+    if len(out) > 0 {
+        print("output ok")
+    }
+
+    # Test run_argv
+    list argv2 = ["true"]
+    int code = process.run_argv(argv2)
+    if code == 0 {
+        print("run ok")
+    }
+
+    # Test pid/ppid still work
+    long p = process.pid()
+    if p > 0 {
+        print("pid ok")
+    }
+
+    print("process class ok")
+    return 0
+}

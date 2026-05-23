@@ -6,6 +6,13 @@ namespace process {
     extern "C" long duxrt_process_wait(long pid) ;
     extern "C" long duxrt_process_spawn(str cmd, list args) ;
 
+    extern "C" ptr  duxrt_proc_spawn(list argv, int cap_out, int cap_err) ;
+    extern "C" int  duxrt_proc_wait(ptr proc) ;
+    extern "C" str  duxrt_proc_stdout(ptr proc) ;
+    extern "C" str  duxrt_proc_stderr(ptr proc) ;
+    extern "C" int  duxrt_proc_kill(ptr proc, int sig) ;
+    extern "C" void duxrt_proc_free(ptr proc) ;
+
     # Run a shell command, wait for it, return exit code.
     long run(str cmd) {
         long r = 0
@@ -59,4 +66,121 @@ namespace process {
         }
         return r
     }
+
+    # Spawn a process from an argv list with inherited stdout/stderr.
+    # Returns a Process instance.
+    ptr spawn_raw(list argv) {
+        ptr p = null
+        unsafe {
+            p = duxrt_proc_spawn(argv, 0, 0)
+        }
+        return p
+    }
+
+    # Spawn and capture stdout+stderr. Returns a Process instance.
+    ptr spawn_capture_raw(list argv) {
+        ptr p = null
+        unsafe {
+            p = duxrt_proc_spawn(argv, 1, 1)
+        }
+        return p
+    }
+
+    # Run argv list and wait for exit; returns exit code.
+    int run_argv(list argv) {
+        ptr p = null
+        unsafe {
+            p = duxrt_proc_spawn(argv, 0, 0)
+        }
+        int r = 0
+        unsafe {
+            r = duxrt_proc_wait(p)
+            duxrt_proc_free(p)
+        }
+        return r
+    }
+
+    # Run argv list, capture stdout, return it as string.
+    str output(list argv) {
+        ptr p = null
+        unsafe {
+            p = duxrt_proc_spawn(argv, 1, 1)
+        }
+        unsafe {
+            duxrt_proc_wait(p)
+        }
+        str s = ""
+        unsafe {
+            s = duxrt_proc_stdout(p)
+            duxrt_proc_free(p)
+        }
+        return s
+    }
+}
+
+# Process — handle to a running child process.
+class Process {
+    ptr _proc
+
+    Process(ptr raw) {
+        this._proc = raw
+    }
+
+    # Block until the process finishes; returns exit code (0=success, neg=signal).
+    int wait() {
+        int r = 0
+        unsafe {
+            r = duxrt_proc_wait(this._proc)
+        }
+        return r
+    }
+
+    # Captured stdout (only valid after wait(), requires spawn with capture=true).
+    str stdout() {
+        str s = ""
+        unsafe {
+            s = duxrt_proc_stdout(this._proc)
+        }
+        return s
+    }
+
+    # Captured stderr.
+    str stderr() {
+        str s = ""
+        unsafe {
+            s = duxrt_proc_stderr(this._proc)
+        }
+        return s
+    }
+
+    # Send a signal to the process.
+    void kill(int sig) {
+        unsafe {
+            duxrt_proc_kill(this._proc, sig)
+        }
+    }
+
+    ~Process() {
+        unsafe {
+            duxrt_proc_free(this._proc)
+        }
+    }
+}
+
+# Spawn a process from an argv list with inherited stdout/stderr.
+Process spawn_proc(list argv) {
+    ptr p = null
+    unsafe {
+        p = duxrt_proc_spawn(argv, 0, 0)
+    }
+    return new Process(p)
+}
+
+# Spawn and capture stdout+stderr.
+Process spawn_capture(list argv) {
+    ptr p = null
+    unsafe {
+        p = duxrt_proc_spawn(argv, 1, 1)
+    }
+    return new Process(p)
 }

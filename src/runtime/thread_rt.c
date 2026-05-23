@@ -201,3 +201,238 @@ void duxrt_once_free(void* handle) {
     pthread_mutex_destroy(&o->mu);
     free(o);
 }
+
+/* ── Thread pool ─────────────────────────────────────────────────────────── */
+
+typedef struct DuxPoolTask {
+    void (*fn)(void*);
+    void*              arg;
+    struct DuxPoolTask* next;
+} DuxPoolTask;
+
+typedef struct DuxPool {
+    pthread_t*      workers;
+    int32_t         n_workers;
+    pthread_mutex_t mu;
+    pthread_cond_t  not_empty;
+    pthread_cond_t  all_done;
+    DuxPoolTask*    head;
+    DuxPoolTask*    tail;
+    int32_t         pending;
+    int32_t         shutdown;
+} DuxPool;
+
+static void* pool_worker(void* arg) {
+    DuxPool* p = (DuxPool*)arg;
+    for (;;) {
+        pthread_mutex_lock(&p->mu);
+        while (!p->head && !p->shutdown)
+            pthread_cond_wait(&p->not_empty, &p->mu);
+        if (p->shutdown && !p->head) {
+            pthread_mutex_unlock(&p->mu);
+            break;
+        }
+        DuxPoolTask* t = p->head;
+        p->head = t->next;
+        if (!p->head) p->tail = NULL;
+        pthread_mutex_unlock(&p->mu);
+
+        t->fn(t->arg);
+        free(t);
+
+        pthread_mutex_lock(&p->mu);
+        p->pending--;
+        if (p->pending == 0)
+            pthread_cond_broadcast(&p->all_done);
+        pthread_mutex_unlock(&p->mu);
+    }
+    return NULL;
+}
+
+void* duxrt_pool_new(int32_t n) {
+    if (n <= 0) n = 1;
+    DuxPool* p = (DuxPool*)calloc(1, sizeof(DuxPool));
+    if (!p) return NULL;
+    p->n_workers = n;
+    pthread_mutex_init(&p->mu, NULL);
+    pthread_cond_init(&p->not_empty, NULL);
+    pthread_cond_init(&p->all_done, NULL);
+    p->workers = (pthread_t*)malloc((size_t)n * sizeof(pthread_t));
+    if (!p->workers) { free(p); return NULL; }
+    for (int i = 0; i < n; i++)
+        pthread_create(&p->workers[i], NULL, pool_worker, p);
+    return p;
+}
+
+void duxrt_pool_submit(void* pool, void* fn_ptr, void* arg) {
+    DuxPool* p = (DuxPool*)pool;
+    if (!p || !fn_ptr) return;
+    DuxPoolTask* t = (DuxPoolTask*)malloc(sizeof(DuxPoolTask));
+    if (!t) return;
+    t->fn   = (void (*)(void*))fn_ptr;
+    t->arg  = arg;
+    t->next = NULL;
+    pthread_mutex_lock(&p->mu);
+    if (p->tail) p->tail->next = t; else p->head = t;
+    p->tail = t;
+    p->pending++;
+    pthread_cond_signal(&p->not_empty);
+    pthread_mutex_unlock(&p->mu);
+}
+
+void duxrt_pool_wait(void* pool) {
+    DuxPool* p = (DuxPool*)pool;
+    if (!p) return;
+    pthread_mutex_lock(&p->mu);
+    while (p->pending > 0)
+        pthread_cond_wait(&p->all_done, &p->mu);
+    pthread_mutex_unlock(&p->mu);
+}
+
+void duxrt_pool_shutdown(void* pool) {
+    DuxPool* p = (DuxPool*)pool;
+    if (!p) return;
+    pthread_mutex_lock(&p->mu);
+    p->shutdown = 1;
+    pthread_cond_broadcast(&p->not_empty);
+    pthread_mutex_unlock(&p->mu);
+    for (int i = 0; i < p->n_workers; i++)
+        pthread_join(p->workers[i], NULL);
+}
+
+void duxrt_pool_free(void* pool) {
+    DuxPool* p = (DuxPool*)pool;
+    if (!p) return;
+    DuxPoolTask* t = p->head;
+    while (t) { DuxPoolTask* next = t->next; free(t); t = next; }
+    pthread_mutex_destroy(&p->mu);
+    pthread_cond_destroy(&p->not_empty);
+    pthread_cond_destroy(&p->all_done);
+    free(p->workers);
+    free(p);
+}
+
+/* ── Channel ─────────────────────────────────────────────────────────────── */
+
+typedef struct DuxChanNode {
+    void*             val;
+    struct DuxChanNode* next;
+} DuxChanNode;
+
+typedef struct DuxChan {
+    pthread_mutex_t mu;
+    pthread_cond_t  not_empty;
+    pthread_cond_t  not_full;
+    DuxChanNode*    head;
+    DuxChanNode*    tail;
+    int64_t         len;
+    int64_t         cap;   /* 0 = unbounded */
+    int32_t         closed;
+} DuxChan;
+
+void* duxrt_chan_new(int64_t cap) {
+    DuxChan* c = (DuxChan*)calloc(1, sizeof(DuxChan));
+    if (!c) return NULL;
+    pthread_mutex_init(&c->mu, NULL);
+    pthread_cond_init(&c->not_empty, NULL);
+    pthread_cond_init(&c->not_full, NULL);
+    c->cap = cap;
+    return c;
+}
+
+void duxrt_chan_send(void* ch, void* val) {
+    DuxChan* c = (DuxChan*)ch;
+    if (!c) return;
+    pthread_mutex_lock(&c->mu);
+    /* bounded: wait while full and not closed */
+    while (c->cap > 0 && c->len >= c->cap && !c->closed)
+        pthread_cond_wait(&c->not_full, &c->mu);
+    if (c->closed) { pthread_mutex_unlock(&c->mu); return; }
+    DuxChanNode* node = (DuxChanNode*)malloc(sizeof(DuxChanNode));
+    if (!node) { pthread_mutex_unlock(&c->mu); return; }
+    node->val  = val;
+    node->next = NULL;
+    if (c->tail) c->tail->next = node; else c->head = node;
+    c->tail = node;
+    c->len++;
+    pthread_cond_signal(&c->not_empty);
+    pthread_mutex_unlock(&c->mu);
+}
+
+void* duxrt_chan_recv(void* ch) {
+    DuxChan* c = (DuxChan*)ch;
+    if (!c) return NULL;
+    pthread_mutex_lock(&c->mu);
+    while (!c->head && !c->closed)
+        pthread_cond_wait(&c->not_empty, &c->mu);
+    if (!c->head) { pthread_mutex_unlock(&c->mu); return NULL; }
+    DuxChanNode* node = c->head;
+    c->head = node->next;
+    if (!c->head) c->tail = NULL;
+    c->len--;
+    void* val = node->val;
+    free(node);
+    pthread_cond_signal(&c->not_full);
+    pthread_mutex_unlock(&c->mu);
+    return val;
+}
+
+/* 1 = got item, 0 = empty+open, -1 = closed+empty */
+int32_t duxrt_chan_try_recv(void* ch, void** out) {
+    DuxChan* c = (DuxChan*)ch;
+    if (!c) return -1;
+    pthread_mutex_lock(&c->mu);
+    if (!c->head) {
+        int r = c->closed ? -1 : 0;
+        pthread_mutex_unlock(&c->mu);
+        return r;
+    }
+    DuxChanNode* node = c->head;
+    c->head = node->next;
+    if (!c->head) c->tail = NULL;
+    c->len--;
+    if (out) *out = node->val;
+    free(node);
+    pthread_cond_signal(&c->not_full);
+    pthread_mutex_unlock(&c->mu);
+    return 1;
+}
+
+void duxrt_chan_close(void* ch) {
+    DuxChan* c = (DuxChan*)ch;
+    if (!c) return;
+    pthread_mutex_lock(&c->mu);
+    c->closed = 1;
+    pthread_cond_broadcast(&c->not_empty);
+    pthread_cond_broadcast(&c->not_full);
+    pthread_mutex_unlock(&c->mu);
+}
+
+int32_t duxrt_chan_is_closed(void* ch) {
+    DuxChan* c = (DuxChan*)ch;
+    if (!c) return 1;
+    pthread_mutex_lock(&c->mu);
+    int r = c->closed;
+    pthread_mutex_unlock(&c->mu);
+    return r;
+}
+
+int64_t duxrt_chan_len(void* ch) {
+    DuxChan* c = (DuxChan*)ch;
+    if (!c) return 0;
+    pthread_mutex_lock(&c->mu);
+    int64_t n = c->len;
+    pthread_mutex_unlock(&c->mu);
+    return n;
+}
+
+void duxrt_chan_free(void* ch) {
+    DuxChan* c = (DuxChan*)ch;
+    if (!c) return;
+    DuxChanNode* node = c->head;
+    while (node) { DuxChanNode* next = node->next; free(node); node = next; }
+    pthread_mutex_destroy(&c->mu);
+    pthread_cond_destroy(&c->not_empty);
+    pthread_cond_destroy(&c->not_full);
+    free(c);
+}

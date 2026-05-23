@@ -1,0 +1,82 @@
+namespace chan {
+    extern "C" ptr  duxrt_chan_new(long cap) ;
+    extern "C" void duxrt_chan_send(ptr ch, ptr val) ;
+    extern "C" ptr  duxrt_chan_recv(ptr ch) ;
+    extern "C" int  duxrt_chan_try_recv(ptr ch, ptr out) ;
+    extern "C" void duxrt_chan_close(ptr ch) ;
+    extern "C" int  duxrt_chan_is_closed(ptr ch) ;
+    extern "C" long duxrt_chan_len(ptr ch) ;
+    extern "C" void duxrt_chan_free(ptr ch) ;
+}
+
+# Chan — a thread-safe FIFO channel for passing values between threads.
+# capacity = 0: unbounded (send never blocks)
+# capacity > 0: bounded (send blocks when full)
+class Chan {
+    ptr  _ch
+    bool _closed
+
+    Chan(int capacity) {
+        this._closed = false
+        unsafe {
+            this._ch = duxrt_chan_new(capacity)
+        }
+    }
+
+    # Send a value (pointer) to the channel. Blocks if bounded and full.
+    void send(ptr val) {
+        unsafe {
+            duxrt_chan_send(this._ch, val)
+        }
+    }
+
+    # Receive a value. Blocks until item available; returns null if closed+empty.
+    ptr recv() {
+        ptr result = null
+        unsafe {
+            result = duxrt_chan_recv(this._ch)
+        }
+        return result
+    }
+
+    # Non-blocking receive. Returns 1=got item, 0=empty+open, -1=closed+empty.
+    int try_recv() {
+        int r = 0
+        unsafe {
+            r = duxrt_chan_try_recv(this._ch, null)
+        }
+        return r
+    }
+
+    bool is_closed() {
+        int r = 0
+        unsafe {
+            r = duxrt_chan_is_closed(this._ch)
+        }
+        return r != 0
+    }
+
+    long pending() {
+        long n = 0
+        unsafe {
+            n = duxrt_chan_len(this._ch)
+        }
+        return n
+    }
+
+    void close() {
+        this._closed = true
+        unsafe {
+            duxrt_chan_close(this._ch)
+        }
+    }
+
+    ~Chan() {
+        if !this._closed {
+            this.close()
+        }
+        unsafe {
+            duxrt_chan_free(this._ch)
+        }
+    }
+}
