@@ -11,6 +11,9 @@ namespace signal {
     extern "C" int duxrt_signal_reset(long sig) ;
     extern "C" int duxrt_signal_raise(long sig) ;
     extern "C" int duxrt_signal_kill(long pid, long sig) ;
+    extern "C" void duxrt_signal_register(int signum, ptr handler) ;
+    extern "C" void duxrt_signal_block(int signum) ;
+    extern "C" void duxrt_signal_unblock(int signum) ;
 
     # Signal number constants.
     long SIGINT() {
@@ -105,11 +108,32 @@ namespace signal {
     }
 
     # Send signal to process. Returns true on success.
-    bool kill(long pid, long sig) {
+    bool kill(long pid_val, long sig) {
         int r = 0
         unsafe {
-            r = duxrt_signal_kill(pid, sig)
+            r = duxrt_signal_kill(pid_val, sig)
         }
         return r != 0
+    }
+
+    # Register a handler function (ptr to fn()->void) for a raw signal number.
+    void on_raw(int signum, ptr handler) {
+        unsafe {
+            duxrt_signal_register(signum, handler)
+        }
+    }
+
+    # Block a signal in the current thread's signal mask.
+    void block(int signum) {
+        unsafe {
+            duxrt_signal_block(signum)
+        }
+    }
+
+    # Unblock a signal in the current thread's signal mask.
+    void unblock(int signum) {
+        unsafe {
+            duxrt_signal_unblock(signum)
+        }
     }
 }

@@ -1,0 +1,6 @@
+len ok
+u8 ok
+u32_be ok
+u32_le ok
+hex ok
+bytes typed ok
