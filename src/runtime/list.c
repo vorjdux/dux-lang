@@ -3,6 +3,14 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Throw a Dux IndexError; msg must be a string literal (or static storage). */
+static void list_index_error(int64_t idx, int64_t len) {
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "list index %ld out of range (len=%ld)", (long)idx, (long)len);
+    duxrt_throw(duxrt_exception_new("IndexError", buf));
+}
+
 #define LIST_INIT_CAP 8
 
 DuxList* duxrt_list_new(void) {
@@ -26,21 +34,22 @@ void duxrt_list_push(DuxList* l, void* val) {
 
 void* duxrt_list_get(DuxList* l, int64_t idx) {
     if (!l) return NULL;
+    int64_t orig = idx;
     if (idx < 0) idx += l->len;
     if (idx < 0 || idx >= l->len) {
-        fprintf(stderr, "duxrt: list index %ld out of range (len=%ld)\n",
-                (long)idx, (long)l->len);
-        abort();
+        list_index_error(orig, l->len);
+        return NULL;  /* unreachable — list_index_error throws */
     }
     return l->data[idx];
 }
 
 void duxrt_list_set(DuxList* l, int64_t idx, void* val) {
     if (!l) return;
+    int64_t orig = idx;
     if (idx < 0) idx += l->len;
     if (idx < 0 || idx >= l->len) {
-        fprintf(stderr, "duxrt: list index %ld out of range\n", (long)idx);
-        abort();
+        list_index_error(orig, l->len);
+        return;  /* unreachable — list_index_error throws */
     }
     l->data[idx] = val;
 }

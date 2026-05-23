@@ -26,7 +26,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#define HTTP_BUF_SIZE (64 * 1024)   /* 64 KiB response buffer */
+#define HTTP_BUF_INIT (64 * 1024)   /* 64 KiB initial response buffer */
+#define HTTP_BUF_SIZE HTTP_BUF_INIT /* alias used by request builders (fixed-size) */
 
 /* ── Thread-local error ──────────────────────────────────────────────────── */
 static __thread char g_http_err[256];
@@ -106,13 +107,21 @@ static DuxHttpResp* resp_new(int32_t status, const char* st,
 /* ── Low-level HTTP send/recv over a plain file descriptor ───────────────── */
 
 static DuxStr* http_read_all(int fd) {
-    char* buf = (char*)malloc(HTTP_BUF_SIZE);
+    size_t cap = HTTP_BUF_INIT;
+    char*  buf = (char*)malloc(cap);
     if (!buf) return duxrt_str_new("", 0);
     size_t total = 0;
     ssize_t n;
-    while ((n = recv(fd, buf + total, HTTP_BUF_SIZE - total - 1, 0)) > 0) {
+    while ((n = recv(fd, buf + total, cap - total - 1, 0)) > 0) {
         total += (size_t)n;
-        if (total >= HTTP_BUF_SIZE - 1) break;
+        /* Grow buffer when it fills — no silent truncation */
+        if (total >= cap - 1) {
+            size_t new_cap = cap * 2;
+            char*  new_buf = (char*)realloc(buf, new_cap);
+            if (!new_buf) { free(buf); return duxrt_str_new("", 0); }
+            buf = new_buf;
+            cap = new_cap;
+        }
     }
     buf[total] = '\0';
     DuxStr* s = duxrt_str_new(buf, (int64_t)total);
