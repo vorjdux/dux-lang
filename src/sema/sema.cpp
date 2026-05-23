@@ -598,8 +598,28 @@ void Sema::check_match(const ast::MatchStmt& s) {
                         "' has no variant '" + arm.pattern.variant_name + "'");
             }
         }
-        // Type-check the arm body
+        // Type-check the arm body, injecting any payload bindings into scope
         scopes_.push();
+        if (arm.pattern.kind == ast::MatchPattern::Kind::EnumVariant &&
+            !arm.pattern.bindings.empty()) {
+            // Find the variant's payload types so we can give bindings the right type
+            Symbol* enum_sym = scopes_.lookup(arm.pattern.enum_name);
+            const sema::EnumVariantInfo* vi = nullptr;
+            if (enum_sym && types_.info(enum_sym->type).kind == TypeKind::Enum) {
+                for (const auto& v : types_.info(enum_sym->type).variants)
+                    if (v.name == arm.pattern.variant_name) { vi = &v; break; }
+            }
+            for (int i = 0; i < (int)arm.pattern.bindings.size(); ++i) {
+                const std::string& bname = arm.pattern.bindings[i];
+                Symbol bs;
+                bs.name = bname;
+                bs.kind = SymKind::Var;
+                // Use the declared payload type when available, else object
+                bs.type = (vi && i < (int)vi->payload.size())
+                          ? vi->payload[i] : TR::TID_OBJECT;
+                scopes_.define(bname, bs);
+            }
+        }
         check_stmts(arm.body);
         scopes_.pop();
     }
@@ -846,10 +866,10 @@ TypeId Sema::check_binary(const ast::BinaryExpr& e) {
     // Arithmetic operators
     if (op == "+" || op == "-" || op == "*" || op == "/" || op == "%") {
         if (op == "+" && (L == TR::TID_STR || R == TR::TID_STR)) {
-            // String concatenation — either side can be str; warn on type mismatch
-            if (L != TR::TID_STR)
+            // String concatenation — either side can be str or object; warn on other types
+            if (L != TR::TID_STR && L != TR::TID_OBJECT)
                 warn(e.left->loc,  "'+' with str: left operand is '" + types_.name_of(L) + "'");
-            if (R != TR::TID_STR)
+            if (R != TR::TID_STR && R != TR::TID_OBJECT)
                 warn(e.right->loc, "'+' with str: right operand is '" + types_.name_of(R) + "'");
             return TR::TID_STR;
         }

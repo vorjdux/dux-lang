@@ -327,6 +327,18 @@ private:
 
     TypeId type_id_of(const ast::Expr& e) const;
 
+    // Enum payload helpers
+    // Returns the max payload arity across all variants of the given enum TypeInfo.
+    int  enum_max_payload_arity(const sema::TypeInfo& ti) const;
+    // Generate a heap-allocated enum value: { i32 tag, ptr field... }
+    llvm::Value* gen_enum_ctor(const sema::TypeInfo& ti,
+                               const sema::EnumVariantInfo& vi,
+                               const std::vector<ast::ExprPtr>& args);
+    // Box a value to ptr-sized slot (same scheme as async env).
+    llvm::Value* box_to_ptr(llvm::Value* v);
+    // Unbox a ptr slot back to the given LLVM type.
+    llvm::Value* unbox_from_ptr(llvm::Value* v, llvm::Type* target);
+
     void err(const ast::SourceLoc& loc, const std::string& msg);
 };
 
