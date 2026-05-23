@@ -129,6 +129,7 @@ private:
     // Each entry is one of:
     //   - Class RAII dtor:  alloca != nullptr, defer_body == nullptr
     //   - Defer block:      alloca == nullptr, defer_body != nullptr
+    //   - C cleanup fn:     fn_to_call != nullptr
     //
     // Entries within a scope are processed in reverse-declaration order
     // (LIFO) so that later declarations are destroyed first, matching
@@ -137,6 +138,7 @@ private:
         llvm::Value*          alloca{nullptr};      // RAII: alloca holding heap ptr
         std::string           class_name;            // RAII: destructor symbol prefix
         const ast::StmtList*  defer_body{nullptr};  // defer: statements to run
+        llvm::Function*       fn_to_call{nullptr};  // new: no-arg cleanup function
     };
     std::vector<std::vector<ScopeCleanup>> cleanup_scopes_;
 
