@@ -1,0 +1,18 @@
+class Point() {
+    int x
+    int y
+
+    Point(int px, int py) {
+        x = px
+        y = py
+    }
+
+    int getX() {
+        return x
+    }
+}
+
+void main() {
+    Point p = new Point(3, 4)
+    println(p.getX())
+}
