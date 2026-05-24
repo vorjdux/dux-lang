@@ -370,3 +370,17 @@ foreach(F ${DUX_RUN_FAIL})
         DEPENDS duxrt
     )
 endforeach()
+
+# bootstrap: compile stage2+stage3 from Dux source, run stage3 round-trip suite.
+# This verifies the compiler can compile a realistic self-hosting workload and
+# that the resulting binaries produce correct output (13 round-trip tests).
+add_test(
+    NAME    bootstrap_stage3_suite
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/bootstrap_test.sh
+            $<TARGET_FILE:dux>
+            ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(bootstrap_stage3_suite PROPERTIES
+    DEPENDS duxrt
+    TIMEOUT 120
+)

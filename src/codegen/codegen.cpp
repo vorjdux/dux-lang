@@ -1614,8 +1614,12 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
                                           match_ptr, "enum.tag");
     } else if (match_raw->getType()->isIntegerTy()) {
         match_val = match_raw;
-        if (!match_val->getType()->isIntegerTy(32))
+        auto* int_ty = llvm::cast<llvm::IntegerType>(match_val->getType());
+        if (int_ty->getBitWidth() > 32)
+            // Wider than i32 (e.g. i64): truncate down.
             match_val = builder_->CreateTrunc(match_val, llvm::Type::getInt32Ty(*ctx_));
+        // Narrower types (bool i1, i8, i16) are kept as-is; the switch and
+        // case constants both use match_val->getType() so they stay consistent.
     } else {
         // Float or other — coerce to i32 (fallback, not normally reached for enums)
         match_val = builder_->CreateFPToSI(match_raw, llvm::Type::getInt32Ty(*ctx_));
