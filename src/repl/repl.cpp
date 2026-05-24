@@ -1,0 +1,235 @@
+#include "repl.hpp"
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+
+namespace dux {
+
+Repl::Repl(const std::string& dux_binary) : dux_binary_(dux_binary) {
+    temp_dir_ = "/tmp/dux_repl_" + std::to_string(static_cast<long>(getpid()));
+    mkdir(temp_dir_.c_str(), 0700);
+}
+
+Repl::~Repl() {
+    // Clean up temp directory
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir_, ec);
+}
+
+void Repl::print_banner() const {
+    std::cout << "Dux REPL -- type :help for commands, :q to quit\n";
+}
+
+bool Repl::is_decl(const std::string& line) const {
+    if (line.empty()) return false;
+
+    // Helper: does line start with keyword kw followed by space or '<'?
+    auto starts_with_kw = [&](const std::string& kw) -> bool {
+        if (line.size() <= kw.size()) return false;
+        if (line.substr(0, kw.size()) != kw) return false;
+        char next = line[kw.size()];
+        return next == ' ' || next == '<' || next == '\t';
+    };
+
+    // Pure declaration keywords
+    if (starts_with_kw("class"))     return true;
+    if (starts_with_kw("enum"))      return true;
+    if (starts_with_kw("interface")) return true;
+    if (starts_with_kw("import"))    return true;
+    if (starts_with_kw("namespace")) return true;
+    if (starts_with_kw("extern"))    return true;
+
+    // Function declarations: type IDENT '(' ... ')' '{' ...
+    // Heuristic: line contains both '(' and '{' and starts with a type keyword
+    bool has_paren = line.find('(') != std::string::npos;
+    bool has_brace = line.find('{') != std::string::npos;
+    if (has_paren && has_brace) {
+        if (starts_with_kw("void"))   return true;
+        if (starts_with_kw("int"))    return true;
+        if (starts_with_kw("str"))    return true;
+        if (starts_with_kw("bool"))   return true;
+        if (starts_with_kw("long"))   return true;
+        if (starts_with_kw("double")) return true;
+        if (starts_with_kw("float"))  return true;
+        if (starts_with_kw("auto"))   return true;
+        if (starts_with_kw("fn"))     return true;
+    }
+
+    return false;
+}
+
+std::string Repl::build_source(const std::string& stmt) const {
+    std::string src;
+    for (const auto& d : context_decls_) {
+        src += d;
+        src += "\n";
+    }
+    src += "void main() {\n    ";
+    src += stmt;
+    src += "\n}\n";
+    return src;
+}
+
+int Repl::compile_and_run(const std::string& source) {
+    static int seq = 0;
+    ++seq;
+
+    std::string src_path = temp_dir_ + "/repl_" + std::to_string(seq) + ".dux";
+    std::string bin_path = temp_dir_ + "/repl_" + std::to_string(seq);
+
+    // Write source file
+    {
+        std::ofstream f(src_path);
+        if (!f) {
+            std::cerr << "dux: repl: cannot write temp source\n";
+            return 1;
+        }
+        f << source;
+    }
+
+    // Compile: invoke ourselves with --compile, suppress compiler stderr unless error
+    std::string compile_cmd = dux_binary_ + " --compile " + src_path
+                              + " -o " + bin_path + " 2>&1";
+    FILE* pipe = popen(compile_cmd.c_str(), "r");
+    if (!pipe) {
+        std::cerr << "dux: repl: cannot run compiler\n";
+        return 1;
+    }
+    std::string compiler_out;
+    char buf[512];
+    while (fgets(buf, sizeof(buf), pipe))
+        compiler_out += buf;
+    int compile_rc = pclose(pipe);
+
+    if (compile_rc != 0) {
+        // Print compiler errors, stripping the temp path prefix for clarity
+        std::istringstream iss(compiler_out);
+        std::string err_line;
+        while (std::getline(iss, err_line)) {
+            // Replace temp path with "<input>" for cleaner output
+            auto pos = err_line.find(src_path);
+            if (pos != std::string::npos)
+                err_line.replace(pos, src_path.size(), "<input>");
+            std::cout << err_line << "\n";
+        }
+        return 1;
+    }
+
+    // Run the compiled binary
+    int run_rc = system(bin_path.c_str());
+    return WIFEXITED(run_rc) ? WEXITSTATUS(run_rc) : 1;
+}
+
+void Repl::run() {
+    print_banner();
+    std::string line;
+
+    while (true) {
+        std::cout << "dux> " << std::flush;
+        if (!std::getline(std::cin, line)) {
+            // EOF (Ctrl-D)
+            std::cout << "\n";
+            break;
+        }
+
+        // Strip trailing whitespace
+        while (!line.empty() && (line.back() == ' ' || line.back() == '\t' || line.back() == '\r'))
+            line.pop_back();
+
+        if (line.empty()) continue;
+
+        // ─── REPL commands ──────────────────────────────────────────────────
+        if (line == ":q" || line == ":quit" || line == "exit" || line == "quit") {
+            break;
+        }
+
+        if (line == ":help") {
+            std::cout <<
+                "Commands:\n"
+                "  :q / :quit   -- exit the REPL\n"
+                "  :clear       -- reset the accumulated declaration context\n"
+                "  :context     -- show accumulated declarations\n"
+                "  :help        -- show this message\n"
+                "\n"
+                "Tips:\n"
+                "  Define functions/classes first, then call them.\n"
+                "  Declarations (class, fn, void/int/str/... name(...) {...}) are\n"
+                "  accumulated and available to all subsequent statements.\n"
+                "  Statements are compiled and run immediately.\n";
+            continue;
+        }
+
+        if (line == ":clear") {
+            context_decls_.clear();
+            std::cout << "Context cleared.\n";
+            continue;
+        }
+
+        if (line == ":context") {
+            if (context_decls_.empty()) {
+                std::cout << "(empty)\n";
+            } else {
+                for (const auto& d : context_decls_)
+                    std::cout << d << "\n";
+            }
+            continue;
+        }
+
+        // ─── Classify and handle input ──────────────────────────────────────
+        if (is_decl(line)) {
+            // Add to context; verify by compiling with a dummy main
+            std::string test_src;
+            for (const auto& d : context_decls_) {
+                test_src += d;
+                test_src += "\n";
+            }
+            test_src += line;
+            test_src += "\nvoid main() {}\n";
+
+            // Write and compile the test source
+            static int verify_seq = 0;
+            ++verify_seq;
+            std::string vsrc = temp_dir_ + "/decl_" + std::to_string(verify_seq) + ".dux";
+            std::string vbin = temp_dir_ + "/decl_" + std::to_string(verify_seq);
+            {
+                std::ofstream f(vsrc);
+                f << test_src;
+            }
+            std::string vcmd = dux_binary_ + " --compile " + vsrc + " -o " + vbin + " 2>&1";
+            FILE* vpipe = popen(vcmd.c_str(), "r");
+            std::string vout;
+            char vbuf[512];
+            while (fgets(vbuf, sizeof(vbuf), vpipe))
+                vout += vbuf;
+            int vrc = pclose(vpipe);
+
+            if (vrc != 0) {
+                // Show errors, clean up temp path
+                std::istringstream iss(vout);
+                std::string err_line;
+                while (std::getline(iss, err_line)) {
+                    auto pos = err_line.find(vsrc);
+                    if (pos != std::string::npos)
+                        err_line.replace(pos, vsrc.size(), "<input>");
+                    std::cout << err_line << "\n";
+                }
+            } else {
+                context_decls_.push_back(line);
+                std::cout << "OK\n";
+            }
+        } else {
+            // Statement: wrap in main with context and run
+            std::string src = build_source(line);
+            compile_and_run(src);
+        }
+    }
+}
+
+} // namespace dux

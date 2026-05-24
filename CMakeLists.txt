@@ -192,6 +192,7 @@ add_executable(dux
     src/sema/sema.cpp
     src/sema/generics.cpp
     src/codegen/codegen.cpp
+    src/repl/repl.cpp
     ${FLEX_DuxLexer_OUTPUTS}
     ${BISON_DuxParser_OUTPUTS}
 )

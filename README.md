@@ -982,8 +982,9 @@ C++ gets from header-only implementation.
 | `--dump-ast` | Print the parsed AST |
 
 See [`docs/spec.md`](docs/spec.md) for the full language specification,
-[`docs/grammar.md`](docs/grammar.md) for the formal EBNF grammar, and
-[`docs/stdlib/`](docs/stdlib/) for the standard library API reference.
+[`docs/grammar.md`](docs/grammar.md) for the formal EBNF grammar,
+[`docs/stdlib/`](docs/stdlib/) for the standard library API reference, and
+[`docs/memory_model.md`](docs/memory_model.md) for the memory and ownership model.
 Contributors: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---

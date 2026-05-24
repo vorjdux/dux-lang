@@ -14,6 +14,7 @@
 #include "sema/generics.hpp"
 #include "sema/sema.hpp"
 #include "codegen/codegen.hpp"
+#include "repl/repl.hpp"
 
 #ifndef DUX_VERSION
 #define DUX_VERSION "0.1.0-dev"
@@ -47,6 +48,7 @@ struct Options {
     int          opt_level{0};      // -O0/-O1/-O2/-O3
     bool         trace_lex{false};
     bool         trace_parse{false};
+    bool         repl{false};
     bool         help{false};
     bool         version{false};
 };
@@ -61,6 +63,7 @@ void usage(std::string_view prog) {
         "  --emit-ir       Emit LLVM IR (to -o path or stdout)\n"
         "  --emit-obj      Emit native object file (requires -o path)\n"
         "  --compile       Compile to a runnable native executable\n"
+        "  --repl          Start an interactive REPL session\n"
         "  -o <path>       Output path\n"
         "  -O0/-O1/-O2/-O3 Optimisation level (default -O0)\n"
         "  -g              Emit DWARF debug information\n"
@@ -81,6 +84,7 @@ Options parse_args(std::span<char*> args) {
         else if (a == "--emit-ir")             { opts.emit_ir     = true; }
         else if (a == "--emit-obj")            { opts.emit_obj    = true; }
         else if (a == "--compile")             { opts.compile     = true; }
+        else if (a == "--repl")                { opts.repl        = true; }
         else if (a == "-g")                    { opts.debug_info  = true; }
         else if (a == "-O0")                   { opts.opt_level   = 0; }
         else if (a == "-O1")                   { opts.opt_level   = 1; }
@@ -198,6 +202,12 @@ int main(int argc, char** argv) {
     if (opts.help) {
         usage(argv[0]);
         return EXIT_FAILURE;
+    }
+
+    if (opts.repl) {
+        dux::Repl repl(argv[0]);
+        repl.run();
+        return EXIT_SUCCESS;
     }
 
     Driver driver;
