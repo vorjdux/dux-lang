@@ -78,22 +78,18 @@ bool_lit    ::= "true" | "false"
 string_lit  ::= '"' { str_char_dq } '"'
               | "'" { str_char_sq } "'"
 
-str_char_dq ::= any_char_except_dquote_and_newline
+f_string_lit ::= 'f"' { f_str_part } '"'
+f_str_part   ::= str_char_dq
+               | "\{" (* escaped brace — produces a literal { *)
+               | "{" expr "}"
+
+str_char_dq ::= any_char_except_dquote_newline_lbrace
               | "\n" | "\t" | "\r" | "\\" | '\"' | "\'" | "\{"
 
 str_char_sq ::= any_char_except_squote_and_newline
               | "\n" | "\t" | "\r" | "\\" | '\"' | "\'" | "\{"
 
 null_lit    ::= "null"
-
-f_string_lit ::= 'f"' { f_str_part } '"'
-               | "f'" { f_str_part } "'"
-
-f_str_part   ::= f_str_char
-               | "{" expr "}"
-
-f_str_char   ::= any_char_except_dquote_brace_and_newline
-               | "\n" | "\t" | "\r" | "\\" | '\"' | "\'" | "\{"
 ```
 
 An f-string (`f"..."`) allows embedded expressions in `{expr}` placeholders.
@@ -113,7 +109,7 @@ To include a literal `{` in the output, escape it as `\{`.
 | `3.14d` | `double` |
 | `3.14f` | `real` |
 | `"hello"` | `str` |
-| `f"Hello, {name}!"` | `str` (f-string) |
+| `f"Hello {name}"` | `str` (interpolated) |
 | `true` / `false` | `bool` |
 | `null` | (null pointer) |
 
@@ -1000,10 +996,18 @@ list_lit ::= "[" "]"
 expr_list ::= expr { "," expr }
 ```
 
+A list literal creates a new `list` with `refcount = 1`.  Elements may be of any
+type — primitives, strings, or class instances.  Primitive values are boxed into
+the `void*` element slot automatically; they are unboxed when the element is
+assigned to a typed variable.
+
 ```dux
 auto empty = []
-auto nums  = [1, 2, 3, 4, 5]
-auto mixed = ["a", "b", "c"]
+auto nums  = [1, 2, 3, 4, 5]    # int elements
+auto words = ["a", "b", "c"]    # str elements
+
+int first = nums[0]    # 1 — unboxed from void* to int
+nums[2] = 99           # 99 — boxed into void*
 ```
 
 ### 9.2 Dict literals
@@ -1014,10 +1018,17 @@ dict_pairs ::= [ dict_pair { "," dict_pair } [ "," ] ]
 dict_pair  ::= expr ":" expr
 ```
 
+Dict keys must be of type `str` (the runtime stores them as `char*`).  Dict values
+may be of any type; the same box/unbox rules as lists apply.
+
 ```dux
 auto empty = {}
-auto ages  = {"alice": 30, "bob": 25}
-auto table = {1: "one", 2: "two"}
+auto ages  = {"alice": 30, "bob": 25}    # str keys, int values
+auto names = {"x": "foo", "y": "bar"}    # str keys, str values
+
+int age = ages["alice"]      # 30 — unboxed from void*
+ages["carol"] = 40           # stored as boxed void*
+println(len(ages))           # 3
 ```
 
 ---
@@ -1183,6 +1194,10 @@ var_decl_stmt   ::= [ "static" | "thread_local" ] [ "const" ] type_expr var_decl
                   | "auto" ident "=" expr ";"
 var_decl_items  ::= ident [ "=" expr ] { "," ident [ "=" expr ] }
 
+(* String literals *)
+string_lit      ::= '"' { str_char } '"'
+f_string_lit    ::= 'f"' { str_char | "{" expr "}" } '"'
+
 (* Expressions *)
 expr            ::= postfix_expr assign_op assign_expr | or_expr
 assign_op       ::= "=" | "+=" | "-=" | "*=" | "/=" | "%="
@@ -1196,12 +1211,13 @@ unary_expr      ::= ( "!" | "~" | "-" | "+" | "++" | "--" | "not" | "await" ) un
                   | postfix_expr
 postfix_expr    ::= postfix_expr ( "." ident | "[" expr "]" | "(" arg_list ")" | "++" | "--" )
                   | primary_expr
-primary_expr    ::= integer_lit | float_lit | real_lit | long_lit | string_lit | f_string_lit
+primary_expr    ::= integer_lit | float_lit | real_lit | long_lit | string_lit
                   | bool_lit | "null" | ident | "str" | "this" | "super"
                   | "(" expr ")"
                   | "new" type_expr "(" arg_list ")"
                   | "[" [ expr { "," expr } ] "]"
                   | "{" [ expr ":" expr { "," expr ":" expr } [ "," ] ] "}"
+                  | f_string_lit
                   | "fn" "(" param_list ")" ( "=>" expr | block | "->" type_expr ( block | "=>" expr ) )
 arg_list        ::= [ expr { "," expr } ]
 ```
