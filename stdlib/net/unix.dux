@@ -1,0 +1,163 @@
+import net.socket
+
+namespace unix {
+    extern "C" ptr  duxrt_sock_new(int af, int sock_type, int proto) ;
+    extern "C" void duxrt_sock_close(ptr s) ;
+    extern "C" int  duxrt_sock_bind_unix(ptr s, str path) ;
+    extern "C" int  duxrt_sock_connect_unix(ptr s, str path) ;
+    extern "C" int  duxrt_sock_listen(ptr s, int backlog) ;
+    extern "C" ptr  duxrt_sock_accept(ptr s) ;
+    extern "C" long duxrt_sock_send_str(ptr s, str data, int flags) ;
+    extern "C" str  duxrt_sock_recv_str(ptr s, long max_bytes, int flags) ;
+    extern "C" void duxrt_unix_unlink(str path) ;
+    extern "C" long duxrt_sock_send_to_unix(ptr s, str dest, str data, int flags) ;
+
+    # ── Stream connection ──────────────────────────────────────────────────────
+    class UnixStream {
+        ptr _sock
+
+        UnixStream(ptr sock_handle) {
+            this._sock = sock_handle
+        }
+
+        ~UnixStream() {
+            if this._sock != null {
+                unsafe {
+                    duxrt_sock_close(this._sock)
+                }
+            }
+        }
+
+        # Send data. Returns bytes sent, or -1 on error.
+        long send(str data) {
+            long n = 0
+            unsafe {
+                n = duxrt_sock_send_str(this._sock, data, 0)
+            }
+            return n
+        }
+
+        # Receive up to max_bytes bytes.
+        str recv(long max_bytes) {
+            str r = ""
+            unsafe {
+                r = duxrt_sock_recv_str(this._sock, max_bytes, 0)
+            }
+            return r
+        }
+
+        bool is_open() {
+            return this._sock != null
+        }
+    }
+
+    # Connect to a Unix stream socket at path. Returns a UnixStream.
+    UnixStream connect(str path) {
+        ptr s = null
+        unsafe {
+            s = duxrt_sock_new(1, 1, 0)
+            duxrt_sock_connect_unix(s, path)
+        }
+        return new UnixStream(s)
+    }
+
+    # ── Stream server ──────────────────────────────────────────────────────────
+    class UnixListener {
+        ptr _sock
+        str _path
+
+        UnixListener(str path, int backlog) {
+            ptr s = null
+            unsafe {
+                s = duxrt_sock_new(1, 1, 0)
+                duxrt_sock_bind_unix(s, path)
+                duxrt_sock_listen(s, backlog)
+            }
+            this._sock = s
+            this._path = path
+        }
+
+        ~UnixListener() {
+            if this._sock != null {
+                unsafe {
+                    duxrt_sock_close(this._sock)
+                }
+            }
+            unsafe {
+                duxrt_unix_unlink(this._path)
+            }
+        }
+
+        # Accept the next incoming connection; returns a UnixStream.
+        UnixStream accept() {
+            ptr client = null
+            unsafe {
+                client = duxrt_sock_accept(this._sock)
+            }
+            return new UnixStream(client)
+        }
+
+        bool is_open() {
+            return this._sock != null
+        }
+    }
+
+    # Start listening on a Unix stream socket path. Returns a UnixListener.
+    UnixListener listen(str path, int backlog) {
+        return new UnixListener(path, backlog)
+    }
+
+    # ── Datagram socket ────────────────────────────────────────────────────────
+    class UnixDgram {
+        ptr _sock
+        str _path
+
+        UnixDgram(str path) {
+            ptr s = null
+            unsafe {
+                s = duxrt_sock_new(1, 2, 0)
+                duxrt_sock_bind_unix(s, path)
+            }
+            this._sock = s
+            this._path = path
+        }
+
+        ~UnixDgram() {
+            if this._sock != null {
+                unsafe {
+                    duxrt_sock_close(this._sock)
+                }
+            }
+            unsafe {
+                duxrt_unix_unlink(this._path)
+            }
+        }
+
+        # Send a datagram to dest_path. Returns bytes sent, or -1 on error.
+        long send_to(str dest_path, str data) {
+            long n = 0
+            unsafe {
+                n = duxrt_sock_send_to_unix(this._sock, dest_path, data, 0)
+            }
+            return n
+        }
+
+        # Receive a datagram (up to max_bytes). Returns the received data.
+        str recv(long max_bytes) {
+            str r = ""
+            unsafe {
+                r = duxrt_sock_recv_str(this._sock, max_bytes, 0)
+            }
+            return r
+        }
+
+        bool is_open() {
+            return this._sock != null
+        }
+    }
+
+    # Bind a Unix datagram socket at path. Returns a UnixDgram.
+    UnixDgram bind_dgram(str path) {
+        return new UnixDgram(path)
+    }
+}

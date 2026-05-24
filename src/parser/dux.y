@@ -83,7 +83,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_SWITCH KW_CASE KW_DEFAULT
 %token KW_MATCH
 %token KW_TRY KW_CATCH KW_IN
-%token KW_CONST KW_STATIC
+%token KW_CONST KW_STATIC KW_THREAD_LOCAL
 %token KW_GET KW_SET
 %token KW_ASSERT KW_DEFER KW_THROW
 %token KW_FN "fn"
