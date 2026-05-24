@@ -521,6 +521,9 @@ void*   duxrt_achan_try_recv(void* ch);              /* NULL if empty         */
 void    duxrt_achan_send(void* ch, void* val);       /* blocks until space    */
 void*   duxrt_achan_recv(void* ch);                  /* blocks; NULL=closed+empty */
 
+/* ── Thread-local storage (TLS) ──────────────────────────────────────────── */
+void duxrt_tls_register_dtor(void* key, void (*dtor)(void*));
+
 /* ── Exceptions ──────────────────────────────────────────────────────────── */
 typedef struct DuxException {
     const char* type_name;

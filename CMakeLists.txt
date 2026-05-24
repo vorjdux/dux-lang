@@ -63,6 +63,7 @@ add_library(duxrt STATIC
     src/runtime/sys_rt.c
     src/runtime/random_rt.c
     src/runtime/thread_rt.c
+    src/runtime/tls_rt.c
     src/runtime/process_rt.c
     src/runtime/signal_rt.c
     src/runtime/bytes_rt.c
@@ -126,6 +127,7 @@ if(LLVM_CLANG_EXE AND LLVM_LINK_EXE)
         src/runtime/dict.c
         src/runtime/range.c
         src/runtime/math_rt.c
+        src/runtime/tls_rt.c
         src/runtime/ws_rt.c
     )
 
