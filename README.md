@@ -91,7 +91,7 @@ cmake --build build && ctest --test-dir build --output-on-failure
 ```dux
 import math
 
-int main() {
+void main() {
     auto name  = "Dux"        # str
     auto count = 0            # int
     auto ratio = 1.5          # double
@@ -111,8 +111,6 @@ int main() {
 
     # Stdlib
     println(math.sqrt(2.0))  # 1.41421...
-
-    return 0
 }
 ```
 
@@ -123,6 +121,13 @@ More examples in [`examples/`](examples/), including the full language showcase 
 
 ## Language features
 
+> **Automatic semicolon insertion:** Dux uses a Go-style rule — the lexer inserts
+> a semicolon at a newline whenever the preceding token can end a statement
+> (identifier, literal, `)`, `]`, `}`, `true`, `false`, etc.).  This means
+> a closing `}` should generally be on its own line, and when you need a
+> one-liner block body you must add an explicit `;` before the `}`.
+> All examples in this document follow these rules.
+
 ### Types
 
 | Type | Description |
@@ -131,19 +136,31 @@ More examples in [`examples/`](examples/), including the full language showcase 
 | `long` | 64-bit signed integer |
 | `double` | 64-bit float |
 | `real` | 32-bit float |
-| `bool` | boolean |
+| `bool` | boolean (`true` / `false`) |
 | `str` | reference-counted string (hybrid inline/heap allocation) |
 | `list` | dynamic array |
 | `dict` | hash map |
 | `ptr` | raw pointer (for C FFI / unsafe code) |
+| `object` | base type for heap-allocated class instances |
+| `void` | no value (function return) |
+| `auto` | compiler-inferred type |
 
 ### Type inference and literal suffixes
 
 ```dux
+# Explicit types
+int    age  = 42
+long   big  = 9000000000l
+double pi   = 3.14159
+real   temp = 98.6f
+str    name = "Dux"
+bool   ok   = true
+
+# Inferred with auto
 auto age  = 42           # int
-auto bigl = 9000000000l  # long  (l suffix)
+auto big  = 9000000000l  # long  (l suffix)
 auto pi   = 3.14159      # double
-auto temp = 98.6f        # real  (f suffix, 32-bit float)
+auto temp = 98.6f        # real  (f suffix)
 auto name = "Dux"        # str
 auto ok   = true         # bool
 ```
@@ -154,7 +171,325 @@ auto ok   = true         # bool
 | `l` | `long` | `42l` |
 | *(none)* | `double` | `3.14` |
 | `f` | `real` | `3.14f` |
-| `d` | `double` (from int literal) | `42d` |
+| `d` | `double` (from integer literal) | `42d` |
+
+### Comments and doc-strings
+
+```dux
+# Single-line comment
+
+/*
+   Multi-line
+   comment
+*/
+
+"""
+  Triple-quoted doc-string.
+  Typically used at the top of a file or function.
+"""
+```
+
+### Variables and constants
+
+```dux
+int  x = 10
+str  s = "hello"
+bool flag = false
+
+# Constant — value fixed at compile time, no mutation allowed
+const int MAX = 100
+
+# Static local — retains value between calls
+int counter() {
+    static int n = 0
+    n += 1
+    return n
+}
+```
+
+### Operators
+
+```dux
+# Arithmetic
+int a = 10 + 3   # 13
+int b = 10 - 3   # 7
+int c = 10 * 3   # 30
+int d = 10 / 3   # 3  (integer division)
+int e = 10 % 3   # 1
+
+# Compound assignment
+a += 5
+a -= 2
+a *= 3
+a /= 2
+a %= 4
+
+# Increment / decrement (statement form)
+a++
+a--
+
+# Comparison
+bool lt = a < b
+bool gt = a > b
+bool eq = a == b
+bool ne = a != b
+bool le = a <= b
+bool ge = a >= b
+
+# Logical
+bool t = true && false   # and
+bool u = true || false   # or
+bool v = !true           # not
+bool w = true and false  # keyword form
+bool z = true or false   # keyword form
+```
+
+### Control flow
+
+#### if / else if / else
+
+```dux
+int x = 5
+if x > 10 {
+    println("big")
+} else if x > 3 {
+    println("medium")
+} else {
+    println("small")
+}
+```
+
+#### while
+
+```dux
+int i = 0
+while i < 5 {
+    println(i)
+    i += 1
+}
+```
+
+#### do-while
+
+```dux
+int x = 0
+do {
+    x++
+} while x < 3
+println(x)   # 3
+```
+
+#### for — range forms
+
+```dux
+# Inclusive range  (1, 2, 3, 4, 5)
+for int i in 1..=5 {
+    println(i)
+}
+
+# Exclusive range  (0, 1, 2)
+for int i in 0..<3 {
+    println(i)
+}
+
+# range(n) — equivalent to 0..<n
+for int i in range(3) {
+    println(i)
+}
+```
+
+#### for — C-style
+
+```dux
+# for init, cond, step
+for int i = 0, i < 5, i++ {
+    println(i)
+}
+```
+
+#### switch
+
+```dux
+int x = 3
+switch x {
+    case 1:
+        println("one")
+        break
+    case 2:
+        println("two")
+        break
+    case 3:
+        println("three")
+        break
+    default:
+        println("other")
+}
+```
+
+#### match
+
+Pattern matching is exhaustive. Use `_` as the wildcard arm.
+Each arm body must use a block `{ }` with the statement on its own line
+(Dux's automatic semicolon insertion requires a line break before the closing `}`).
+
+```dux
+# Match on integer
+int n = 2
+match n {
+    1 => {
+        println("one")
+    }
+    2 => {
+        println("two")
+    }
+    _ => {
+        println("other")
+    }
+}
+
+# Match on string
+str word = "apple"
+match word {
+    "apple" => {
+        println("fruit")
+    }
+    "carrot" => {
+        println("vegetable")
+    }
+    _ => {
+        println("unknown")
+    }
+}
+
+# Match on bool
+bool flag = true
+match flag {
+    true => {
+        println("yes")
+    }
+    false => {
+        println("no")
+    }
+}
+
+# Match on enum variant
+enum Dir {
+    North,
+    South,
+    East,
+    West,
+}
+
+Dir d = Dir.East
+match d {
+    Dir.North => {
+        println("N")
+    }
+    Dir.South => {
+        println("S")
+    }
+    Dir.East => {
+        println("E")
+    }
+    _ => {
+        println("W")
+    }
+}
+```
+
+#### Labeled break
+
+Break out of an outer loop by name:
+
+```dux
+&outer while true {
+    int k = 0
+    while k < 5 {
+        if k == 2 {
+            break &outer
+        }
+        k++
+    }
+}
+println("after break")
+```
+
+#### break and continue
+
+```dux
+for int i in range(10) {
+    if i == 3 { continue }
+    if i == 7 { break }
+    println(i)
+}
+```
+
+### Functions
+
+```dux
+# Regular function
+int add(int a, int b) {
+    return a + b
+}
+
+# Void function
+void greet(str name) {
+    println("Hello, " + name + "!")
+}
+
+# Generic function — monomorphised per call site
+int identity<T>(T x) {
+    return x
+}
+
+void main() {
+    println(add(3, 4))        # 7
+    greet("Dux")              # Hello, Dux!
+    println(identity<int>(42)) # 42
+}
+```
+
+### Closures and lambdas
+
+```dux
+# Arrow style — return type inside
+auto sq = fn(int n) -> int => n * n
+
+# Block body — multi-statement
+auto greet = fn(str name) -> void {
+    println("hello, " + name)
+}
+
+# Closure — captures variables from the enclosing scope by value
+int base = 10
+auto addBase = fn(int x) -> int => x + base
+println(addBase(5))   # 15
+
+# Higher-order function — fn type as parameter
+int apply(fn(int) -> int f, int x) {
+    return f(x)
+}
+println(apply(sq, 6))   # 36
+```
+
+### Enums
+
+```dux
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+void main() {
+    int r = Color.Red     # 0
+    int g = Color.Green   # 1
+    int b = Color.Blue    # 2
+    println(r)
+    println(g)
+    println(b)
+}
+```
 
 ### Classes, inheritance and interfaces
 
@@ -171,9 +506,9 @@ class Animal {
     }
 }
 
+# Single inheritance — class Child(Parent)
 class Dog(Animal) {
-    Dog(str n) {
-        Animal(n)
+    Dog(str n) : Animal(n) {
     }
 
     str speak() {
@@ -181,61 +516,126 @@ class Dog(Animal) {
     }
 }
 
-int main() {
+void main() {
     Dog d = new Dog("Rex")
     println(d.speak())   # Woof!
-    return 0
+    println(d.name)      # Rex
 }
 ```
 
 Destructors (`~ClassName()`) are called automatically at scope exit (RAII).
 Empty destructors are elided at compile time — no overhead for trivial types.
 
+```dux
+class Handle {
+    Handle()  { println("open");  }
+    ~Handle() { println("close"); }
+}
+
+void main() {
+    Handle h = new Handle()
+    println("using")
+    # prints: open / using / close
+}
+```
+
+#### Access modifiers
+
+```dux
+class Point {
+    public:
+    int x
+    int y
+
+    private:
+    int _cache
+
+    public:
+    Point(int x, int y) {
+        this.x = x
+        this.y = y
+        this._cache = 0
+    }
+}
+```
+
+#### Static fields and methods
+
+Static members belong to the class, not instances. Static local variables inside
+functions retain their value between calls.
+
+```dux
+class Counter {
+    static int count = 0
+
+    static void increment() {
+        Counter.count += 1
+    }
+
+    static int value() {
+        return Counter.count
+    }
+}
+
+void main() {
+    Counter.increment()
+    Counter.increment()
+    Counter.increment()
+    println(Counter.value())   # 3
+}
+
+# Static local variable in a function
+int next_id() {
+    static int id = 0
+    id += 1
+    return id
+}
+```
+
+#### Property getters and setters
+
+Methods declared with `-> get` / `-> set` become property accessors:
+
+```dux
+class Circle {
+    double _radius
+
+    Circle(double r) { this._radius = r; }
+
+    double radius -> get { return this._radius; }
+    void   radius -> set { this._radius = value; }
+
+    double area -> get {
+        return 3.14159 * this._radius * this._radius
+    }
+}
+```
+
 ### Generics
 
-Parametric classes via monomorphisation — each instantiation is a separate native type:
+Parametric classes and functions via monomorphisation — each instantiation is a
+separate native type with zero virtual-dispatch overhead:
 
 ```dux
 class Box<T> {
     T value
-    Box(T v) { this.value = v }
-    T unwrap() { return this.value }
+    Box(T v) { this.value = v; }
+    T unwrap() { return this.value; }
 }
 
 class Pair<A, B> {
     A first
     B second
-    Pair(A a, B b) { this.first = a; this.second = b }
+    Pair(A a, B b) { this.first = a; this.second = b; }
 }
 
-int main() {
-    Box<int>     bi = new Box<int>(42)
-    Box<str>     bs = new Box<str>("hello")
-    Pair<int,str> p = new Pair<int,str>(7, "seven")
+void main() {
+    Box<int>      bi = new Box<int>(42)
+    Box<str>      bs = new Box<str>("hello")
+    Pair<int,str> p  = new Pair<int,str>(7, "seven")
     println(bi.unwrap())   # 42
     println(bs.unwrap())   # hello
     println(p.first)       # 7
-    return 0
-}
-```
-
-### Closures and lambdas
-
-```dux
-# Style A — return type inside the lambda
-auto sq = fn(int n) -> int => n * n
-
-# Style B — return type as variable prefix
-int cube = fn(int n) => n * n * n
-
-# Block body (multi-line)
-auto greet = fn(str name) -> void {
-    println("hello, " + name)
-}
-
-# Higher-order function
-int apply(fn(int) -> int f, int x) {
-    return f(x)
 }
 ```
 
@@ -243,80 +643,113 @@ int apply(fn(int) -> int f, int x) {
 
 ```dux
 class Vec2 {
-    double x
-    double y
-    Vec2(double x, double y) { this.x = x; this.y = y }
+    int x
+    int y
+
+    Vec2(int x, int y) { this.x = x; this.y = y; }
 
     Vec2 operator__add(Vec2 other) {
         return new Vec2(this.x + other.x, this.y + other.y)
     }
 
     bool operator__eq(Vec2 other) {
-        return this.x == other.x and this.y == other.y
+        return this.x == other.x && this.y == other.y
+    }
+
+    bool operator__lt(Vec2 other) {
+        return this.x < other.x
+    }
+
+    int operator__index(int i) {
+        if i == 0 { return this.x; }
+        return this.y
     }
 }
 
-int main() {
-    Vec2 a = new Vec2(1.0, 2.0)
-    Vec2 b = new Vec2(3.0, 4.0)
-    Vec2 c = a + b   # calls operator__add
-    println(c.x)     # 4.0
-    return 0
+void main() {
+    Vec2 a = new Vec2(1, 2)
+    Vec2 b = new Vec2(3, 4)
+    Vec2 c = a + b        # operator__add  → Vec2(4, 6)
+    println(c.x)          # 4
+    if a < b { println("lt"); }   # operator__lt
+    println(a[0])         # operator__index → 1
 }
 ```
 
-Supported operators: `+` `−` `*` `/` `==` `!=` `<` `>` `<=` `>=` `[]`
+Supported operators: `+` `−` `*` `/` `%` `==` `!=` `<` `>` `<=` `>=` `[]`
 
 ### Exception handling
 
+Any class instance can be thrown. Use `catch ...` to catch everything, or
+`catch (TypeName varName)` to bind the caught object to a variable:
+
 ```dux
-class ValueError(Exception) {
-    ValueError(str msg) { Exception(msg) }
+class AppError {
+    str message
+    AppError(str msg) {
+        this.message = msg
+    }
 }
 
 int parse(str s) {
     if s == "" {
-        throw new ValueError("empty input")
+        throw new AppError("empty input")
     }
     return 42
 }
 
-int main() {
+void main() {
+    # Catch-all — matches any thrown value
     try {
         int v = parse("")
-    } catch (ValueError e) {
+    } catch ... {
+        println("caught an error")
+    }
+
+    # Bind caught object to a variable
+    try {
+        throw new AppError("oops")
+    } catch (AppError e) {
         println("caught: " + e.message)
     }
-    return 0
 }
 ```
 
 ### Defer and RAII
 
 ```dux
-int main() {
-    defer { println("cleanup 2") }
-    defer { println("cleanup 1") }  # runs first (LIFO)
+void main() {
+    defer { println("cleanup 2"); }
+    defer { println("cleanup 1"); }  # runs first (LIFO)
     println("work")
-    return 0
     # prints: work / cleanup 1 / cleanup 2
 }
 ```
 
-Class destructors are called automatically at scope exit:
+Class destructors fire automatically when the object goes out of scope:
 
 ```dux
-class Handle {
-    Handle()  { println("open")  }
-    ~Handle() { println("close") }  # called when handle goes out of scope
+class Logger {
+    str tag
+    Logger(str t)  { println("open:"  + t); this.tag = t; }
+    ~Logger()      { println("close:" + this.tag); }
 }
 
-int main() {
-    Handle h = new Handle()
-    println("using")
-    return 0
-    # prints: open / using / close
+void example() {
+    Logger a = new Logger("A")
+    defer { println("deferred"); }
+    Logger b = new Logger("B")
+    println("body")
+    # prints: open:A / open:B / body / close:B / deferred / close:A
+    # (LIFO cleanup stack: b's dtor, then defer, then a's dtor)
 }
+```
+
+### Assertions
+
+```dux
+assert(2 + 2 == 4)        # passes
+assert(x > 0)             # aborts with message if x ≤ 0
 ```
 
 ### Namespaces and imports
@@ -326,12 +759,20 @@ int main() {
 import math
 println(math.sqrt(2.0))
 
-# Import specific symbols from a file
+# Import specific symbols — available without prefix
 import { factorial, fibonacci } from "./algorithms"
 
-# Full file import — all exported names available with module prefix
+# Full file import — names available under module prefix
 import "./utils"
 utils.helper()
+
+# Standard library modules
+import str
+import thread
+import thread.chan
+import thread.pool
+import sys.sys
+import sys.env
 
 # Package-style namespace declaration
 namespace com.example.mylib
@@ -339,25 +780,155 @@ namespace com.example.mylib
 
 ### Unsafe blocks and C FFI
 
-Call any C function directly with `extern "C"` and access low-level operations inside
-`unsafe` blocks:
+Call any C function directly with `extern "C"` and perform low-level operations
+inside `unsafe` blocks:
 
 ```dux
 extern "C" ptr malloc(long size)
 extern "C" void free(ptr p)
+extern "C" double duxrt_math_sqrt(double x)
 
-int main() {
-    ptr buf = null
+double fast_sqrt(double x) {
+    double result
     unsafe {
-        buf = malloc(1024l)
+        result = duxrt_math_sqrt(x)
     }
+    return result
+}
+
+void main() {
+    ptr buf = null
+    unsafe { buf = malloc(1024l) }
     # ... use buf ...
     unsafe { free(buf) }
-    return 0
+    println(fast_sqrt(9.0))   # 3.0
 }
 ```
 
-### StringBuilder
+### Standard library
+
+#### `math`
+
+```dux
+import math
+
+println(math.sqrt(2.0))        # 1.41421...
+println(math.pow(2.0, 10.0))   # 1024.0
+println(math.floor(3.7))       # 3.0
+println(math.ceil(3.2))        # 4.0
+println(math.abs(-5.0))        # 5.0
+println(math.log(2.718281))    # ~1.0
+println(math.log2(8.0))        # 3.0
+println(math.sin(0.0))         # 0.0
+println(math.cos(0.0))         # 1.0
+println(math.min(2.0, 3.0))    # 2.0
+println(math.max(2.0, 3.0))    # 3.0
+# Integer variants
+println(math.abs_i(-7l))       # 7
+println(math.min_i(3l, 5l))    # 3
+println(math.max_i(3l, 5l))    # 5
+```
+
+#### `str`
+
+```dux
+import str
+
+str a = "hello"
+str b = "world"
+
+println(str.length(a))               # 5
+println(str.concat(a, b))            # helloworld
+println(str.slice(a, 1l, 4l))        # ell
+println(str.index(a, 0l))            # h
+println(str.eq(a, b))                # false
+println(str.from_int(42l))           # 42
+println(str.from_double(3.14))       # 3.14
+println(str.to_upper(a))             # HELLO
+println(str.to_lower("WORLD"))       # world
+println(str.trim("  hi  "))          # hi
+println(str.contains(a, "ell"))      # true
+println(str.starts_with(a, "hel"))   # true
+println(str.ends_with(a, "llo"))     # true
+println(str.find(a, "ll"))           # 2
+println(str.replace(a, "l", "r"))    # herlo
+println(str.replace_all(a, "l", "r")) # herro
+println(str.repeat(a, 2l))           # hellohello
+println(str.ord("A"))                # 65
+println(str.chr(65l))                # A
+```
+
+#### `io`
+
+```dux
+import io
+
+io.println("hello")    # with newline
+io.print("hello")      # no newline
+str line = io.readline()
+```
+
+The built-in `println` and `print` functions are always available without import.
+
+#### `thread`
+
+```dux
+import thread
+
+Mutex m = new Mutex()
+m.lock()
+m.unlock()
+bool ok = m.try_lock()
+if ok { m.unlock() }
+
+RWLock rw = new RWLock()
+rw.read_lock()
+rw.unlock()
+rw.write_lock()
+rw.unlock()
+
+CondVar cv = new CondVar()
+cv.signal()
+cv.broadcast()
+
+Once o = new Once()   # run-once guard
+
+long tid = thread.id()
+thread.sleep_ms(100l)
+```
+
+#### `thread.chan` and `thread.pool`
+
+```dux
+import thread.chan
+
+Chan ch = new Chan(0)
+long n = ch.pending()
+bool closed = ch.is_closed()
+int val = ch.try_recv()
+ch.close()
+```
+
+```dux
+import thread.pool
+
+ThreadPool p = new ThreadPool(4)
+long workers = p.size()
+p.wait()
+```
+
+#### `sys.sys` and `sys.env`
+
+```dux
+import sys.sys
+import sys.env
+
+long pid  = sys.pid()
+long ppid = sys.ppid()
+str  host = sys.hostname()
+```
+
+#### `string_builder`
 
 Efficient mutable string accumulation backed by a pre-allocated contiguous buffer —
 O(1) amortised append, single allocation at build time:
@@ -365,25 +936,13 @@ O(1) amortised append, single allocation at build time:
 ```dux
 import string_builder
 
-int main() {
-    StringBuilder sb = new StringBuilder()
-    sb.append("hello")
-    sb.append(", ")
-    sb.append("world")
-    str result = sb.build()
-    println(result)   # hello, world
-    return 0
-}
+StringBuilder sb = new StringBuilder()
+sb.append("hello")
+sb.append(", ")
+sb.append("world")
+str result = sb.build()
+println(result)   # hello, world
 ```
-
-### Standard library
-
-| Module | Contents |
-|--------|----------|
-| `math` | `sqrt`, `pow`, `floor`, `ceil`, `abs`, `min`, `max`, `log`, `log2`, `sin`, `cos` |
-| `str` | `len`, `slice`, `index`, `eq`, `from_int`, `from_double` |
-| `io` | `println`, `print`, `readline` |
-| `string_builder` | `StringBuilder` class — efficient string accumulation |
 
 ---
 
@@ -410,26 +969,6 @@ C++ gets from header-only implementation.
 
 ---
 
-## Variables and type inference
-
-Dux is statically typed. Every variable has a fixed type determined at compile time.
-You can either annotate the type explicitly or let the compiler infer it with `auto`:
-
-```dux
-# Explicit type
-int    age  = 42
-long   big  = 9000000000l
-double pi   = 3.14159
-real   temp = 98.6f
-str    name = "Dux"
-bool   ok   = true
-
-# Inferred with auto
-auto age  = 42
-auto pi   = 3.14159
-auto name = "Dux"
-```
-
 ## Compiler flags
 
 | Flag | Effect |
@@ -444,6 +983,64 @@ auto name = "Dux"
 
 See [`docs/spec.md`](docs/spec.md) for the full language specification and
 [`docs/stdlib/`](docs/stdlib/) for the standard library API reference.
+
+---
+
+## Self-hosted bootstrap (proof of concept)
+
+The [`bootstrap/`](bootstrap/) directory contains two Dux programs written in Dux
+itself. They exist to demonstrate that the language is expressive enough for
+non-trivial software — **not** as an alternative compiler pipeline or a step
+toward replacing the C++ implementation.
+
+```
+bootstrap/
+  dux_stage2.dux   — a Dux-written lexer + parser + pretty-printer (~2 400 lines)
+  dux_stage3.dux   — a round-trip test suite that validates stage2 output
+```
+
+**What they do:**
+
+`dux_stage2` reads a `.dux` source file and pretty-prints it as a normalised
+AST dump.  It is a *parser/pretty-printer*, not a compiler — it produces
+human-readable Dux source, not machine code.
+
+`dux_stage3` tests the round-trip: it writes small Dux snippets to `/tmp`,
+runs `dux_stage2 --dump-ast` on each, feeds the dump back to the main compiler,
+executes the resulting binary, and compares stdout to the expected output.
+
+**What they are not:**
+
+- They are **not** a self-hosting compiler.  The authoritative, production
+  compiler is `src/` (C++, Bison/Flex, LLVM).  Stage2 has no codegen, no
+  semantic analysis, and no optimiser.
+- They are **not** part of the build.  Building the project always uses the C++
+  compiler.  Stage2 and stage3 are pre-compiled into `bootstrap/dux_stage2` and
+  `bootstrap/dux_stage3` by running the main compiler manually.
+
+**Running the round-trip suite:**
+
+```bash
+# Assumes the main compiler is already built
+./bootstrap/dux_stage3
+# dux stage3 — round-trip test suite
+# =====================================
+# [PASS] hello_world
+# [PASS] string_match
+# ...
+# Results: 13 passed, 0 failed
+# OVERALL: PASS
+```
+
+**Why it matters:**
+
+Writing a ~2 400-line program in Dux — one that uses classes, generics, closures,
+match statements, string operations, process I/O, and a full hand-written lexer —
+and having that program compile and produce correct output is the strongest
+evidence that the language is consistent and usable.  It is a real dogfood test,
+not a toy demo.
+
+---
 
 ## License
 
