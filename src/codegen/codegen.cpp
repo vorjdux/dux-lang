@@ -1854,7 +1854,7 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
     llvm::Function* end_catch_fn = get_or_declare_rt(
         "__cxa_end_catch", llvm::Type::getVoidTy(*ctx_), {});
     cleanup_scopes_.back().push_back(
-        {nullptr, "", nullptr, end_catch_fn});
+        {nullptr, "", {}, nullptr, end_catch_fn});
     gen_stmt(*s.catch_body);
     env_pop();  // env_pop fires emit_scope_cleanup which calls __cxa_end_catch
     if (!builder_->GetInsertBlock()->getTerminator())
@@ -1873,6 +1873,10 @@ void Codegen::gen_return(const ast::ReturnStmt& s) {
             val = coerce(val, val_tid, current_ret_type_);
             if (current_ret_type_ == TR::TID_STR)
                 val = maybe_retain_str(val);
+            else if (current_ret_type_ == TR::TID_LIST)
+                val = maybe_retain_list(val);
+            else if (current_ret_type_ == TR::TID_DICT)
+                val = maybe_retain_dict(val);
         }
         // Box result as void* for the future
         Value* boxed;
@@ -1904,11 +1908,15 @@ void Codegen::gen_return(const ast::ReturnStmt& s) {
         TypeId val_tid = type_id_of(**s.value);
         val = coerce(val, val_tid, current_ret_type_);
         // Retain the return value before releasing scopes so the caller gets
-        // a valid owned reference even when returning a local str variable.
+        // a valid owned reference even when returning a local refcounted variable.
         if (current_ret_type_ == TR::TID_STR)
             val = maybe_retain_str(val);
+        else if (current_ret_type_ == TR::TID_LIST)
+            val = maybe_retain_list(val);
+        else if (current_ret_type_ == TR::TID_DICT)
+            val = maybe_retain_dict(val);
     }
-    // Destroy class instances, run defers, and release str variables across all active scopes.
+    // Destroy class instances, run defers, and release refcounted variables across all active scopes.
     emit_all_scope_cleanups();
     emit_all_str_releases();
     if (val)
@@ -2029,6 +2037,10 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
             if (init_val) {
                 if (var_tid == TR::TID_STR)
                     init_val = maybe_retain_str(init_val);
+                else if (var_tid == TR::TID_LIST)
+                    init_val = maybe_retain_list(init_val);
+                else if (var_tid == TR::TID_DICT)
+                    init_val = maybe_retain_dict(init_val);
                 if (init_val->getType() != t)
                     init_val = coerce(init_val, decl_tid, var_tid);
                 builder_->CreateStore(init_val, alloca);
@@ -2046,7 +2058,7 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
                     fn_var_types_[name] = te;
                     // Register closure env for free() on scope exit
                     if (!cleanup_scopes_.empty())
-                        cleanup_scopes_.back().push_back({alloca, "__closure", nullptr});
+                        cleanup_scopes_.back().push_back({alloca, "__closure", {}, nullptr, nullptr});
                 }
             }
             // Track variable→class for member access resolution
@@ -2081,8 +2093,34 @@ void Codegen::gen_delete(const ast::DeleteStmt& s) {
     TypeId tid = type_id_of(*s.expr);
     if (tid == TR::TID_STR) {
         // Strings are refcounted — must release, not raw free.
-        Value* ptr = gen_expr(*s.expr);
-        emit_str_release(ptr);
+        // Also null the slot so that RAII scope cleanup is a no-op.
+        Value* slot = lvalue_of(*s.expr);
+        if (slot) {
+            Value* ptr = builder_->CreateLoad(ptr_type(), slot, "str.del");
+            emit_str_release(ptr);
+            builder_->CreateStore(
+                llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptr_type())),
+                slot);
+        } else {
+            Value* ptr = gen_expr(*s.expr);
+            emit_str_release(ptr);
+        }
+        return;
+    }
+
+    // Lists and dicts are refcounted — call release and null the slot.
+    if (tid == TR::TID_LIST || tid == TR::TID_DICT) {
+        const std::string rel_sym = (tid == TR::TID_LIST)
+            ? "duxrt_list_release" : "duxrt_dict_release";
+        Value* slot = lvalue_of(*s.expr);
+        if (slot) {
+            emit_rc_release(slot, rel_sym);
+        } else {
+            Value* ptr = gen_expr(*s.expr);
+            auto* rel_fn = get_or_declare_rt(rel_sym,
+                llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+            builder_->CreateCall(rel_fn, {ptr});
+        }
         return;
     }
 
@@ -2213,7 +2251,7 @@ Value* Codegen::gen_assign(const ast::AssignExpr& e) {
 
     if (rhs) {
         if (e.op == "=") {
-            // For str: release old value, then retain new value before storing.
+            // For refcounted types: release old value, then retain new value before storing.
             if (rhs_tid == TR::TID_STR) {
                 auto tit = alloca_type_.find(slot);
                 if (tit != alloca_type_.end() && tit->second->isPointerTy()) {
@@ -2221,6 +2259,45 @@ Value* Codegen::gen_assign(const ast::AssignExpr& e) {
                     emit_str_release(old_val);
                 }
                 rhs = maybe_retain_str(rhs);
+            } else if (rhs_tid == TR::TID_LIST) {
+                auto tit = alloca_type_.find(slot);
+                if (tit != alloca_type_.end() && tit->second->isPointerTy()) {
+                    Value* old_val = builder_->CreateLoad(ptr_type(), slot, "list.old");
+                    auto* rel_fn = get_or_declare_rt("duxrt_list_release",
+                        llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+                    // Null-guard old value before releasing
+                    Value* null_v = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type()));
+                    Function* fn   = builder_->GetInsertBlock()->getParent();
+                    auto* rel_bb   = BasicBlock::Create(*ctx_, "list.asgn.rel", fn);
+                    auto* cont_bb  = BasicBlock::Create(*ctx_, "list.asgn.cont", fn);
+                    builder_->CreateCondBr(
+                        builder_->CreateICmpEQ(old_val, null_v), cont_bb, rel_bb);
+                    builder_->SetInsertPoint(rel_bb);
+                    builder_->CreateCall(rel_fn, {old_val});
+                    builder_->CreateBr(cont_bb);
+                    builder_->SetInsertPoint(cont_bb);
+                }
+                rhs = maybe_retain_list(rhs);
+            } else if (rhs_tid == TR::TID_DICT) {
+                auto tit = alloca_type_.find(slot);
+                if (tit != alloca_type_.end() && tit->second->isPointerTy()) {
+                    Value* old_val = builder_->CreateLoad(ptr_type(), slot, "dict.old");
+                    auto* rel_fn = get_or_declare_rt("duxrt_dict_release",
+                        llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+                    Value* null_v = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type()));
+                    Function* fn   = builder_->GetInsertBlock()->getParent();
+                    auto* rel_bb   = BasicBlock::Create(*ctx_, "dict.asgn.rel", fn);
+                    auto* cont_bb  = BasicBlock::Create(*ctx_, "dict.asgn.cont", fn);
+                    builder_->CreateCondBr(
+                        builder_->CreateICmpEQ(old_val, null_v), cont_bb, rel_bb);
+                    builder_->SetInsertPoint(rel_bb);
+                    builder_->CreateCall(rel_fn, {old_val});
+                    builder_->CreateBr(cont_bb);
+                    builder_->SetInsertPoint(cont_bb);
+                }
+                rhs = maybe_retain_dict(rhs);
             }
             builder_->CreateStore(rhs, slot);
         } else {
@@ -3655,13 +3732,22 @@ void Codegen::env_define(const std::string& name, Value* alloca, TypeId tid) {
         str_scopes_.back().push_back(alloca);
         return;
     }
+    // Register list/dict allocas for RAII ref-count release at scope exit.
+    if (tid == TR::TID_LIST && !cleanup_scopes_.empty()) {
+        cleanup_scopes_.back().push_back({alloca, {}, "duxrt_list_release", nullptr, nullptr});
+        return;
+    }
+    if (tid == TR::TID_DICT && !cleanup_scopes_.empty()) {
+        cleanup_scopes_.back().push_back({alloca, {}, "duxrt_dict_release", nullptr, nullptr});
+        return;
+    }
     // Register class instances for RAII cleanup (dtor call if present, then free).
     // Uses layouts_ as the condition so trivial-dtor classes (no ___dtor symbol)
     // are still freed at scope exit via the free-only path in emit_dtor.
     if (tid > TR::TID_NULL && !cleanup_scopes_.empty()) {
         const std::string& cls_name = types_.name_of(tid);
         if (!cls_name.empty() && layouts_.count(cls_name))
-            cleanup_scopes_.back().push_back({alloca, cls_name, nullptr});
+            cleanup_scopes_.back().push_back({alloca, cls_name, {}, nullptr, nullptr});
     }
 }
 
@@ -3712,6 +3798,26 @@ void Codegen::emit_dtor(Value* alloca, const std::string& class_name) {
     builder_->SetInsertPoint(end_bb);
 }
 
+void Codegen::emit_rc_release(llvm::Value* slot, const std::string& release_sym) {
+    auto* bb = builder_->GetInsertBlock();
+    if (!bb || bb->getTerminator()) return;
+    Value* null_v = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type()));
+    Value* ptr = builder_->CreateLoad(ptr_type(), slot, "rc.ptr");
+    Function* fn   = bb->getParent();
+    auto* call_bb  = BasicBlock::Create(*ctx_, "rc.rel.call", fn);
+    auto* end_bb   = BasicBlock::Create(*ctx_, "rc.rel.end",  fn);
+    builder_->CreateCondBr(
+        builder_->CreateICmpEQ(ptr, null_v, "rc.isnull"), end_bb, call_bb);
+    builder_->SetInsertPoint(call_bb);
+    auto* rel_fn = get_or_declare_rt(release_sym, llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+    builder_->CreateCall(rel_fn, {ptr});
+    // Null the slot so a double-release (delete + RAII) is a no-op.
+    builder_->CreateStore(null_v, slot);
+    builder_->CreateBr(end_bb);
+    builder_->SetInsertPoint(end_bb);
+}
+
 void Codegen::emit_scope_cleanup(const ScopeCleanup& c) {
     auto* bb = builder_->GetInsertBlock();
     if (!bb || bb->getTerminator()) return;
@@ -3719,6 +3825,9 @@ void Codegen::emit_scope_cleanup(const ScopeCleanup& c) {
         emit_call(c.fn_to_call, {});
     } else if (c.defer_body) {
         gen_stmts(*c.defer_body);
+    } else if (!c.release_sym.empty()) {
+        // List / dict RAII: null-guarded reference-count release.
+        emit_rc_release(c.alloca, c.release_sym);
     } else {
         emit_dtor(c.alloca, c.class_name);
     }
@@ -3737,7 +3846,7 @@ void Codegen::emit_all_scope_cleanups() {
 void Codegen::gen_defer(const ast::DeferStmt& s) {
     if (cleanup_scopes_.empty()) return;
     // Register the defer block; it will be emitted in LIFO order at scope exit.
-    cleanup_scopes_.back().push_back({nullptr, {}, &s.body});
+    cleanup_scopes_.back().push_back({nullptr, {}, {}, &s.body, nullptr});
 }
 
 void Codegen::gen_throw(const ast::ThrowStmt& s) {
@@ -3874,6 +3983,21 @@ Value* Codegen::maybe_retain_str(Value* v) {
     // Consuming convention: call results (refcount=1) and immortal globals need no retain.
     if (llvm::isa<llvm::CallInst>(v) || llvm::isa<llvm::GlobalVariable>(v)) return v;
     return emit_str_retain(v);
+}
+
+Value* Codegen::maybe_retain_list(Value* v) {
+    if (!v) return v;
+    // Consuming convention: CallInst results already carry refcount=1; no retain needed.
+    if (llvm::isa<llvm::CallInst>(v)) return v;
+    auto* fn = get_or_declare_rt("duxrt_list_retain", ptr_type(), {ptr_type()});
+    return builder_->CreateCall(fn, {v}, "list.retain");
+}
+
+Value* Codegen::maybe_retain_dict(Value* v) {
+    if (!v) return v;
+    if (llvm::isa<llvm::CallInst>(v)) return v;
+    auto* fn = get_or_declare_rt("duxrt_dict_retain", ptr_type(), {ptr_type()});
+    return builder_->CreateCall(fn, {v}, "dict.retain");
 }
 
 void Codegen::emit_all_str_releases() {

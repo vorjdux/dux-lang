@@ -145,8 +145,25 @@ void       duxrt_strbuf_append_str(DuxStrBuf* b, DuxStr* s);
 DuxStr*    duxrt_strbuf_build(DuxStrBuf* b);   /* refcount=1, caller owns */
 void       duxrt_strbuf_free(DuxStrBuf* b);
 
-/* ── List (dynamic array of void*) ──────────────────────────────────────── */
+/* ── List (reference-counted dynamic array of void*) ─────────────────────── */
+
+/*
+ * DuxList: reference-counted dynamic array.
+ *
+ * refcount semantics mirror DuxStr:
+ *   refcount == 1   →  single owner (freshly allocated by duxrt_list_new)
+ *   refcount  > 1   →  shared; each variable/call frame holding the ptr = +1
+ *   refcount → 0    →  freed by duxrt_list_release
+ *
+ * Ownership rules:
+ *   duxrt_list_new()        → caller owns (refcount=1); register for RAII or delete
+ *   duxrt_list_retain(l)    → acquire a new reference (refcount++)
+ *   duxrt_list_release(l)   → release a reference (refcount--); frees when 0
+ *   delete list_var         → calls release and nulls the slot; RAII is no-op
+ */
 typedef struct DuxList {
+    DUXRT_ATOMIC(int32_t) refcount; /* atomic reference count */
+    int32_t  _pad;                  /* explicit pad to keep 8-byte alignment */
     int64_t  len;
     int64_t  cap;
     void**   data;
@@ -157,19 +174,34 @@ void     duxrt_list_push(DuxList* l, void* val);
 void*    duxrt_list_get(DuxList* l, int64_t idx);
 void     duxrt_list_set(DuxList* l, int64_t idx, void* val);
 int64_t  duxrt_list_len(DuxList* l);
+/* Retain/release — primary lifecycle API for refcounted lists. */
+DuxList* duxrt_list_retain(DuxList* l);   /* returns l for convenience */
+void     duxrt_list_release(DuxList* l);  /* frees when refcount reaches 0 */
+/* duxrt_list_free: legacy name — now an alias for release.  Prefer release. */
 void     duxrt_list_free(DuxList* l);
 DuxList* duxrt_list_concat(DuxList* a, DuxList* b);
 
-/* ── Dict (open-addressing hash map, char* keys) ─────────────────────────── */
+/* ── Dict (reference-counted open-addressing hash map, char* keys) ────────── */
+
+/*
+ * DuxDict: reference-counted hash map, parallel semantics to DuxList.
+ *
+ *   duxrt_dict_new()        → caller owns (refcount=1)
+ *   duxrt_dict_retain(d)    → acquire a new reference
+ *   duxrt_dict_release(d)   → release; frees when refcount reaches 0
+ *   delete dict_var         → calls release and nulls the slot; RAII is no-op
+ */
 typedef struct DuxDictEntry {
     char* key;
     void* val;
 } DuxDictEntry;
 
 typedef struct DuxDict {
-    int64_t       len;
-    int64_t       cap;
-    int64_t       tomb;
+    DUXRT_ATOMIC(int32_t) refcount; /* atomic reference count */
+    int32_t  _pad;                  /* explicit pad */
+    int64_t  len;
+    int64_t  cap;
+    int64_t  tomb;
     DuxDictEntry* entries;
 } DuxDict;
 
@@ -178,6 +210,10 @@ void     duxrt_dict_set(DuxDict* d, const char* key, void* val);
 void*    duxrt_dict_get(DuxDict* d, const char* key);
 int      duxrt_dict_has(DuxDict* d, const char* key);
 void     duxrt_dict_del(DuxDict* d, const char* key);
+/* Retain/release — primary lifecycle API. */
+DuxDict* duxrt_dict_retain(DuxDict* d);
+void     duxrt_dict_release(DuxDict* d);
+/* Legacy alias. */
 void     duxrt_dict_free(DuxDict* d);
 
 /* ── Range ───────────────────────────────────────────────────────────────── */

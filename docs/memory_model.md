@@ -128,40 +128,56 @@ all references to it without calling `delete`, the memory leaks.
 
 **Reference semantics — pointers to heap structures.**
 
-`list` and `dict` values are represented as pointers to `DuxList` and
-`DuxDict` heap structures respectively:
+`list` and `dict` values are **reference-counted** heap structures, mirroring
+the `DuxStr` model.  The runtime structs carry an atomic reference count:
 
 ```c
-/* DuxList: dynamic array of void* */
+/* DuxList: reference-counted dynamic array of void* */
 typedef struct DuxList {
-    int64_t  len;
-    int64_t  cap;
-    void**   data;   /* heap-allocated element array */
+    atomic_int  refcount;  /* 1 = single owner; >1 = shared */
+    int32_t     _pad;
+    int64_t     len;
+    int64_t     cap;
+    void**      data;      /* heap-allocated element array */
 } DuxList;
 
-/* DuxDict: open-addressing hash map with char* keys */
+/* DuxDict: reference-counted open-addressing hash map, char* keys */
 typedef struct DuxDict {
+    atomic_int    refcount;
+    int32_t       _pad;
     int64_t       len;
     int64_t       cap;
-    int64_t       tomb;         /* tombstone count for deletion */
-    DuxDictEntry* entries;      /* heap-allocated entry array */
+    int64_t       tomb;
+    DuxDictEntry* entries;
 } DuxDict;
 ```
 
-Assigning a list or dict to another variable copies the **pointer**, not the
-contents.  Both variables refer to the same underlying storage.
+**Lifecycle rules:**
 
-**Deallocation:** call `duxrt_list_free` / `duxrt_dict_free` via `delete`:
+| Operation | Effect |
+|-----------|--------|
+| `list x = [...]` / `dict d = {}` | Allocates with `refcount = 1`. RAII cleanup registered for `x` / `d`. |
+| `list y = x` | Retains `x` (`refcount++`). RAII registered for `y` too. |
+| Scope exit (RAII) | Releases each in-scope list/dict (`refcount--`); frees when `refcount` reaches 0. |
+| `delete x` | Releases `x`'s reference (`refcount--`) and nulls the slot. Subsequent RAII cleanup for `x` is a **no-op** (null check). |
+| Returned from a function | The return value is retained before scope cleanup; caller receives `refcount = 1`. |
+
+**Example — no explicit delete required:**
 
 ```dux
-list<int> nums = [1, 2, 3]
-# ...
-delete nums   # frees the DuxList header + element array
+list names = ["Alice", "Bob", "Carol"]
+# names is automatically released at end of scope (refcount → 0 → freed)
+
+list a = ["x", "y"]
+list b = a           # refcount → 2
+delete a             # refcount → 1; b is still valid
+println(b[0])        # "x"
+# b released by RAII at scope exit (refcount → 0 → freed)
 ```
 
-The current runtime does **not** automatically free list or dict allocations
-when they go out of scope (unlike class instances which get RAII destructors).
-Forgetting to `delete` a list or dict is a memory leak.
+**`delete` and RAII coexist safely.**  Calling `delete` before scope exit
+releases the reference immediately and zeroes the slot.  When scope exits,
+RAII sees a null pointer and skips the release — no double-free.
 
 ---
 
@@ -181,16 +197,17 @@ Forgetting to `delete` a list or dict is a memory leak.
 - **No borrow checker.** Dux does not track ownership or lifetimes.
   Use-after-free and double-free are possible if `delete` is used incorrectly.
 
-- **Manual lifetime management for lists and dicts.** Unlike class instances,
-  lists and dicts do not get RAII destructors automatically.  They must be
-  freed with `delete` or left to the OS at process exit.
+- **No cycle detection.** The reference-counting scheme for `str`, `list`, and
+  `dict` cannot detect reference cycles.  In practice, Dux expressions cannot
+  form cycles between these types through normal language constructs.
 
 - **No cycle detection for reference-counted strings.** The reference-counting
   scheme for `str` cannot detect reference cycles.  In practice, `str` values
   cannot form cycles through normal Dux expressions.
 
 - **No generational or tracing GC.** Large programs allocating many short-lived
-  class instances must be careful to call `delete` or rely on destructors.
+  class instances should rely on destructors for cleanup; lists and dicts are
+  freed automatically by RAII but cycles (if they could form) would leak.
 
 - **Single-ownership assumption.** The runtime assumes at most one "owner"
   per class instance at any given time.  Sharing pointers across threads
@@ -226,17 +243,19 @@ void process(str path) {
 
 ```dux
 void write_data(str path) {
-    list<str> lines = ["a", "b", "c"]
+    list lines = ["a", "b", "c"]
+    # lines is released automatically by RAII at end of scope
+    # Use defer only when early-exit cleanup is needed for OTHER resources:
     defer {
-        delete lines   # always runs, even on early return
+        delete lines   # safe no-op if already released; frees early if needed
     }
     # ... work with lines ...
 }
 ```
 
-### Avoid passing `delete`d pointers
+### Avoid accessing `delete`d pointers
 
-After `delete obj`, the variable is set to `null`.  Accessing it afterwards
+After `delete obj`, the slot is set to `null`.  Accessing it afterwards
 is undefined behavior.  Null-check before use if lifetime is uncertain:
 
 ```dux
@@ -245,13 +264,19 @@ if obj != null {
 }
 ```
 
-### Explicit `delete` for lists and dicts
+### Lists and dicts: RAII is automatic
 
-Until the runtime gains automatic list/dict RAII, explicitly `delete` lists
-and dicts when you are done with them:
+Lists and dicts are freed automatically at scope exit via reference counting.
+`delete` is optional — use it only for **early release** (e.g. freeing a large
+list before a long computation):
 
 ```dux
-list<int> result = compute()
+list result = compute()
 # ... use result ...
-delete result
+delete result   # optional: frees now; RAII at scope exit is already a no-op
+# ... long computation without result in memory ...
 ```
+
+If `delete` is omitted, RAII releases the list when the scope exits.
+Either way there is no double-free: `delete` nulls the slot so subsequent
+RAII cleanup is skipped.

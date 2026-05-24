@@ -137,9 +137,10 @@ private:
     // C++ destructor ordering and Go's defer semantics.
     struct ScopeCleanup {
         llvm::Value*          alloca{nullptr};      // RAII: alloca holding heap ptr
-        std::string           class_name;            // RAII: destructor symbol prefix
+        std::string           class_name;           // RAII class: dtor symbol prefix
+        std::string           release_sym;          // RAII rc: runtime release fn name
         const ast::StmtList*  defer_body{nullptr};  // defer: statements to run
-        llvm::Function*       fn_to_call{nullptr};  // new: no-arg cleanup function
+        llvm::Function*       fn_to_call{nullptr};  // no-arg cleanup function
     };
     std::vector<std::vector<ScopeCleanup>> cleanup_scopes_;
 
@@ -325,6 +326,12 @@ private:
     llvm::Value* maybe_retain_str(llvm::Value* v);
     // Emit releases for every str alloca across all active scopes (used by gen_return).
     void         emit_all_str_releases();
+
+    // List/dict reference-counting helpers (same consuming convention as maybe_retain_str)
+    llvm::Value* maybe_retain_list(llvm::Value* v);
+    llvm::Value* maybe_retain_dict(llvm::Value* v);
+    // Null-guarded release call (used by emit_scope_cleanup for list/dict RAII).
+    void         emit_rc_release(llvm::Value* slot, const std::string& release_sym);
 
     TypeId type_id_of(const ast::Expr& e) const;
 
