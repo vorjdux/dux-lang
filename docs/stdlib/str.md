@@ -17,6 +17,32 @@ operations that produce a new string allocate fresh memory via `duxrt_alloc`.
 
 ---
 
+## String Interpolation (f-strings)
+
+F-strings allow expressions to be embedded directly inside a string literal
+using `{expr}` placeholders. Prefix the opening quote with `f`:
+
+```dux
+str name = "Dux"
+int year  = 2026
+
+str s1 = f"Hello, {name}!"                   # "Hello, Dux!"
+str s2 = f"Year: {year}, next: {year + 1}"   # "Year: 2026, next: 2027"
+str s3 = f"2 + 2 = {2 + 2}"                  # "2 + 2 = 4"
+```
+
+Any expression whose type is convertible to `str` may appear inside `{ }`.
+F-strings are desugared at compile time into a sequence of `str` concatenation
+operations — there is no runtime interpretation overhead.
+
+To emit a literal `{` character in an f-string, escape it as `\{`:
+
+```dux
+str s = f"set literal: \{1, 2, 3\}"   # "set literal: {1, 2, 3}"
+```
+
+---
+
 ## Operators
 
 ### Concatenation

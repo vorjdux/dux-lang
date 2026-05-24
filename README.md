@@ -159,6 +159,29 @@ More examples in [`examples/`](examples/), including the full language showcase 
 > one-liner block body you must add an explicit `;` before the `}`.
 > All examples in this document follow these rules.
 
+### Strings and string interpolation
+
+String literals use double quotes. Strings support standard C escape sequences.
+
+```dux
+str name = "Dux"
+str msg  = "Hello, " + name + "!"   # concatenation with +
+```
+
+**F-strings** (format strings) embed expressions directly inside a string using
+`{expr}` interpolation. Prefix the opening quote with `f`:
+
+```dux
+str name = "Dux"
+int year  = 2026
+str s1 = f"Hello, {name}!"                   # "Hello, Dux!"
+str s2 = f"Year: {year}, next: {year + 1}"   # "Year: 2026, next: 2027"
+str s3 = f"2 + 2 = {2 + 2}"                  # "2 + 2 = 4"
+```
+
+Any expression that produces a value convertible to `str` may appear inside `{ }`.
+Nested braces are not permitted; use a temporary variable for complex sub-expressions.
+
 ### Types
 
 | Type | Description |
@@ -169,8 +192,8 @@ More examples in [`examples/`](examples/), including the full language showcase 
 | `real` | 32-bit float |
 | `bool` | boolean (`true` / `false`) |
 | `str` | reference-counted string (hybrid inline/heap allocation) |
-| `list` | dynamic array |
-| `dict` | hash map |
+| `list` | dynamic array (reference-counted; freed automatically via RAII when the last reference drops) |
+| `dict` | hash map (reference-counted; freed automatically via RAII when the last reference drops) |
 | `ptr` | raw pointer (for C FFI / unsafe code) |
 | `object` | base type for heap-allocated class instances |
 | `void` | no value (function return) |
