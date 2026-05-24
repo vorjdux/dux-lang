@@ -359,6 +359,7 @@ struct InstKey {
     std::string          generic_name;
     std::vector<TypeExpr> type_args;
     std::string           mangled;
+    SourceLoc             loc;       // instantiation site location
 };
 
 static void fix_te(TypeExpr& te,
@@ -387,7 +388,7 @@ static void fix_te(TypeExpr& te,
     if (!te.type_args.empty()) {
         std::string mangled = mangle_generic(te.name, te.type_args);
         if (!done.count(mangled))
-            pending.push_back(InstKey{te.name, te.type_args, mangled});
+            pending.push_back(InstKey{te.name, te.type_args, mangled, te.loc});
         te.name      = mangled;
         te.type_args = {};
     }
@@ -635,7 +636,7 @@ void expand_generics(ast::Program& prog, Driver& driver) {
                 if (it == subst.end()) continue;
                 const std::string& concrete_type = it->second.name;
                 if (!ast_satisfies_bound(concrete_type, bound.interface_name, prog)) {
-                    driver.error(tmpl.loc,
+                    driver.error(key.loc,
                         "type '" + concrete_type + "' does not implement '" +
                         bound.interface_name + "' (required by generic parameter '" +
                         bound.param + "')");
@@ -667,7 +668,7 @@ void expand_generics(ast::Program& prog, Driver& driver) {
                 if (it == subst.end()) continue;
                 const std::string& concrete_type = it->second.name;
                 if (!ast_satisfies_bound(concrete_type, bound.interface_name, prog)) {
-                    driver.error(tmpl.loc,
+                    driver.error(key.loc,
                         "type '" + concrete_type + "' does not implement '" +
                         bound.interface_name + "' (required by generic parameter '" +
                         bound.param + "')");

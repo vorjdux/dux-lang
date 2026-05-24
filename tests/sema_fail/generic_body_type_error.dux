@@ -1,0 +1,21 @@
+class Animal {
+    void speak() { println("..."); }
+}
+
+# T is substituted with Animal at instantiation time.
+# Sema checks the concrete Holder__Animal body and finds that
+# Animal has no member 'fly', producing an error.
+class Holder<T> {
+    T val
+    Holder(T v) { this.val = v; }
+
+    void bad_use() {
+        this.val.fly()   # error: type 'Animal' has no member 'fly'
+    }
+}
+
+void main() {
+    Animal a = new Animal()
+    Holder<Animal> h = new Holder<Animal>(a)
+    h.bad_use()
+}

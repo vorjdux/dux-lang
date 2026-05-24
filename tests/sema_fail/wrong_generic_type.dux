@@ -1,0 +1,8 @@
+class Box<T> {
+    T val
+    Box(T v) { this.val = v; }
+}
+
+void main() {
+    Box<int> b = new Box<str>("hello")  # error: cannot assign Box__str to Box__int
+}

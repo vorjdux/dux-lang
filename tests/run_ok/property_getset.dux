@@ -1,0 +1,22 @@
+class Circle {
+    double _radius
+
+    Circle(double r) {
+        this._radius = r
+    }
+
+    double radius() -> get {
+        return this._radius
+    }
+
+    void radius(double value) -> set {
+        this._radius = value
+    }
+}
+
+void main() {
+    Circle c = new Circle(5.0)
+    println(c.radius)
+    c.radius = 10.0
+    println(c.radius)
+}

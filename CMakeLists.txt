@@ -76,6 +76,7 @@ add_library(duxrt STATIC
     src/runtime/async_rt.c
     src/runtime/achan_rt.c
     src/runtime/future_rt.c
+    src/runtime/pool_rt.c
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)
@@ -191,6 +192,7 @@ add_executable(dux
     src/sema/sema.cpp
     src/sema/generics.cpp
     src/codegen/codegen.cpp
+    src/repl/repl.cpp
     ${FLEX_DuxLexer_OUTPUTS}
     ${BISON_DuxParser_OUTPUTS}
 )
@@ -354,3 +356,33 @@ foreach(F ${DUX_RUN_OK})
         )
     endif()
 endforeach()
+
+# run_fail: files that must compile but exit non-zero at runtime.
+# Used for testing assert failures, runtime panics, etc.
+file(GLOB DUX_RUN_FAIL "${CMAKE_SOURCE_DIR}/tests/run_fail/*.dux")
+foreach(F ${DUX_RUN_FAIL})
+    cmake_path(GET F STEM name)
+    add_test(
+        NAME    run_fail_${name}
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_fail_test.sh
+                $<TARGET_FILE:dux>
+                ${F}
+    )
+    set_tests_properties(run_fail_${name} PROPERTIES
+        DEPENDS duxrt
+    )
+endforeach()
+
+# bootstrap: compile stage2+stage3 from Dux source, run stage3 round-trip suite.
+# This verifies the compiler can compile a realistic self-hosting workload and
+# that the resulting binaries produce correct output (13 round-trip tests).
+add_test(
+    NAME    bootstrap_stage3_suite
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/bootstrap_test.sh
+            $<TARGET_FILE:dux>
+            ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(bootstrap_stage3_suite PROPERTIES
+    DEPENDS duxrt
+    TIMEOUT 120
+)

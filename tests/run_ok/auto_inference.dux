@@ -1,0 +1,20 @@
+int add(int a, int b) {
+    return a + b
+}
+
+str greet(str name) {
+    return "Hello, " + name + "!"
+}
+
+void main() {
+    auto x = add(3, 4)
+    println(x)
+    auto msg = greet("Dux")
+    println(msg)
+    auto flag = x > 5
+    if flag {
+        println("big")
+    } else {
+        println("small")
+    }
+}

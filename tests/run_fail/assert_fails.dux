@@ -1,0 +1,6 @@
+# Assert failure should abort the program with non-zero exit
+void main() {
+    int x = 5
+    assert(x > 10)
+    println("never reached")
+}

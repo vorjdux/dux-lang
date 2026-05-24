@@ -278,6 +278,7 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
                 MethodInfo mi;
                 mi.name        = f->name;
                 mi.vtable_slot = slot++;
+                mi.modifier    = f->modifier ? *f->modifier : "";
                 layout.methods.push_back(mi);
             }
         }
@@ -350,6 +351,10 @@ void Codegen::declare_functions(const ast::DeclList& decls,
 static std::string mangle_class_member(const std::string& cls,
                                        const ast::FunctionDecl& f) {
     if (f.is_dtor) return cls + "___dtor";
+    // Property accessors (get/set) get a dedicated mangled name to avoid
+    // collision when both a getter and setter share the same Dux name.
+    if (f.modifier && *f.modifier == "get") return cls + "__" + f.name + "___get";
+    if (f.modifier && *f.modifier == "set") return cls + "__" + f.name + "___set";
     return cls + "__" + f.name;
 }
 
@@ -397,8 +402,9 @@ void Codegen::declare_class_methods(const ast::ClassDecl& c) {
 
             // Record in layout (non-ctor/dtor instance methods only)
             if (!f->is_ctor && !f->is_dtor && layouts_.count(c.name)) {
+                std::string fmod = f->modifier ? *f->modifier : "";
                 for (auto& mi : layouts_[c.name].methods) {
-                    if (mi.name == f->name) { mi.fn = fn; break; }
+                    if (mi.name == f->name && mi.modifier == fmod) { mi.fn = fn; break; }
                 }
             }
         }
@@ -1608,8 +1614,12 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
                                           match_ptr, "enum.tag");
     } else if (match_raw->getType()->isIntegerTy()) {
         match_val = match_raw;
-        if (!match_val->getType()->isIntegerTy(32))
+        auto* int_ty = llvm::cast<llvm::IntegerType>(match_val->getType());
+        if (int_ty->getBitWidth() > 32)
+            // Wider than i32 (e.g. i64): truncate down.
             match_val = builder_->CreateTrunc(match_val, llvm::Type::getInt32Ty(*ctx_));
+        // Narrower types (bool i1, i8, i16) are kept as-is; the switch and
+        // case constants both use match_val->getType() so they stay consistent.
     } else {
         // Float or other — coerce to i32 (fallback, not normally reached for enums)
         match_val = builder_->CreateFPToSI(match_raw, llvm::Type::getInt32Ty(*ctx_));
@@ -2169,6 +2179,24 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
 }
 
 Value* Codegen::gen_assign(const ast::AssignExpr& e) {
+    // Property setter dispatch: obj.prop = val calls the setter if one exists.
+    // We resolve the class name and check for a setter BEFORE evaluating the
+    // object expression, so static-field assignments (ClassName.field) are not
+    // incorrectly treated as instance-method dispatches.
+    if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e.target.get())) {
+        std::string cls = resolve_class_name(*mem->object, type_id_of(*mem->object));
+        auto li = layouts_.find(cls);
+        if (li != layouts_.end()) {
+            for (const auto& mi : li->second.methods) {
+                if (mi.name == mem->member && mi.modifier == "set" && mi.fn) {
+                    Value* obj_v = gen_expr(*mem->object);
+                    Value* rval = gen_expr(*e.value);
+                    return emit_call(mi.fn, {obj_v, rval});
+                }
+            }
+        }
+    }
+
     // Get lvalue slot
     Value* slot = lvalue_of(*e.target);
     Value* rhs  = gen_expr(*e.value);
@@ -2469,6 +2497,42 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
             return rt_println(arg, t);
         }
 
+        // __fstr_to_str — synthetic builtin emitted by the f-string desugaring.
+        // Converts any value to a DuxStr* (str) by dispatching on its sema TypeId.
+        if (name == "__fstr_to_str") {
+            Value* arg = e.args.empty() ? str_literal("") : gen_expr(*e.args[0]);
+            TypeId t   = e.args.empty() ? TR::TID_STR    : type_id_of(*e.args[0]);
+            // Infer from LLVM type when sema type is unknown
+            if (t == TR::TID_UNKNOWN) {
+                if (arg->getType()->isIntegerTy()) t = TR::TID_INT;
+                else if (arg->getType()->isFloatingPointTy()) t = TR::TID_DOUBLE;
+                else t = TR::TID_STR;
+            }
+            if (t == TR::TID_STR) return arg;
+            if (t == TR::TID_BOOL) {
+                llvm::Type* i1 = llvm::Type::getInt1Ty(*ctx_);
+                Value* cond = (arg->getType() == i1)
+                    ? arg : builder_->CreateTrunc(arg, i1);
+                return builder_->CreateSelect(cond, str_literal("true"), str_literal("false"));
+            }
+            if (t == TR::TID_INT || t == TR::TID_LONG) {
+                auto* fn = get_or_declare_rt("duxrt_str_from_int",
+                    ptr_type(), {llvm::Type::getInt64Ty(*ctx_)});
+                Value* v64 = arg->getType() == llvm::Type::getInt64Ty(*ctx_)
+                    ? arg : builder_->CreateSExt(arg, llvm::Type::getInt64Ty(*ctx_));
+                return builder_->CreateCall(fn, {v64});
+            }
+            if (t == TR::TID_DOUBLE || t == TR::TID_REAL) {
+                auto* fn = get_or_declare_rt("duxrt_str_from_double",
+                    ptr_type(), {llvm::Type::getDoubleTy(*ctx_)});
+                Value* vd = arg->getType() == llvm::Type::getDoubleTy(*ctx_)
+                    ? arg : builder_->CreateFPExt(arg, llvm::Type::getDoubleTy(*ctx_));
+                return builder_->CreateCall(fn, {vd});
+            }
+            // Fallback: already a pointer — treat as str
+            return arg;
+        }
+
         // assert built-in — handled as stmt but might appear as expr
         if (name == "assert") {
             if (!e.args.empty()) {
@@ -2711,6 +2775,12 @@ Value* Codegen::gen_member(const ast::MemberExpr& e) {
     auto layout_it = layouts_.find(cls_name);
     if (layout_it != layouts_.end()) {
         const ClassLayout& layout = layout_it->second;
+        // Property getter dispatch: obj.prop calls the getter method if one exists
+        for (const auto& mi : layout.methods) {
+            if (mi.name == e.member && mi.modifier == "get" && mi.fn) {
+                return emit_call(mi.fn, {obj});
+            }
+        }
         for (const auto& f : layout.fields) {
             if (f.name == e.member) {
                 Value* gep = builder_->CreateStructGEP(
@@ -3449,6 +3519,12 @@ Value* Codegen::lvalue_of(const ast::Expr& e) {
         std::string cls_name = resolve_class_name(*mem->object, type_id_of(*mem->object));
         auto it = layouts_.find(cls_name);
         if (it != layouts_.end()) {
+            // If member is a property (has getter/setter), don't expose an lvalue for it
+            // (assignment is handled by gen_assign's setter dispatch)
+            for (const auto& mi : it->second.methods) {
+                if (mi.name == mem->member && !mi.modifier.empty())
+                    return nullptr;
+            }
             for (const auto& f : it->second.fields)
                 if (f.name == mem->member)
                     return builder_->CreateStructGEP(
