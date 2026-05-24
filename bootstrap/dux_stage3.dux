@@ -1,0 +1,287 @@
+import sys.process
+import io.file
+import sys.args
+import str
+
+# ─────────────────────────────────────────────────────────────────────────────
+# dux_stage3 — round-trip test suite and fuzzer for dux_stage2
+#
+# Validates that dux_stage2 correctly parses and pretty-prints Dux source
+# and that the resulting AST dump can be compiled by the main compiler.
+#
+# Test lifecycle per test:
+#   1. Write a Dux snippet to /tmp
+#   2. Run `dux_stage2 --dump-ast` → AST pretty-print
+#   3. Compile the pretty-print with the main compiler
+#   4. Run the compiled binary and compare stdout to expected output
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestRunner {
+    int pass_count
+    int fail_count
+    str stage2_bin
+    str compiler_bin
+
+    TestRunner(str s2, str cc) {
+        this.pass_count  = 0
+        this.fail_count  = 0
+        this.stage2_bin  = s2
+        this.compiler_bin = cc
+    }
+
+    void pass(str name) {
+        this.pass_count = this.pass_count + 1
+        println("[PASS] " + name)
+    }
+
+    void fail(str name, str reason) {
+        this.fail_count = this.fail_count + 1
+        println("[FAIL] " + name + " — " + reason)
+    }
+
+    # Write src to /tmp/dux_s3_<tag>.dux, run stage2 --dump-ast, return output.
+    str dump(str src, str tag) {
+        str tmpf = "/tmp/dux_s3_" + tag + ".dux"
+        file.write(tmpf, src)
+        str cmd = this.stage2_bin + " --dump-ast " + tmpf + " 2>/dev/null"
+        return process.capture(cmd)
+    }
+
+    # Round-trip src: dump via stage2, compile, run, return stdout.
+    # Returns "" and sets out_ok to false on any step failure.
+    str round_trip(str src, str tag) {
+        str d = this.dump(src, tag)
+        if d == "" {
+            return ""
+        }
+        str ast_f = "/tmp/dux_s3_" + tag + "_ast.dux"
+        str bin_f = "/tmp/dux_s3_" + tag + "_bin"
+        file.write(ast_f, d)
+        str cc = this.compiler_bin + " --compile " + ast_f + " -o " + bin_f + " 2>/dev/null"
+        long rc = process.run(cc)
+        if rc != 0l {
+            return ""
+        }
+        return process.capture(bin_f + " 2>/dev/null")
+    }
+
+    # ── Individual test cases ─────────────────────────────────────────────────
+
+    void test_hello_world() {
+        str name = "hello_world"
+        str src = "void main() {\n    println(\"Hello, Dux!\")\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "Hello, Dux!\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_string_match() {
+        str name = "string_match"
+        str src = "str classify(str w) {\n    match w {\n        \"apple\" => {\n            return \"fruit\"\n        }\n        \"carrot\" => {\n            return \"vegetable\"\n        }\n        _ => {\n            return \"unknown\"\n        }\n    }\n    return \"unknown\"\n}\nvoid main() {\n    println(classify(\"apple\"))\n    println(classify(\"carrot\"))\n    println(classify(\"pizza\"))\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "fruit\nvegetable\nunknown\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_int_match() {
+        str name = "int_match"
+        str src = "str grade(int n) {\n    match n {\n        1 => {\n            return \"one\"\n        }\n        2 => {\n            return \"two\"\n        }\n        _ => {\n            return \"many\"\n        }\n    }\n    return \"many\"\n}\nvoid main() {\n    println(grade(1))\n    println(grade(2))\n    println(grade(9))\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "one\ntwo\nmany\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_bool_match() {
+        str name = "bool_match"
+        str src = "str yn(bool b) {\n    match b {\n        true => {\n            return \"yes\"\n        }\n        false => {\n            return \"no\"\n        }\n        _ => {\n            return \"?\"\n        }\n    }\n    return \"?\"\n}\nvoid main() {\n    println(yn(true))\n    println(yn(false))\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "yes\nno\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_if_else_chain() {
+        str name = "if_else_chain"
+        str src = "void main() {\n    int x = 5\n    if x > 10 {\n        println(\"big\")\n    } else if x > 3 {\n        println(\"medium\")\n    } else {\n        println(\"small\")\n    }\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "medium\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_while_loop() {
+        str name = "while_loop"
+        str src = "void main() {\n    int i = 0\n    while i < 3 {\n        println(\"x\")\n        i = i + 1\n    }\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "x\nx\nx\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_class_basic() {
+        str name = "class_basic"
+        # Note: "get" is a reserved keyword in Dux (property modifier); use "value()" instead
+        str src = "class Counter {\n    int value\n    Counter(int start) {\n        this.value = start\n    }\n    void inc() {\n        this.value = this.value + 1\n    }\n    int value() {\n        return this.value\n    }\n}\nvoid main() {\n    Counter c = new Counter(0)\n    c.inc()\n    c.inc()\n    c.inc()\n    println(c.value())\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "3\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_generic_class() {
+        str name = "generic_class"
+        # Note: "get" is a reserved keyword in Dux (property modifier); use "fetch()" instead
+        str src = "class Box<T> {\n    T val\n    Box(T v) {\n        this.val = v\n    }\n    T fetch() {\n        return this.val\n    }\n}\nvoid main() {\n    Box<int> b = new Box<int>(7)\n    println(b.fetch())\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "7\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_generic_fn_dump() {
+        # Verify stage2 now emits type params for generic functions
+        str name = "generic_fn_type_params_in_dump"
+        str src = "int identity<T>(T x) {\n    return x\n}\nvoid main() {\n    println(identity<int>(42))\n}\n"
+        str d = this.dump(src, "generic_fn")
+        if d == "" {
+            this.fail(name, "stage2 produced empty output")
+            return
+        }
+        # Dump must contain a '<' for the type parameter
+        int found = 0
+        int i = 0
+        int n = len(d)
+        while i < n {
+            if d[i] == "<" {
+                found = found + 1
+            }
+            i = i + 1
+        }
+        if found > 0 {
+            this.pass(name)
+        } else {
+            this.fail(name, "no '<' found in dump — type params missing")
+        }
+    }
+
+    void test_nested_calls() {
+        str name = "nested_calls"
+        str src = "int add(int a, int b) {\n    return a + b\n}\nint mul(int a, int b) {\n    return a * b\n}\nvoid main() {\n    println(add(mul(2, 3), 4))\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "10\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_string_ops() {
+        str name = "string_ops"
+        str src = "void main() {\n    str s = \"hello\"\n    str t = s + \" world\"\n    println(t)\n    println(len(t))\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "hello world\n11\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_enum_match() {
+        str name = "enum_match"
+        str src = "enum Dir {\n    North\n    South\n    East\n    West\n}\nvoid main() {\n    Dir d = Dir.East\n    match d {\n        Dir.North => {\n            println(\"N\")\n        }\n        Dir.South => {\n            println(\"S\")\n        }\n        Dir.East => {\n            println(\"E\")\n        }\n        _ => {\n            println(\"W\")\n        }\n    }\n}\n"
+        str got = this.round_trip(src, name)
+        if got == "E\n" {
+            this.pass(name)
+        } else {
+            this.fail(name, "got: \"" + got + "\"")
+        }
+    }
+
+    void test_stage2_self_dump() {
+        str name = "stage2_self_dump"
+        str cmd = this.stage2_bin + " --dump-ast bootstrap/dux_stage2.dux 2>/dev/null"
+        str d = process.capture(cmd)
+        if d == "" {
+            this.fail(name, "stage2 self-dump produced empty output")
+            return
+        }
+        # Count lines — a healthy dump should be well over 1500 lines
+        int lines = 0
+        int i = 0
+        int n = len(d)
+        while i < n {
+            if d[i] == "\n" {
+                lines = lines + 1
+            }
+            i = i + 1
+        }
+        if lines > 1500 {
+            this.pass(name + " (" + str.from_int(lines + 0l) + " lines)")
+        } else {
+            this.fail(name, "dump too short: " + str.from_int(lines + 0l) + " lines")
+        }
+    }
+
+    void run_all() {
+        println("dux stage3 — round-trip test suite")
+        println("=====================================")
+        this.test_hello_world()
+        this.test_string_match()
+        this.test_int_match()
+        this.test_bool_match()
+        this.test_if_else_chain()
+        this.test_while_loop()
+        this.test_class_basic()
+        this.test_generic_class()
+        this.test_generic_fn_dump()
+        this.test_nested_calls()
+        this.test_string_ops()
+        this.test_enum_match()
+        this.test_stage2_self_dump()
+        println("=====================================")
+        str ps = str.from_int(this.pass_count + 0l)
+        str fs = str.from_int(this.fail_count + 0l)
+        println("Results: " + ps + " passed, " + fs + " failed")
+        if this.fail_count > 0 {
+            println("OVERALL: FAIL")
+        } else {
+            println("OVERALL: PASS")
+        }
+    }
+}
+
+void main() {
+    long argc = args.count()
+    if argc > 1 {
+        str flag = args.at(1)
+        if flag == "--help" || flag == "-h" {
+            println("dux_stage3 — round-trip test suite for dux_stage2")
+            println("")
+            println("Usage:")
+            println("  dux_stage3          Run all tests")
+            println("  dux_stage3 --help   Show this help")
+            return
+        }
+    }
+    TestRunner runner = new TestRunner("./bootstrap/dux_stage2", "./build/dux")
+    runner.run_all()
+}

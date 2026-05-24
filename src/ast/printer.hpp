@@ -233,6 +233,18 @@ private:
             case MatchPattern::Kind::BoolLit:
                 out_ << (arm.pattern.bool_value ? "true" : "false");
                 break;
+            case MatchPattern::Kind::StrLit: {
+                out_ << '"';
+                for (char c : arm.pattern.str_value) {
+                    if      (c == '"')  out_ << "\\\"";
+                    else if (c == '\\') out_ << "\\\\";
+                    else if (c == '\n') out_ << "\\n";
+                    else if (c == '\t') out_ << "\\t";
+                    else                out_ << c;
+                }
+                out_ << '"';
+                break;
+            }
             }
             out_ << " => {\n";
             indent();
@@ -321,11 +333,24 @@ private:
         }
     }
 
+    // Helper: emit "<T, U>" generic params if any
+    void emit_type_params(const std::vector<std::string>& tps) {
+        if (tps.empty()) return;
+        out_ << '<';
+        for (std::size_t i = 0; i < tps.size(); ++i) {
+            if (i) out_ << ", ";
+            out_ << tps[i];
+        }
+        out_ << '>';
+    }
+
     void visit(const FunctionDecl& n) override {
         out_ << pad();
         if (n.is_dtor) out_ << '~';
         if (!n.is_ctor && !n.is_dtor) out_ << n.return_type.name << ' ';
-        out_ << n.name << '(';
+        out_ << n.name;
+        emit_type_params(n.type_params);
+        out_ << '(';
         for (std::size_t i = 0; i < n.params.size(); ++i) {
             if (i) out_ << ", ";
             out_ << n.params[i].type.name << ' ' << n.params[i].name;
@@ -348,6 +373,7 @@ private:
 
     void visit(const ClassDecl& n) override {
         out_ << pad() << "class " << n.name;
+        emit_type_params(n.type_params);
         if (!n.bases.empty()) {
             out_ << '(';
             for (std::size_t i = 0; i < n.bases.size(); ++i) {

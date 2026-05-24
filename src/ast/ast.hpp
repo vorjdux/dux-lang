@@ -223,13 +223,14 @@ struct SwitchStmt final : Stmt {
 // ─── Match statement (enum/value pattern matching) ───────────────────────────
 
 struct MatchPattern {
-    enum class Kind { Wildcard, EnumVariant, IntLit, BoolLit };
+    enum class Kind { Wildcard, EnumVariant, IntLit, BoolLit, StrLit };
     Kind        kind{Kind::Wildcard};
     std::string enum_name;    // for EnumVariant: "Color"
     std::string variant_name; // for EnumVariant: "Red"
     std::vector<std::string> bindings; // for EnumVariant payload: Result.Err(msg) => msg
     long long   int_value{0}; // for IntLit
     bool        bool_value{false}; // for BoolLit
+    std::string str_value;    // for StrLit
     SourceLoc   loc;
 };
 
