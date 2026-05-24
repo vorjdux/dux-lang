@@ -1,0 +1,119 @@
+# stdlib/chars.dux — Character classification and value utilities
+#
+# All functions operate on single-character strings (the type Dux uses for
+# s[i] indexing).  Range comparisons via duxrt_str_ord avoid the 26-branch
+# equality chains that would otherwise be required.
+#
+# Character predicates:
+#   chars.is_digit(c)       → bool   '0'-'9'
+#   chars.is_lower(c)       → bool   'a'-'z'
+#   chars.is_upper(c)       → bool   'A'-'Z'
+#   chars.is_alpha(c)       → bool   letter
+#   chars.is_alnum(c)       → bool   letter or digit
+#   chars.is_alnum_under(c) → bool   letter, digit, or '_'
+#   chars.is_space(c)       → bool   space, tab, newline, carriage-return
+#   chars.is_hex(c)         → bool   0-9, a-f, A-F
+#   chars.is_print(c)       → bool   printable ASCII (32-126)
+#   chars.is_punct(c)       → bool   printable non-alnum non-space
+#
+# Character values:
+#   chars.digit_val(c)      → long   numeric value of '0'-'9' (unchecked)
+#   chars.hex_val(c)        → long   numeric value of hex digit, or -1
+
+namespace chars {
+
+    extern "C" long duxrt_str_ord(ptr s)
+
+    # Return the ASCII code point of c (first byte).
+    long _ord(str c) {
+        long r = 0l
+        unsafe {
+            r = duxrt_str_ord(c)
+        }
+        return r
+    }
+
+    # ── Predicates ────────────────────────────────────────────────────────────
+
+    # True if c is an ASCII decimal digit ('0'-'9').
+    bool is_digit(str c) {
+        long code = _ord(c)
+        return code >= 48l && code <= 57l
+    }
+
+    # True if c is an ASCII lowercase letter ('a'-'z').
+    bool is_lower(str c) {
+        long code = _ord(c)
+        return code >= 97l && code <= 122l
+    }
+
+    # True if c is an ASCII uppercase letter ('A'-'Z').
+    bool is_upper(str c) {
+        long code = _ord(c)
+        return code >= 65l && code <= 90l
+    }
+
+    # True if c is any ASCII letter.
+    bool is_alpha(str c) {
+        return is_lower(c) || is_upper(c)
+    }
+
+    # True if c is an ASCII letter or digit.
+    bool is_alnum(str c) {
+        return is_alpha(c) || is_digit(c)
+    }
+
+    # True if c is an ASCII letter, digit, or underscore — valid identifier char.
+    bool is_alnum_under(str c) {
+        return is_alnum(c) || c == "_"
+    }
+
+    # True if c is ASCII whitespace: space(32), tab(9), newline(10), CR(13).
+    bool is_space(str c) {
+        long code = _ord(c)
+        return code == 32l || code == 9l || code == 10l || code == 13l
+    }
+
+    # True if c is a hexadecimal digit (0-9, a-f, A-F).
+    bool is_hex(str c) {
+        long code = _ord(c)
+        return (code >= 48l && code <= 57l) ||
+               (code >= 65l && code <= 70l) ||
+               (code >= 97l && code <= 102l)
+    }
+
+    # True if c is a printable ASCII character (code points 32-126).
+    bool is_print(str c) {
+        long code = _ord(c)
+        return code >= 32l && code <= 126l
+    }
+
+    # True if c is printable, non-alphanumeric, non-space ASCII.
+    bool is_punct(str c) {
+        return is_print(c) && !is_alnum(c) && !is_space(c)
+    }
+
+    # ── Character values ──────────────────────────────────────────────────────
+
+    # Return the numeric digit value of c ('0'→0, '9'→9).
+    # Caller must ensure is_digit(c) is true.
+    long digit_val(str c) {
+        return _ord(c) - 48l
+    }
+
+    # Return the numeric value of a hexadecimal digit (0-15), or -1 if invalid.
+    long hex_val(str c) {
+        long code = _ord(c)
+        if code >= 48l && code <= 57l {
+            return code - 48l
+        }
+        if code >= 65l && code <= 70l {
+            return code - 55l
+        }
+        if code >= 97l && code <= 102l {
+            return code - 87l
+        }
+        return -1l
+    }
+
+}
