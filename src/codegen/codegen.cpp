@@ -1479,6 +1479,18 @@ llvm::Value* Codegen::gen_enum_ctor(const sema::TypeInfo& ti,
     // Store each payload field (boxed to ptr-sized slot) at ptr-slot offsets 1..N
     for (int i = 0; i < (int)args.size() && i < (int)vi.payload.size(); ++i) {
         Value* val    = gen_expr(*args[i]);
+        // Retain str payloads so they survive the local-variable scope cleanup
+        // that fires after the constructor expression.  The enum struct takes
+        // ownership; the retain is matched by a release when the struct is freed
+        // (handled by a future enum destructor pass).
+        // Use the ACTUAL expression type (not just the declared payload type) so
+        // we only call duxrt_str_retain when the value really is a DuxStr*.
+        TypeId actual_tid = type_id_of(*args[i]);
+        if (actual_tid == TR::TID_STR && val->getType()->isPointerTy()) {
+            Function* retain_fn = get_or_declare_rt("duxrt_str_retain",
+                ptr_type(), {ptr_type()});
+            val = builder_->CreateCall(retain_fn, {val}, "pay.str.retain");
+        }
         Value* boxed  = box_to_ptr(val);
         Value* slot   = builder_->CreateConstGEP1_64(ptr_type(), mem,
                                                       (int64_t)(i + 1),

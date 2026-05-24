@@ -1,0 +1,44 @@
+import io.file
+import result
+
+int main() {
+    # read_result on missing file gives Err
+    Result r1 = file.read_result("/tmp/dux_test_nonexistent_file_xyz.txt")
+    match r1 {
+        Result.Err(msg) => {
+            print("err ok")
+        }
+        Result.Ok(c) => {
+            print("bad")
+        }
+    }
+
+    # Write a file then read_result it — should get Ok
+    bool ok = file.write("/tmp/dux_file_result_test.txt", "hello file")
+    Result r2 = file.read_result("/tmp/dux_file_result_test.txt")
+    match r2 {
+        Result.Ok(content) => {
+            print("read ok:" + content)
+        }
+        Result.Err(msg) => {
+            print("bad:" + msg)
+        }
+    }
+
+    # read_lines_result on existing file
+    Result r3 = file.read_lines_result("/tmp/dux_file_result_test.txt")
+    match r3 {
+        Result.Ok(lines) => {
+            print("lines ok")
+        }
+        Result.Err(msg) => {
+            print("bad")
+        }
+    }
+
+    # Clean up
+    file.remove("/tmp/dux_file_result_test.txt")
+
+    print("file result ok")
+    return 0
+}

@@ -1,3 +1,6 @@
+import option
+import result
+
 namespace file {
     extern "C" str  duxrt_file_read(str path) ;
     extern "C" list duxrt_file_read_lines(str path) ;
@@ -19,6 +22,7 @@ namespace file {
     extern "C" int  duxrt_file_eof_handle(ptr f) ;
 
     # Read entire file as a string.
+    # Returns "" on error; prefer read_result() when you need to handle errors.
     str read(str path) {
         str result = ""
         unsafe {
@@ -27,13 +31,46 @@ namespace file {
         return result
     }
 
+    # Read file as a string, returning Result.Ok(content) or Result.Err(message).
+    Result read_result(str path) {
+        int ex = 0
+        unsafe {
+            ex = duxrt_file_exists(path)
+        }
+        if ex == 0 {
+            return Result.Err("file not found: " + path)
+        }
+        str content = ""
+        unsafe {
+            content = duxrt_file_read(path)
+        }
+        return Result.Ok(content)
+    }
+
     # Read file as a list of lines (newlines stripped).
+    # Returns empty list on error; prefer read_lines_result() for error handling.
     list read_lines(str path) {
         list result = []
         unsafe {
             result = duxrt_file_read_lines(path)
         }
         return result
+    }
+
+    # Read file lines, returning Result.Ok(lines) or Result.Err(message).
+    Result read_lines_result(str path) {
+        int ex = 0
+        unsafe {
+            ex = duxrt_file_exists(path)
+        }
+        if ex == 0 {
+            return Result.Err("file not found: " + path)
+        }
+        list lines = []
+        unsafe {
+            lines = duxrt_file_read_lines(path)
+        }
+        return Result.Ok(lines)
     }
 
     # Write content to file (overwrites). Returns true on success.
@@ -81,6 +118,26 @@ namespace file {
         return r == 0
     }
 
+    # Open a file, returning Result.Ok(File) on success or Result.Err(message)
+    # when the file cannot be opened.  Modes: "r" read, "w" write, "a" append.
+    Result open_result(str path, str mode) {
+        int ex = 0
+        unsafe {
+            ex = duxrt_file_exists(path)
+        }
+        # For write/append modes, no pre-existence check is needed.
+        if mode == "r" {
+            if ex == 0 {
+                return Result.Err("cannot open: " + path)
+            }
+        }
+        File f = new File(path, mode)
+        if f.is_open() {
+            return Result.Ok(f)
+        }
+        return Result.Err("failed to open: " + path)
+    }
+
     # Handle-based File class for incremental read/write/seek.
     # Construct with: File f = new File(path, mode)
     # Modes: "r" read, "w" write, "a" append, "r+" read+write
@@ -120,6 +177,19 @@ namespace file {
                 line = duxrt_file_read_line_handle(this._handle)
             }
             return line
+        }
+
+        # Read the next line as Option.Some(line) or Option.None at EOF.
+        # Preferred over read_line() when iterating to end-of-file.
+        Option read_line_opt() {
+            if this.eof() {
+                return Option.None
+            }
+            str line = ""
+            unsafe {
+                line = duxrt_file_read_line_handle(this._handle)
+            }
+            return Option.Some(line)
         }
 
         bool eof() {

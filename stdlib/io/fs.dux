@@ -1,3 +1,6 @@
+import option
+import result
+
 namespace fs {
     extern "C" int  duxrt_fs_mkdir(str path) ;
     extern "C" int  duxrt_fs_mkdir_all(str path) ;
@@ -168,6 +171,7 @@ namespace fs {
     }
 
     # Return a Stat for the given path, or null if it does not exist.
+    # For code that prefers ADT-style error handling, use stat_opt() instead.
     Stat stat(str p) {
         int ex = 0
         unsafe {
@@ -183,11 +187,76 @@ namespace fs {
         unsafe {
             fi = duxrt_fs_is_file(p)
             di = duxrt_fs_is_dir(p)
-            s = duxrt_fs_size(p)
-            m = duxrt_fs_mtime(p)
+            s  = duxrt_fs_size(p)
+            m  = duxrt_fs_mtime(p)
         }
         bool f = fi != 0
         bool d = di != 0
         return new Stat(p, f, d, s, m)
+    }
+
+    # Return Option.Some(Stat) for the given path, or Option.None if it does
+    # not exist.  Preferred over stat() when you want to pattern-match:
+    #
+    #   match fs.stat_opt("/etc/hosts") {
+    #       Option.Some(s) => { print("found") }
+    #       Option.None    => { print("not found") }
+    #   }
+    Option stat_opt(str p) {
+        int ex = 0
+        unsafe {
+            ex = duxrt_fs_exists(p)
+        }
+        if ex == 0 {
+            return Option.None
+        }
+        int fi = 0
+        int di = 0
+        long s = 0
+        long m = 0
+        unsafe {
+            fi = duxrt_fs_is_file(p)
+            di = duxrt_fs_is_dir(p)
+            s  = duxrt_fs_size(p)
+            m  = duxrt_fs_mtime(p)
+        }
+        bool f = fi != 0
+        bool d = di != 0
+        Stat st = new Stat(p, f, d, s, m)
+        return Option.Some(st)
+    }
+
+    # List directory entries, returning Result.Ok(entries) or Result.Err(message).
+    # Preferred over list_dir() when you need to handle missing/inaccessible dirs.
+    Result list_dir_result(str p) {
+        int ex = 0
+        int is_d = 0
+        unsafe {
+            ex   = duxrt_fs_exists(p)
+            is_d = duxrt_fs_is_dir(p)
+        }
+        if ex == 0 {
+            return Result.Err("directory not found: " + p)
+        }
+        if is_d == 0 {
+            return Result.Err("not a directory: " + p)
+        }
+        list entries = []
+        unsafe {
+            entries = duxrt_fs_list_dir(p)
+        }
+        return Result.Ok(entries)
+    }
+
+    # Current working directory as Result.Ok(path) or Result.Err(message).
+    Result cwd_result() {
+        str r = ""
+        unsafe {
+            r = duxrt_fs_cwd()
+        }
+        if r == "" {
+            return Result.Err("getcwd failed")
+        }
+        return Result.Ok(r)
     }
 }
