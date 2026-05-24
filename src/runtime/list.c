@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdatomic.h>
 
 /* Throw a Dux IndexError; msg must be a string literal (or static storage). */
 static void list_index_error(int64_t idx, int64_t len) {
@@ -16,6 +17,8 @@ static void list_index_error(int64_t idx, int64_t len) {
 DuxList* duxrt_list_new(void) {
     DuxList* l = (DuxList*)malloc(sizeof(DuxList));
     if (!l) abort();
+    atomic_store_explicit(&l->refcount, 1, memory_order_relaxed);
+    l->_pad = 0;
     l->len  = 0;
     l->cap  = LIST_INIT_CAP;
     l->data = (void**)malloc(sizeof(void*) * (size_t)LIST_INIT_CAP);
@@ -58,11 +61,29 @@ int64_t duxrt_list_len(DuxList* l) {
     return l ? l->len : 0;
 }
 
-void duxrt_list_free(DuxList* l) {
-    if (!l) return;
-    free(l->data);
-    free(l);
+/* ── Reference counting ─────────────────────────────────────────────────── */
+
+DuxList* duxrt_list_retain(DuxList* l) {
+    if (!l) return NULL;
+    atomic_fetch_add_explicit(&l->refcount, 1, memory_order_relaxed);
+    return l;
 }
+
+void duxrt_list_release(DuxList* l) {
+    if (!l) return;
+    /* fetch_sub returns the value BEFORE subtraction; free when it was 1 */
+    if (atomic_fetch_sub_explicit(&l->refcount, 1, memory_order_acq_rel) == 1) {
+        free(l->data);
+        free(l);
+    }
+}
+
+/* Legacy name — release is the preferred API. */
+void duxrt_list_free(DuxList* l) {
+    duxrt_list_release(l);
+}
+
+/* ── Concatenation ──────────────────────────────────────────────────────── */
 
 DuxList* duxrt_list_concat(DuxList* a, DuxList* b) {
     DuxList* out = duxrt_list_new();
