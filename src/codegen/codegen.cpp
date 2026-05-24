@@ -2175,14 +2175,17 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
 }
 
 Value* Codegen::gen_assign(const ast::AssignExpr& e) {
-    // Property setter dispatch: obj.prop = val calls the setter if one exists
+    // Property setter dispatch: obj.prop = val calls the setter if one exists.
+    // We resolve the class name and check for a setter BEFORE evaluating the
+    // object expression, so static-field assignments (ClassName.field) are not
+    // incorrectly treated as instance-method dispatches.
     if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e.target.get())) {
-        Value* obj_v = gen_expr(*mem->object);
         std::string cls = resolve_class_name(*mem->object, type_id_of(*mem->object));
         auto li = layouts_.find(cls);
         if (li != layouts_.end()) {
             for (const auto& mi : li->second.methods) {
                 if (mi.name == mem->member && mi.modifier == "set" && mi.fn) {
+                    Value* obj_v = gen_expr(*mem->object);
                     Value* rval = gen_expr(*e.value);
                     return emit_call(mi.fn, {obj_v, rval});
                 }
