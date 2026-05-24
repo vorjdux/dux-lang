@@ -211,6 +211,8 @@ void*    duxrt_dict_get(DuxDict* d, const char* key);
 int      duxrt_dict_has(DuxDict* d, const char* key);
 void     duxrt_dict_del(DuxDict* d, const char* key);
 /* Retain/release — primary lifecycle API. */
+int64_t  duxrt_dict_len(DuxDict* d);
+/* Retain/release — primary lifecycle API. */
 DuxDict* duxrt_dict_retain(DuxDict* d);
 void     duxrt_dict_release(DuxDict* d);
 /* Legacy alias. */

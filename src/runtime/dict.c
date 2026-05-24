@@ -126,6 +126,10 @@ void duxrt_dict_del(DuxDict* d, const char* key) {
     }
 }
 
+int64_t duxrt_dict_len(DuxDict* d) {
+    return d ? d->len : 0;
+}
+
 /* ── Reference counting ─────────────────────────────────────────────────── */
 
 DuxDict* duxrt_dict_retain(DuxDict* d) {

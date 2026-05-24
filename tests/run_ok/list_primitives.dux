@@ -1,0 +1,31 @@
+# Test: list storing and retrieving primitive types (int, bool, double)
+# Exercises box_to_ptr / unbox_from_ptr in list element access.
+
+void main() {
+    list nums = [10, 20, 30]
+    int a = nums[0]
+    int b = nums[1]
+    int c = nums[2]
+    println(a)
+    println(b)
+    println(c)
+    println(len(nums))
+
+    # Mutate via index assignment
+    nums[1] = 99
+    int d = nums[1]
+    println(d)
+
+    # Bool elements
+    list flags = [true, false, true]
+    bool f0 = flags[0]
+    bool f2 = flags[2]
+    println(f0)
+    println(f2)
+
+    # For-in loop over int list
+    list squares = [1, 4, 9, 16]
+    for int v in squares {
+        println(v)
+    }
+}
