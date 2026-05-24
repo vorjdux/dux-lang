@@ -1,6 +1,6 @@
 # Dux Language Specification
 
-Version 0.1 — May 2026
+Version 0.2 — May 2026
 
 ---
 
@@ -54,10 +54,23 @@ while
 | Integer   | `42`, `-7`           |
 | Float     | `3.14`, `-0.5`       |
 | String    | `"hello"`, `"world"` |
+| F-string  | `f"Hello, {name}!"`  |
 | Boolean   | `true`, `false`      |
 | Null      | `null`               |
 
 String literals support standard C escape sequences (`\n`, `\t`, `\\`, `\"`, etc.).
+
+**F-strings** (interpolated string literals) are prefixed with `f` and allow
+arbitrary expressions inside `{ }` braces:
+
+```
+f"Hello, {name}!"
+f"Result: {x + y}"
+f"Year {year}, next {year + 1}"
+```
+
+The expression inside `{ }` must produce a value that is convertible to `str`.
+F-strings are desugared at compile time into a sequence of `str` concatenations.
 
 ---
 
@@ -79,10 +92,16 @@ String literals support standard C escape sequences (`\n`, `\t`, `\\`, `\"`, etc
 
 | Type     | Description                        |
 |----------|------------------------------------|
-| `list`   | Dynamic array                      |
-| `dict`   | Hash map (string keys)             |
+| `list`   | Dynamic array (reference-counted, RAII-managed) |
+| `dict`   | Hash map (string keys, reference-counted, RAII-managed) |
 | `tuple`  | Fixed-size heterogeneous sequence  |
 | `object` | Base type of all classes           |
+
+**Box / unbox.** Primitive values (`int`, `double`, etc.) are stack-allocated.
+When a primitive must be stored in a generic container or passed as an `object`
+reference, the compiler automatically *boxes* the value — wrapping it in a
+heap-allocated `object` — and *unboxes* it (unwraps and copies back to the stack)
+at the use site. Boxing is implicit and transparent to the programmer.
 
 ### 3.3 Numeric Coercions
 

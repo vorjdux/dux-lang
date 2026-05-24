@@ -85,7 +85,20 @@ str_char_sq ::= any_char_except_squote_and_newline
               | "\n" | "\t" | "\r" | "\\" | '\"' | "\'" | "\{"
 
 null_lit    ::= "null"
+
+f_string_lit ::= 'f"' { f_str_part } '"'
+               | "f'" { f_str_part } "'"
+
+f_str_part   ::= f_str_char
+               | "{" expr "}"
+
+f_str_char   ::= any_char_except_dquote_brace_and_newline
+               | "\n" | "\t" | "\r" | "\\" | '\"' | "\'" | "\{"
 ```
+
+An f-string (`f"..."`) allows embedded expressions in `{expr}` placeholders.
+The expression must evaluate to a type that is convertible to `str`.
+To include a literal `{` in the output, escape it as `\{`.
 
 **Literal type summary:**
 
@@ -100,6 +113,7 @@ null_lit    ::= "null"
 | `3.14d` | `double` |
 | `3.14f` | `real` |
 | `"hello"` | `str` |
+| `f"Hello, {name}!"` | `str` (f-string) |
 | `true` / `false` | `bool` |
 | `null` | (null pointer) |
 
@@ -763,6 +777,7 @@ primary_expr ::= integer_lit
                | real_lit
                | long_lit
                | string_lit
+               | f_string_lit
                | bool_lit
                | "null"
                | ident
@@ -1181,7 +1196,7 @@ unary_expr      ::= ( "!" | "~" | "-" | "+" | "++" | "--" | "not" | "await" ) un
                   | postfix_expr
 postfix_expr    ::= postfix_expr ( "." ident | "[" expr "]" | "(" arg_list ")" | "++" | "--" )
                   | primary_expr
-primary_expr    ::= integer_lit | float_lit | real_lit | long_lit | string_lit
+primary_expr    ::= integer_lit | float_lit | real_lit | long_lit | string_lit | f_string_lit
                   | bool_lit | "null" | ident | "str" | "this" | "super"
                   | "(" expr ")"
                   | "new" type_expr "(" arg_list ")"

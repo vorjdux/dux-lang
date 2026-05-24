@@ -162,6 +162,31 @@ typedef struct DuxDict {
 | `delete x` | Releases `x`'s reference (`refcount--`) and nulls the slot. Subsequent RAII cleanup for `x` is a **no-op** (null check). |
 | Returned from a function | The return value is retained before scope cleanup; caller receives `refcount = 1`. |
 
+**Element storage (box/unbox):**
+
+List and dict elements are stored as `void*`.  The compiler converts values
+automatically:
+
+| Element type | Storage in `void*` | Retrieval |
+|---|---|---|
+| `str` (pointer) | pointer stored directly | pointer returned directly |
+| class instance (pointer) | pointer stored directly | pointer returned directly |
+| `int`, `bool`, `long` | integer bits packed via `IntToPtr` | `PtrToInt` + truncate |
+| `double` | bits reinterpreted via `BitCast+IntToPtr` | `PtrToInt` + `BitCast` |
+| `real` (float) | f32 bits packed into low 32 bits of pointer | `PtrToInt` + truncate + `BitCast` |
+
+When reading an element, declare the receiving variable with the correct type and
+the compiler emits the unboxing automatically:
+
+```dux
+list nums = [10, 20, 30]
+int a = nums[0]     # unboxed: PtrToInt → i32
+nums[1] = 99        # boxed: i32 → IntToPtr → void*
+
+dict d = {"x": 3.14}
+double v = d["x"]   # unboxed: PtrToInt → BitCast → f64
+```
+
 **Example — no explicit delete required:**
 
 ```dux
@@ -201,10 +226,6 @@ RAII sees a null pointer and skips the release — no double-free.
   `dict` cannot detect reference cycles.  In practice, Dux expressions cannot
   form cycles between these types through normal language constructs.
 
-- **No cycle detection for reference-counted strings.** The reference-counting
-  scheme for `str` cannot detect reference cycles.  In practice, `str` values
-  cannot form cycles through normal Dux expressions.
-
 - **No generational or tracing GC.** Large programs allocating many short-lived
   class instances should rely on destructors for cleanup; lists and dicts are
   freed automatically by RAII but cycles (if they could form) would leak.
@@ -212,6 +233,11 @@ RAII sees a null pointer and skips the release — no double-free.
 - **Single-ownership assumption.** The runtime assumes at most one "owner"
   per class instance at any given time.  Sharing pointers across threads
   without synchronization can cause data races.
+
+- **Untyped list/dict elements.** Lists and dicts store elements as `void*`
+  using a box/unbox convention.  The compiler does not track element types; it
+  is the programmer's responsibility to retrieve elements with the correct type.
+  Retrieving an element as the wrong type produces undefined behavior.
 
 ---
 
