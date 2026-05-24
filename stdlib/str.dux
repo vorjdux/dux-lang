@@ -27,10 +27,6 @@
 #   str.trim_end(s)            → str
 #   str.repeat(s, n)           → str   (n: long)
 #   str.split(s, sep)          → list  (list of str)
-#   str.to_long(s)             → Option (Some(long) | None)
-#   str.to_double(s)           → Option (Some(double) | None)
-
-import option
 
 # ── Core C bindings ───────────────────────────────────────────────────────────
 extern "C" ptr duxrt_str_concat(ptr a, ptr b)
@@ -59,10 +55,6 @@ extern "C" ptr duxrt_str_trim_start(ptr s)
 extern "C" ptr duxrt_str_trim_end(ptr s)
 extern "C" ptr duxrt_str_repeat(ptr s, long n)
 extern "C" ptr duxrt_str_split(ptr s, ptr sep)
-extern "C" int duxrt_str_to_long_valid(ptr s)
-extern "C" long duxrt_str_to_long_val(ptr s)
-extern "C" int duxrt_str_to_double_valid(ptr s)
-extern "C" double duxrt_str_to_double_val(ptr s)
 
 # ── Core wrappers ─────────────────────────────────────────────────────────────
 
@@ -277,34 +269,3 @@ list split(str s, str sep) {
     return result
 }
 
-# Parse s as a base-10 integer.  Returns Option.Some(value) or Option.None.
-Option to_long(str s) {
-    int ok = 0
-    unsafe {
-        ok = duxrt_str_to_long_valid(s)
-    }
-    if ok != 0 {
-        long v = 0l
-        unsafe {
-            v = duxrt_str_to_long_val(s)
-        }
-        return Option.Some(v)
-    }
-    return Option.None
-}
-
-# Parse s as a floating-point number.  Returns Option.Some(value) or Option.None.
-Option to_double(str s) {
-    int ok = 0
-    unsafe {
-        ok = duxrt_str_to_double_valid(s)
-    }
-    if ok != 0 {
-        double v = 0.0
-        unsafe {
-            v = duxrt_str_to_double_val(s)
-        }
-        return Option.Some(v)
-    }
-    return Option.None
-}

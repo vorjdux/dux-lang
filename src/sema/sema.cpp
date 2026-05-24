@@ -955,7 +955,6 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
                 {"trim",        TR::TID_STR},  {"trim_start",  TR::TID_STR},
                 {"trim_end",    TR::TID_STR},  {"repeat",      TR::TID_STR},
                 {"split",       TR::TID_LIST},
-                {"to_long",     TR::TID_UNKNOWN},{"to_double",  TR::TID_UNKNOWN},
             }},
             {"io",   {{"readline", TR::TID_STR}}},
         };
