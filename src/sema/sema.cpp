@@ -391,7 +391,7 @@ void Sema::check_class(const ast::ClassDecl& c) {
             if (fd->init) {
                 TypeId init_t = check_expr(**fd->init);
                 TypeId decl_t = type_from_te(fd->type);
-                require_assignable(init_t, decl_t, fd->loc,
+                require_assignable(init_t, decl_t, (*fd->init)->loc,
                                    "field '" + fd->name + "' initialiser");
             }
         }
@@ -1078,14 +1078,14 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
     if (sym->kind == SymKind::Function || sym->kind == SymKind::BuiltIn) {
         // Async functions must be called with 'await'
         if (sym->is_async && !in_await_) {
-            err(e.loc, "async function '" + sym->name + "' must be called with 'await'");
+            err(e.callee->loc, "async function '" + sym->name + "' must be called with 'await'");
         }
         if (!sym->params.empty() &&
             sym->params.size() != e.args.size()) {
             std::ostringstream os;
             os << "'" << sym->name << "' expects " << sym->params.size()
                << " argument(s), got " << e.args.size();
-            err(e.loc, os.str());
+            err(e.callee->loc, os.str());
         }
         // Check each argument type
         for (std::size_t i = 0; i < e.args.size(); ++i) {
