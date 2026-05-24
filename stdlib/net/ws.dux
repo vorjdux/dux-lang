@@ -1,0 +1,194 @@
+import option
+import result
+
+namespace ws {
+    extern "C" ptr  duxrt_ws_connect(str url, int use_tls_hint) ;
+    extern "C" str  duxrt_ws_last_error() ;
+    extern "C" void duxrt_ws_close(ptr ws) ;
+    extern "C" int  duxrt_ws_send_text(ptr ws, str msg) ;
+    extern "C" int  duxrt_ws_send_binary(ptr ws, str data) ;
+    extern "C" str  duxrt_ws_recv(ptr ws) ;
+    extern "C" ptr  duxrt_ws_listen(str host, int port) ;
+    extern "C" ptr  duxrt_ws_accept(ptr server) ;
+    extern "C" void duxrt_ws_server_close(ptr server) ;
+
+    # Return the last WebSocket error string.
+    str last_error() {
+        str r = ""
+        unsafe {
+            r = duxrt_ws_last_error()
+        }
+        return r
+    }
+}
+
+# ── WsConn — a single WebSocket connection ───────────────────────────────────
+class WsConn {
+    ptr _handle
+
+    WsConn(ptr h) {
+        this._handle = h
+    }
+
+    ~WsConn() {
+        if this._handle != null {
+            unsafe {
+                ws.duxrt_ws_close(this._handle)
+            }
+            this._handle = null
+        }
+    }
+
+    # True if the connection handle is still open.
+    bool is_open() {
+        return this._handle != null
+    }
+
+    # Send a UTF-8 text message.
+    # Returns Result.Ok(null) on success, Result.Err(reason) on failure.
+    Result send(str msg) {
+        int r = 0
+        unsafe {
+            r = ws.duxrt_ws_send_text(this._handle, msg)
+        }
+        if r != 0 {
+            str err = ""
+            unsafe {
+                err = ws.duxrt_ws_last_error()
+            }
+            return Result.Err("ws send error: " + err)
+        }
+        return Result.Ok(null)
+    }
+
+    # Send a binary message (payload as str bytes).
+    # Returns Result.Ok(null) on success, Result.Err(reason) on failure.
+    Result send_binary(str data) {
+        int r = 0
+        unsafe {
+            r = ws.duxrt_ws_send_binary(this._handle, data)
+        }
+        if r != 0 {
+            str err = ""
+            unsafe {
+                err = ws.duxrt_ws_last_error()
+            }
+            return Result.Err("ws send_binary error: " + err)
+        }
+        return Result.Ok(null)
+    }
+
+    # Receive the next message from the peer.
+    # Blocks until a message arrives.
+    # Returns Option.Some(msg) on success, Option.None on clean close or error.
+    Option recv() {
+        str msg = ""
+        unsafe {
+            msg = ws.duxrt_ws_recv(this._handle)
+        }
+        # duxrt_ws_recv returns "" on close or error.
+        if msg == "" {
+            return Option.None
+        }
+        return Option.Some(msg)
+    }
+
+    # Close the connection explicitly (sends a RFC 6455 close frame).
+    void close() {
+        if this._handle != null {
+            unsafe {
+                ws.duxrt_ws_close(this._handle)
+            }
+            this._handle = null
+        }
+    }
+}
+
+# ── WsServer — a WebSocket server that accepts client connections ─────────────
+class WsServer {
+    ptr _handle
+
+    WsServer(ptr h) {
+        this._handle = h
+    }
+
+    ~WsServer() {
+        if this._handle != null {
+            unsafe {
+                ws.duxrt_ws_server_close(this._handle)
+            }
+            this._handle = null
+        }
+    }
+
+    # True if the server socket is bound and listening.
+    bool is_open() {
+        return this._handle != null
+    }
+
+    # Block until a client connects and completes the WebSocket handshake.
+    # Returns a WsConn for the new connection (check is_open() for errors).
+    WsConn accept() {
+        ptr h = null
+        unsafe {
+            h = ws.duxrt_ws_accept(this._handle)
+        }
+        return new WsConn(h)
+    }
+
+    # Stop accepting connections and release the server socket.
+    void close() {
+        if this._handle != null {
+            unsafe {
+                ws.duxrt_ws_server_close(this._handle)
+            }
+            this._handle = null
+        }
+    }
+}
+
+# ── Top-level helpers ─────────────────────────────────────────────────────────
+
+# Connect to a WebSocket server at the given ws:// or wss:// URL.
+# Returns Result.Ok(WsConn) on success, Result.Err(reason) on failure.
+Result ws_connect(str url) {
+    ptr h = null
+    unsafe {
+        h = ws.duxrt_ws_connect(url, 0)
+    }
+    if h == null {
+        str reason = ""
+        unsafe {
+            reason = ws.duxrt_ws_last_error()
+        }
+        return Result.Err("WebSocket connect failed: " + reason)
+    }
+    return Result.Ok(new WsConn(h))
+}
+
+# Connect to a WebSocket server over TLS (forces wss://).
+# Returns Result.Ok(WsConn) on success, Result.Err(reason) on failure.
+Result ws_connect_tls(str url) {
+    ptr h = null
+    unsafe {
+        h = ws.duxrt_ws_connect(url, 1)
+    }
+    if h == null {
+        str reason = ""
+        unsafe {
+            reason = ws.duxrt_ws_last_error()
+        }
+        return Result.Err("WebSocket TLS connect failed: " + reason)
+    }
+    return Result.Ok(new WsConn(h))
+}
+
+# Start a WebSocket server listening on host:port.
+# Returns a WsServer (check is_open() to detect bind failures).
+WsServer ws_listen(str host, int port) {
+    ptr h = null
+    unsafe {
+        h = ws.duxrt_ws_listen(host, port)
+    }
+    return new WsServer(h)
+}

@@ -1,0 +1,54 @@
+import result
+
+namespace fmt {
+    extern "C" long duxrt_timefmt_parse(str s, str fmt_str) ;
+    extern "C" str  duxrt_date_format(long unix_ts, str fmt_str) ;
+
+    # ── Predefined format strings ─────────────────────────────────────────────
+    str ISO8601() {
+        return "%Y-%m-%dT%H:%M:%S"
+    }
+    str RFC2822() {
+        return "%a, %d %b %Y %H:%M:%S %Z"
+    }
+    str DATE_ONLY() {
+        return "%Y-%m-%d"
+    }
+    str TIME_ONLY() {
+        return "%H:%M:%S"
+    }
+    str DATETIME() {
+        return "%Y-%m-%d %H:%M:%S"
+    }
+
+    # Format a Unix timestamp using a strftime-style format string.
+    str format(long unix_ts, str fmt_str) {
+        str r = ""
+        unsafe {
+            r = duxrt_date_format(unix_ts, fmt_str)
+        }
+        return r
+    }
+
+    # Parse a date/time string. Returns Result.Ok(unix_ts) or Result.Err(message).
+    Result parse(str s, str fmt_str) {
+        long ts = 0
+        unsafe {
+            ts = duxrt_timefmt_parse(s, fmt_str)
+        }
+        if ts == -1 {
+            return Result.Err("failed to parse datetime '" + s + "' with format '" + fmt_str + "'")
+        }
+        return Result.Ok(ts)
+    }
+
+    # Format a Unix timestamp as ISO 8601 (YYYY-MM-DDTHH:MM:SS).
+    str to_iso(long unix_ts) {
+        return format(unix_ts, "%Y-%m-%dT%H:%M:%S")
+    }
+
+    # Parse an ISO 8601 string. Returns Result.Ok(unix_ts) or Result.Err(message).
+    Result from_iso(str s) {
+        return parse(s, "%Y-%m-%dT%H:%M:%S")
+    }
+}

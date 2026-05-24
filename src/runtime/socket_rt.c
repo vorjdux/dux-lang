@@ -369,3 +369,30 @@ int32_t duxrt_sock_leave_multicast(void* s, DuxStr* group_str) {
     if (r < 0) { sock_save_errno(); return -1; }
     return 0;
 }
+
+/* ── Unix domain socket helpers ──────────────────────────────────────────── */
+
+void duxrt_unix_unlink(DuxStr* path_str) {
+    if (!path_str) return;
+    unlink(duxrt_str_cstr(path_str));
+}
+
+int64_t duxrt_sock_send_to_unix(void* s, DuxStr* dest_str, DuxStr* data, int32_t flags) {
+    if (!s || !dest_str || !data) return -1;
+    DuxSocket* sock = (DuxSocket*)s;
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    const char* dest = duxrt_str_cstr(dest_str);
+    /* support Linux abstract namespace: leading \0 */
+    if (dest[0] == '\0') {
+        strncpy(addr.sun_path + 1, dest + 1, sizeof(addr.sun_path) - 2);
+    } else {
+        strncpy(addr.sun_path, dest, sizeof(addr.sun_path) - 1);
+    }
+    int64_t n = (int64_t)sendto(sock->fd,
+        duxrt_str_cstr(data), (size_t)data->len, (int)flags,
+        (struct sockaddr*)&addr, sizeof(addr));
+    if (n < 0) { sock_save_errno(); return -1; }
+    return n;
+}

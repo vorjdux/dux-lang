@@ -1822,6 +1822,44 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
     for (const auto& [name, init_ptr] : s.decls) {
         TypeId var_tid = decl_tid;
 
+        if (s.is_thread_local) {
+            // Thread-local module-scope variable: create a GlobalVariable with
+            // setThreadLocal(true) so LLVM emits the TLS attribute.  No IR
+            // builder insert block is required — this is a global declaration.
+            if (var_tid == TR::TID_UNKNOWN) var_tid = TR::TID_INT;
+            llvm::Type* t = lower_type(var_tid);
+            std::string gname = current_namespace_.empty()
+                                    ? name
+                                    : (current_namespace_ + "." + name);
+
+            // Resolve constant initializer (literal values only)
+            llvm::Constant* init_val = llvm::Constant::getNullValue(t);
+            if (init_ptr) {
+                if (auto* il = dynamic_cast<const ast::IntLitExpr*>(init_ptr.get()))
+                    init_val = llvm::ConstantInt::get(t,
+                        static_cast<uint64_t>(il->value), /*isSigned=*/true);
+                else if (auto* ll = dynamic_cast<const ast::LongLitExpr*>(init_ptr.get()))
+                    init_val = llvm::ConstantInt::get(t,
+                        static_cast<uint64_t>(ll->value), /*isSigned=*/true);
+                else if (auto* fl = dynamic_cast<const ast::FloatLitExpr*>(init_ptr.get()))
+                    init_val = llvm::ConstantFP::get(t, fl->value);
+                else if (auto* rl = dynamic_cast<const ast::RealLitExpr*>(init_ptr.get()))
+                    init_val = llvm::ConstantFP::get(t, rl->value);
+                else if (auto* bl = dynamic_cast<const ast::BoolLitExpr*>(init_ptr.get()))
+                    init_val = llvm::ConstantInt::get(t, bl->value ? 1 : 0);
+                // StringLitExpr and NullLitExpr: leave as NullValue (zero-init)
+            }
+
+            auto* gv = new llvm::GlobalVariable(
+                *mod_, t, /*isConstant=*/s.is_const,
+                llvm::GlobalValue::InternalLinkage,
+                init_val, gname);
+            gv->setThreadLocal(true);
+            alloca_type_[gv] = t;
+            env_define(name, gv, var_tid);
+            continue;
+        }
+
         if (s.is_static) {
             // Static local variable: module-level global with once-only init guard
             // Use __cxa_guard_acquire/__cxa_guard_release for thread-safe initialization.

@@ -1,0 +1,9 @@
+int compute() {
+    return 42
+}
+
+thread_local int bad = compute()
+
+int main() {
+    return 0
+}

@@ -266,6 +266,7 @@ int64_t  duxrt_date_weekday(int64_t unix_ts);
 int64_t  duxrt_date_to_unix(int64_t y, int64_t mo, int64_t d, int64_t h, int64_t mi, int64_t s);
 DuxStr*  duxrt_date_format(int64_t unix_ts, DuxStr* fmt);
 DuxStr*  duxrt_date_iso(int64_t unix_ts);
+int64_t  duxrt_timefmt_parse(DuxStr* s, DuxStr* fmt);
 
 /* ── System / Environment / Args ─────────────────────────────────────────── */
 void     duxrt_sys_init(int argc, char** argv);
@@ -445,6 +446,8 @@ DuxStr* duxrt_sock_peer_addr(void* s);
 DuxStr* duxrt_sock_local_addr(void* s);
 int32_t duxrt_sock_join_multicast(void* s, DuxStr* group);
 int32_t duxrt_sock_leave_multicast(void* s, DuxStr* group);
+void    duxrt_unix_unlink(DuxStr* path);
+int64_t duxrt_sock_send_to_unix(void* s, DuxStr* dest, DuxStr* data, int32_t flags);
 
 /* ── net.tls — OpenSSL TLS wrappers ──────────────────────────────────────── */
 void*   duxrt_tls_ctx_new_client(void);
@@ -480,6 +483,17 @@ void    duxrt_http_req_free(void* req);
 DuxStr* duxrt_http_format_response(int32_t status, DuxStr* status_text,
                                     void* headers_dict, DuxStr* body);
 
+/* ── net.ws — RFC 6455 WebSocket client and server ───────────────────────── */
+void*   duxrt_ws_connect(DuxStr* url, int32_t use_tls_hint);
+DuxStr* duxrt_ws_last_error(void);
+void    duxrt_ws_close(void* ws);
+int32_t duxrt_ws_send_text(void* ws, DuxStr* msg);
+int32_t duxrt_ws_send_binary(void* ws, DuxStr* data);
+DuxStr* duxrt_ws_recv(void* ws);
+void*   duxrt_ws_listen(DuxStr* host, int32_t port);
+void*   duxrt_ws_accept(void* server);
+void    duxrt_ws_server_close(void* server);
+
 /* ── Future (async/await Phase 2) ───────────────────────────────────────── */
 void*   duxrt_future_new(void);
 void    duxrt_future_retain(void* fut);     /* increment ref count */
@@ -506,6 +520,9 @@ int32_t duxrt_achan_try_send(void* ch, void* val);  /* 1=sent, 0=full/closed */
 void*   duxrt_achan_try_recv(void* ch);              /* NULL if empty         */
 void    duxrt_achan_send(void* ch, void* val);       /* blocks until space    */
 void*   duxrt_achan_recv(void* ch);                  /* blocks; NULL=closed+empty */
+
+/* ── Thread-local storage (TLS) ──────────────────────────────────────────── */
+void duxrt_tls_register_dtor(void* key, void (*dtor)(void*));
 
 /* ── Exceptions ──────────────────────────────────────────────────────────── */
 typedef struct DuxException {

@@ -59,9 +59,11 @@ add_library(duxrt STATIC
     src/runtime/fs_rt.c
     src/runtime/file_rt.c
     src/runtime/time_rt.c
+    src/runtime/timefmt_rt.c
     src/runtime/sys_rt.c
     src/runtime/random_rt.c
     src/runtime/thread_rt.c
+    src/runtime/tls_rt.c
     src/runtime/process_rt.c
     src/runtime/signal_rt.c
     src/runtime/bytes_rt.c
@@ -70,6 +72,7 @@ add_library(duxrt STATIC
     src/runtime/socket_rt.c
     src/runtime/net_tls.c
     src/runtime/net_http.c
+    src/runtime/ws_rt.c
     src/runtime/async_rt.c
     src/runtime/achan_rt.c
     src/runtime/future_rt.c
@@ -124,6 +127,8 @@ if(LLVM_CLANG_EXE AND LLVM_LINK_EXE)
         src/runtime/dict.c
         src/runtime/range.c
         src/runtime/math_rt.c
+        src/runtime/tls_rt.c
+        src/runtime/ws_rt.c
     )
 
     set(DUXRT_BC_DIR "${CMAKE_CURRENT_BINARY_DIR}/runtime_bc")
