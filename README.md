@@ -981,8 +981,10 @@ C++ gets from header-only implementation.
 | `-g` | Emit DWARF debug information |
 | `--dump-ast` | Print the parsed AST |
 
-See [`docs/spec.md`](docs/spec.md) for the full language specification and
+See [`docs/spec.md`](docs/spec.md) for the full language specification,
+[`docs/grammar.md`](docs/grammar.md) for the formal EBNF grammar, and
 [`docs/stdlib/`](docs/stdlib/) for the standard library API reference.
+Contributors: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 
