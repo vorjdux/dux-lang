@@ -58,6 +58,7 @@ Options:
   --emit-ir       Emit LLVM IR (to -o path or stdout)
   --emit-obj      Emit native object file (requires -o path)
   --compile       Compile to a runnable native executable
+  --repl          Start an interactive REPL session
   -o <path>       Output path
   -O0/-O1/-O2/-O3 Optimisation level (default -O0)
   -g              Emit DWARF debug information
@@ -76,7 +77,37 @@ Options:
 
 # Check for semantic errors only
 ./build/dux --check examples/design.dux
+
+# Start an interactive REPL session
+./build/dux --repl
 ```
+
+### REPL
+
+Start an interactive session with `--repl`:
+
+```
+$ ./build/dux --repl
+Dux REPL -- type :help for commands, :q to quit
+dux> int square(int x) { return x * x; }
+OK
+dux> println(square(7))
+49
+dux> println("Hello!")
+Hello!
+dux> :q
+```
+
+Declarations (functions, classes, enums) are accumulated and remain available for subsequent statements. Statements are compiled and executed immediately.
+
+REPL commands:
+
+| Command | Description |
+|---------|-------------|
+| `:q` / `:quit` | Exit the REPL |
+| `:help` | Show help |
+| `:clear` | Reset accumulated declarations |
+| `:context` | Show accumulated declarations |
 
 ## Run tests
 
