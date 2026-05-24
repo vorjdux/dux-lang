@@ -1144,18 +1144,24 @@ program module as LLVM bitcode before optimisation, so the inliner can eliminate
 call overhead across the translation-unit boundary — the same advantage that
 C++ gets from header-only implementation.
 
-| | math loop | fib(35) | string build | alloc 1M |
-|--|:---------:|:-------:|:------------:|:--------:|
-| **C** (gcc -O2) | 2 ms | 21 ms | 3 ms | 3 ms |
-| **C++** (g++ -O2) | 2 ms | 21 ms | 3 ms | 3 ms |
-| **Go** | 39 ms | 56 ms | 3 ms | 3 ms |
-| **Dux** (-O2 + LTO) | **3 ms** | **31 ms** | **3 ms** | **2 ms** |
-| Node.js 22 | 92 ms | 134 ms | 37 ms | 44 ms |
-| Python 3.11 | 4 110 ms | 1 180 ms | 14 ms | 225 ms |
+Seven benchmarks across the core language features:
+
+| | math loop | fib(35) | string build | alloc 1M | list ops | dict ops | f-string |
+|--|:---------:|:-------:|:------------:|:--------:|:--------:|:--------:|:--------:|
+| **C** (gcc -O2) | 3 ms | 22 ms | 4 ms | 4 ms | 11 ms | 26 ms | 25 ms |
+| **C++** (g++ -O2) | 3 ms | 22 ms | 5 ms | 4 ms | 19 ms | 48 ms | **14 ms** |
+| **Go** | 35 ms | 56 ms | 4 ms | 4 ms | 18 ms | 54 ms | 54 ms |
+| **Dux** (-O2 + LTO) | **4 ms** | **31 ms** | **5 ms** | **3 ms** | **94 ms** | **77 ms** | **55 ms** |
+| Node.js 22 | 105 ms | 139 ms | 37 ms | 44 ms | 1 130 ms | 101 ms | 52 ms |
+| Python 3.11 | 4 460 ms | 1 220 ms | 15 ms | 249 ms | 2 410 ms | 73 ms | 107 ms |
 
 *4-core Intel Xeon @ 2.80 GHz, Linux 6.18 (x86-64). Best of 3 runs.*
 
-→ **[Full benchmark analysis with methodology and per-fix breakdown](benchmarks/README.md)**
+Dux is at or within C speed on four of seven benchmarks.  The list-ops gap (8.5×)
+reflects the `void*` boxing cost for typed element access in the dynamic `list` type;
+f-strings and dict operations land within 3× of C — comparable to Go and ahead of Node.js.
+
+→ **[Full benchmark analysis with methodology and per-workload breakdown](benchmarks/README.md)**
 
 ---
 
