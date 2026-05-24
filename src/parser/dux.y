@@ -990,6 +990,14 @@ match_pattern
             p.bool_value = $1;
             $$ = std::move(p);
         }
+    | STRING
+        {
+            /* string literal pattern: match "keyword" => { ... } */
+            MatchPattern p; p.loc = sl(@$, driver);
+            p.kind = MatchPattern::Kind::StrLit;
+            p.str_value = $1;
+            $$ = std::move(p);
+        }
     | IDENT
         {
             /* bare identifier: "_" is wildcard, any other name is also wildcard for now
