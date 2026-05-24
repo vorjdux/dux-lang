@@ -32,6 +32,8 @@ Sema::Sema(Driver& driver) : driver_(driver) {
     builtin("double",   TR::TID_DOUBLE, {{"x", TR::TID_OBJECT}});
     builtin("range",    TR::TID_LIST, {{"end", TR::TID_INT}});
     builtin("assert",   TR::TID_VOID, {{"cond", TR::TID_BOOL}});
+    /* Synthetic built-in used by f-string desugaring — converts any value to str */
+    builtin("__fstr_to_str", TR::TID_STR, {{"x", TR::TID_OBJECT}});
 
     // Built-in root class symbols (so classes can extend them without error)
     auto builtin_class = [&](const std::string& name, TypeId tid) {

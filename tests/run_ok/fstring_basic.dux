@@ -1,0 +1,12 @@
+void main() {
+    str name = "World"
+    int x = 42
+    println(f"Hello {name}! x={x}")
+    str a = "foo"
+    str b = "bar"
+    println(f"{a}{b}")
+    int n = 7
+    println(f"n squared is {n * n}")
+    bool flag = true
+    println(f"flag={flag}")
+}
