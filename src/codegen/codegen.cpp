@@ -1316,8 +1316,13 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
             auto* get_fn = get_or_declare_rt("duxrt_list_get",
                 ptr_type(), {ptr_type(), llvm::Type::getInt64Ty(*ctx_)});
             Value* elem = builder_->CreateCall(get_fn, {list_v, idx_body}, "elem");
-            if (var_t == ptr_type())
-                builder_->CreateStore(elem, var_alloca);
+            // Always store element into var_alloca, unboxing to the declared
+            // element type when needed (e.g. int elements stored via box_to_ptr).
+            {
+                Value* elem_to_store = (elem->getType() != var_t)
+                    ? coerce_to_llvm_type(elem, var_t) : elem;
+                builder_->CreateStore(elem_to_store, var_alloca);
+            }
 
             loop_stack_.push_back({incr_bb, exit_bb, pending_label_});
             pending_label_.clear();
@@ -1480,7 +1485,14 @@ int Codegen::enum_max_payload_arity(const sema::TypeInfo& ti) const {
 
 llvm::Value* Codegen::box_to_ptr(llvm::Value* v) {
     if (v->getType()->isPointerTy()) return v;
+    // float (f32): bitcast bits to i32, zero-extend to i64, then IntToPtr
+    if (v->getType()->isFloatTy()) {
+        Value* i32  = builder_->CreateBitCast(v, llvm::Type::getInt32Ty(*ctx_));
+        Value* ext  = builder_->CreateZExt(i32, llvm::Type::getInt64Ty(*ctx_));
+        return builder_->CreateIntToPtr(ext, ptr_type());
+    }
     if (v->getType()->isIntegerTy()) {
+        // Zero-extend booleans/i8/i16/i32 to i64, then pack into pointer bits
         Value* ext = builder_->CreateZExt(v, llvm::Type::getInt64Ty(*ctx_));
         return builder_->CreateIntToPtr(ext, ptr_type());
     }
@@ -1494,6 +1506,12 @@ llvm::Value* Codegen::box_to_ptr(llvm::Value* v) {
 
 llvm::Value* Codegen::unbox_from_ptr(llvm::Value* v, llvm::Type* target) {
     if (target->isPointerTy()) return v;
+    // float (f32): PtrToInt → i64 → trunc to i32 → bitcast to f32
+    if (target->isFloatTy()) {
+        Value* i64 = builder_->CreatePtrToInt(v, llvm::Type::getInt64Ty(*ctx_));
+        Value* i32 = builder_->CreateTrunc(i64, llvm::Type::getInt32Ty(*ctx_));
+        return builder_->CreateBitCast(i32, target);
+    }
     if (target->isIntegerTy()) {
         Value* i64 = builder_->CreatePtrToInt(v, llvm::Type::getInt64Ty(*ctx_));
         return builder_->CreateTrunc(i64, target);
@@ -2042,7 +2060,7 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
                 else if (var_tid == TR::TID_DICT)
                     init_val = maybe_retain_dict(init_val);
                 if (init_val->getType() != t)
-                    init_val = coerce(init_val, decl_tid, var_tid);
+                    init_val = coerce_to_llvm_type(init_val, t);
                 builder_->CreateStore(init_val, alloca);
             } else {
                 builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
@@ -2232,6 +2250,44 @@ Value* Codegen::gen_assign(const ast::AssignExpr& e) {
                     return emit_call(mi.fn, {obj_v, rval});
                 }
             }
+        }
+    }
+
+    // List index assignment: list[i] = val  →  duxrt_list_set(list, i, box(val))
+    // Dict index assignment: dict["k"] = val →  duxrt_dict_set(dict, cstr(k), box(val))
+    // Must be handled before lvalue_of() because lvalue_of returns nullptr for
+    // collection index expressions (they have no simple alloca lvalue).
+    if (auto* idx_target = dynamic_cast<const ast::IndexExpr*>(e.target.get())) {
+        TypeId obj_tid = type_id_of(*idx_target->object);
+        if (obj_tid == TR::TID_LIST) {
+            Value* obj  = gen_expr(*idx_target->object);
+            Value* ki   = gen_expr(*idx_target->index);
+            Value* rhs  = gen_expr(*e.value);
+            Value* idx64 = builder_->CreateSExt(ki, llvm::Type::getInt64Ty(*ctx_));
+            auto* set_fn = get_or_declare_rt("duxrt_list_set",
+                llvm::Type::getVoidTy(*ctx_),
+                {ptr_type(), llvm::Type::getInt64Ty(*ctx_), ptr_type()});
+            builder_->CreateCall(set_fn, {obj, idx64, box_to_ptr(rhs)});
+            return rhs;
+        }
+        if (obj_tid == TR::TID_DICT) {
+            Value* obj  = gen_expr(*idx_target->object);
+            Value* key  = gen_expr(*idx_target->index);
+            Value* rhs  = gen_expr(*e.value);
+            TypeId k_tid = type_id_of(*idx_target->index);
+            Value* char_key;
+            if (k_tid == TR::TID_STR) {
+                auto* cstr_fn = get_or_declare_rt("duxrt_str_cstr",
+                    ptr_type(), {ptr_type()});
+                char_key = builder_->CreateCall(cstr_fn, {key});
+            } else {
+                char_key = box_to_ptr(key);
+            }
+            auto* set_fn = get_or_declare_rt("duxrt_dict_set",
+                llvm::Type::getVoidTy(*ctx_),
+                {ptr_type(), ptr_type(), ptr_type()});
+            builder_->CreateCall(set_fn, {obj, char_key, box_to_ptr(rhs)});
+            return rhs;
         }
     }
 
@@ -2645,6 +2701,12 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
                 Value* v = builder_->CreateCall(fn, {arg});
                 return builder_->CreateTrunc(v, i32);
             }
+            if (arg_tid == TR::TID_DICT) {
+                auto* fn = get_or_declare_rt("duxrt_dict_len",
+                    llvm::Type::getInt64Ty(*ctx_), {ptr_type()});
+                Value* v = builder_->CreateCall(fn, {arg});
+                return builder_->CreateTrunc(v, i32);
+            }
             // str and fallback
             auto* fn = get_or_declare_rt("duxrt_str_length",
                 llvm::Type::getInt64Ty(*ctx_), {ptr_type()});
@@ -2969,12 +3031,11 @@ Value* Codegen::gen_list(const ast::ListExpr& e) {
         llvm::Type::getVoidTy(*ctx_), {ptr_type(), ptr_type()});
     for (const auto& elem : e.elements) {
         Value* v = gen_expr(*elem);
-        // box primitive to ptr (simplified: store on heap via alloca then ptr)
-        if (!v->getType()->isPointerTy()) {
-            Value* box = make_alloca(v->getType(), "box");
-            builder_->CreateStore(v, box);
-            v = box;
-        }
+        // Pack primitives directly into the void* slot via box_to_ptr.
+        // This avoids stack-alloca boxing (which produced dangling pointers
+        // after the function returned).  Pointers (str, class, list, dict) are
+        // passed through unchanged.
+        v = box_to_ptr(v);
         builder_->CreateCall(push_fn, {list, v});
     }
     return list;
@@ -2989,20 +3050,18 @@ Value* Codegen::gen_dict(const ast::DictExpr& e) {
     for (const auto& [k, v] : e.pairs) {
         Value* kv = gen_expr(*k);
         Value* vv = gen_expr(*v);
-        // Dict keys are stored as char*; extract from DuxStr if needed.
+        // Dict keys must be char*.  Convert DuxStr* keys to cstr; leave other
+        // pointer keys unchanged.  Non-pointer key types are unsupported (dict
+        // always uses string keys) — pass through box_to_ptr which will at
+        // least avoid a dangling stack pointer.
         TypeId k_tid = type_id_of(*k);
         if (k_tid == TR::TID_STR)
             kv = builder_->CreateCall(cstr_fn, {kv});
-        else if (!kv->getType()->isPointerTy()) {
-            Value* box = make_alloca(kv->getType(), "kbox");
-            builder_->CreateStore(kv, box);
-            kv = box;
-        }
-        if (!vv->getType()->isPointerTy()) {
-            Value* box = make_alloca(vv->getType(), "vbox");
-            builder_->CreateStore(vv, box);
-            vv = box;
-        }
+        else
+            kv = box_to_ptr(kv);
+        // Values are stored as void*; use box_to_ptr so primitives are packed
+        // into the pointer word rather than stored on the stack.
+        vv = box_to_ptr(vv);
         builder_->CreateCall(set_fn, {dict, kv, vv});
     }
     return dict;
@@ -3650,6 +3709,10 @@ Value* Codegen::coerce_to_llvm_type(Value* v, llvm::Type* pt) {
         return builder_->CreateSIToFP(v, pt);
     if (pt->isIntegerTy() && v->getType()->isFloatingPointTy())
         return builder_->CreateFPToSI(v, pt);
+    // Unbox void* → primitive: handles list[i] / dict["k"] used in typed context.
+    // box_to_ptr packed the value into pointer bits; unbox_from_ptr reverses that.
+    if (v->getType()->isPointerTy() && !pt->isPointerTy())
+        return unbox_from_ptr(v, pt);
     return v;
 }
 
