@@ -1,44 +1,63 @@
 # stdlib: str
 
-String operations are built into Dux. No import is required.
+String operations are built into Dux.  No import is required for the `str` type
+or the `f"..."` interpolation syntax.  The `str` module adds extended methods;
+import it with `import str`.
 
 ---
 
 ## The `str` Type
 
-String literals are delimited by double quotes. The type name is `str`.
+String literals are delimited by double quotes.
 
 ```dux
 str s = "hello"
+str t = 'world'   # single-quote form is also valid
 ```
 
-Strings are null-terminated byte arrays managed by the runtime. All string
-operations that produce a new string allocate fresh memory via `duxrt_alloc`.
+Strings are reference-counted heap values (see [`docs/memory_model.md`](../memory_model.md)).
+The compiler inserts retain/release calls automatically; you never call `free` on a
+string manually.
+
+Short strings (≤ 63 bytes) are stored inline in the `DuxStr` header;
+longer strings use a separately heap-allocated buffer.  In both cases the
+programmer-visible semantics are the same.
 
 ---
 
 ## String Interpolation (f-strings)
 
-F-strings allow expressions to be embedded directly inside a string literal
-using `{expr}` placeholders. Prefix the opening quote with `f`:
+The `f"..."` syntax embeds arbitrary expressions directly in a string literal.
+Expressions are enclosed in `{` `}`:
 
 ```dux
-str name = "Dux"
-int year  = 2026
-
-str s1 = f"Hello, {name}!"                   # "Hello, Dux!"
-str s2 = f"Year: {year}, next: {year + 1}"   # "Year: 2026, next: 2027"
-str s3 = f"2 + 2 = {2 + 2}"                  # "2 + 2 = 4"
+str name = "World"
+int x = 42
+println(f"Hello {name}! x={x}")        # Hello World! x=42
+println(f"{x} squared = {x * x}")      # 42 squared = 1764
+println(f"positive = {x > 0}")         # positive = true
 ```
 
-Any expression whose type is convertible to `str` may appear inside `{ }`.
-F-strings are desugared at compile time into a sequence of `str` concatenation
-operations — there is no runtime interpretation overhead.
+**Conversion rules:**
 
-To emit a literal `{` character in an f-string, escape it as `\{`:
+| Expression type | Result in the string |
+|---|---|
+| `str` | the string itself |
+| `int` / `long` | decimal integer (`42` → `"42"`) |
+| `double` / `real` | decimal float (`3.14` → `"3.14"`) |
+| `bool` | `"true"` or `"false"` |
+
+Escape a literal brace with `\{`:
 
 ```dux
-str s = f"set literal: \{1, 2, 3\}"   # "set literal: {1, 2, 3}"
+println(f"set = \{1, 2, 3\}")   # set = {1, 2, 3}
+```
+
+F-strings can be nested in larger string expressions via `+`:
+
+```dux
+str prefix = "Result"
+str msg = prefix + ": " + f"{x * x}"
 ```
 
 ---
@@ -53,8 +72,6 @@ The `+` operator concatenates two strings and returns a new `str`.
 str greeting = "hello" + ", world"   # "hello, world"
 ```
 
-Backed by `duxrt_str_concat(const char* a, const char* b)`.
-
 ### Equality
 
 The `==` operator compares two strings by value (not by pointer).
@@ -63,8 +80,6 @@ The `==` operator compares two strings by value (not by pointer).
 "foo" == "foo"   # true
 "foo" == "bar"   # false
 ```
-
-Backed by `duxrt_str_eq(const char* a, const char* b)`.
 
 ---
 

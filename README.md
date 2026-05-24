@@ -131,6 +131,11 @@ void main() {
 
     println(name)
 
+    # String interpolation (f-strings)
+    int x = 42
+    println(f"Hello {name}! x={x}")            # Hello Dux! x=42
+    println(f"sqrt(2) = {math.sqrt(2.0)}")     # sqrt(2) = 1.41421356...
+
     # Lambdas
     auto sq = fn(int n) -> int => n * n
     println(sq(7))   # 49
@@ -159,29 +164,6 @@ More examples in [`examples/`](examples/), including the full language showcase 
 > one-liner block body you must add an explicit `;` before the `}`.
 > All examples in this document follow these rules.
 
-### Strings and string interpolation
-
-String literals use double quotes. Strings support standard C escape sequences.
-
-```dux
-str name = "Dux"
-str msg  = "Hello, " + name + "!"   # concatenation with +
-```
-
-**F-strings** (format strings) embed expressions directly inside a string using
-`{expr}` interpolation. Prefix the opening quote with `f`:
-
-```dux
-str name = "Dux"
-int year  = 2026
-str s1 = f"Hello, {name}!"                   # "Hello, Dux!"
-str s2 = f"Year: {year}, next: {year + 1}"   # "Year: 2026, next: 2027"
-str s3 = f"2 + 2 = {2 + 2}"                  # "2 + 2 = 4"
-```
-
-Any expression that produces a value convertible to `str` may appear inside `{ }`.
-Nested braces are not permitted; use a temporary variable for complex sub-expressions.
-
 ### Types
 
 | Type | Description |
@@ -192,8 +174,8 @@ Nested braces are not permitted; use a temporary variable for complex sub-expres
 | `real` | 32-bit float |
 | `bool` | boolean (`true` / `false`) |
 | `str` | reference-counted string (hybrid inline/heap allocation) |
-| `list` | dynamic array (reference-counted; freed automatically via RAII when the last reference drops) |
-| `dict` | hash map (reference-counted; freed automatically via RAII when the last reference drops) |
+| `list` | reference-counted dynamic array (stores any type) |
+| `dict` | reference-counted hash map (string keys, any-type values) |
 | `ptr` | raw pointer (for C FFI / unsafe code) |
 | `object` | base type for heap-allocated class instances |
 | `void` | no value (function return) |
@@ -260,6 +242,40 @@ int counter() {
     return n
 }
 ```
+
+### Strings and string interpolation
+
+String literals are enclosed in double quotes.  Dux strings are reference-counted
+heap values; no explicit `free` is needed.
+
+```dux
+str greeting = "Hello, world!"
+str combined = greeting + " More text."
+```
+
+**f-strings** (string interpolation) embed arbitrary expressions directly inside
+a string literal using `f"...{expr}..."` syntax.  Any expression is valid between
+`{` and `}`, including arithmetic, function calls, and boolean logic:
+
+```dux
+str name = "Dux"
+int n    = 7
+
+println(f"Hello, {name}!")          # Hello, Dux!
+println(f"{n} squared = {n * n}")   # 7 squared = 49
+println(f"flag = {n > 0}")          # flag = true
+```
+
+The result of each `{expr}` is converted to a string automatically:
+
+| Expression type | Conversion |
+|---|---|
+| `str` | used as-is |
+| `int` / `long` | decimal representation |
+| `double` / `real` | decimal representation |
+| `bool` | `"true"` or `"false"` |
+
+Escape `{` with `\{` to include a literal brace in an f-string.
 
 ### Operators
 
@@ -349,6 +365,15 @@ for int i in 0..<3 {
 # range(n) — equivalent to 0..<n
 for int i in range(3) {
     println(i)
+}
+```
+
+#### for — iterating a list
+
+```dux
+list nums = [10, 20, 30]
+for int v in nums {
+    println(v)   # 10, 20, 30
 }
 ```
 
@@ -525,6 +550,90 @@ int apply(fn(int) -> int f, int x) {
 }
 println(apply(sq, 6))   # 36
 ```
+
+### Lists
+
+`list` is a reference-counted dynamic array that can store any type — primitives,
+strings, or class instances.  No explicit memory management is needed; the list
+is freed automatically at scope exit (RAII).
+
+```dux
+# Create a list
+list nums = [10, 20, 30]
+
+# Read elements (typed retrieval)
+int a = nums[0]    # 10
+int b = nums[2]    # 30
+
+# Mutate elements
+nums[1] = 99
+
+# Length
+println(len(nums))   # 3
+
+# List of strings
+list names = ["Alice", "Bob", "Carol"]
+str first = names[0]   # Alice
+
+# List of class instances
+list pts = [new Point(1, 2), new Point(3, 4)]
+Point p = pts[0]
+
+# Iterate
+for int v in nums {
+    println(v)
+}
+
+# Concatenate two lists into a new one
+list a = [1, 2]
+list b = [3, 4]
+# list c = a + b   # returns a new list [1, 2, 3, 4]
+```
+
+**Ownership:** `list y = x` increments the reference count — both variables refer
+to the same list.  Each goes out of scope independently and decrements the count;
+the list is freed when the count reaches zero.
+
+```dux
+list x = ["hello", "world"]
+list y = x            # refcount → 2
+delete x              # refcount → 1; y still valid
+println(y[0])         # hello
+# y released by RAII at end of scope (refcount → 0, freed)
+```
+
+`delete list_var` releases the reference immediately and nulls the slot;
+subsequent RAII cleanup at scope exit is a safe no-op.
+
+### Dicts
+
+`dict` is a reference-counted hash map with string keys and any-type values.
+Like `list`, it is freed automatically at scope exit (RAII).
+
+```dux
+# Create a dict
+dict d = {"name": "Dux", "version": "0.1"}
+
+# Read a value (typed retrieval)
+str name = d["name"]     # Dux
+
+# Assign / add entries
+d["author"] = "team"
+
+# Check length
+println(len(d))   # 3
+
+# Dict with integer values
+dict scores = {"alice": 95, "bob": 87}
+int alice_score = scores["alice"]   # 95
+scores["bob"] = 90
+
+# Delete a key (runtime)
+# duxrt_dict_del is available via extern for advanced use
+```
+
+**Ownership semantics** are the same as `list`: assignment shares the reference,
+`delete` releases early, RAII frees at scope exit.
 
 ### Enums
 
@@ -997,6 +1106,33 @@ sb.append("world")
 str result = sb.build()
 println(result)   # hello, world
 ```
+
+---
+
+## Memory and ownership
+
+Dux uses a combination of automatic reference counting and RAII for memory safety
+without a garbage collector.
+
+| Type | Allocation | Release |
+|---|---|---|
+| `int`, `long`, `double`, `real`, `bool` | stack / register | automatic (scope exit) |
+| `str` | heap, reference-counted | automatic (RAII) |
+| `list` | heap, reference-counted | automatic (RAII) |
+| `dict` | heap, reference-counted | automatic (RAII) |
+| class instances | heap (`new`) | RAII destructor or `delete` |
+
+`list` and `dict` values are reference-counted with atomic counters so they can be
+shared safely across threads.  Assigning a list to another variable increments the
+count; the list is freed when the count reaches zero (last variable goes out of
+scope or is `delete`d).
+
+`delete` is optional for `list` and `dict` — use it only for **early release**
+(e.g. freeing a large list before a long computation).  If `delete` is called,
+RAII at scope exit is a safe no-op (the slot is nulled, and the null check skips
+the release).
+
+See [`docs/memory_model.md`](docs/memory_model.md) for the full specification.
 
 ---
 
