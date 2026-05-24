@@ -1,3 +1,34 @@
+# stdlib/str.dux — String utilities
+#
+# Core operations:
+#   str.concat(a, b)           → str
+#   str.from_int(n)            → str   (long)
+#   str.from_double(x)         → str
+#   str.length(s)              → long
+#   str.slice(s, start, end)   → str
+#   str.index(s, i)            → str   (single char)
+#   str.eq(a, b)               → bool
+#
+# Extended operations (new):
+#   str.ord(c)                 → long  (ASCII code point of first byte)
+#   str.chr(code)              → str   (single char from code point)
+#   str.cmp(a, b)              → int   (-1, 0, or 1)
+#   str.contains(s, needle)    → bool
+#   str.find(s, needle)        → long  (first index, or -1)
+#   str.rfind(s, needle)       → long  (last index, or -1)
+#   str.starts_with(s, prefix) → bool
+#   str.ends_with(s, suffix)   → bool
+#   str.replace(s, from, to)   → str   (first occurrence)
+#   str.replace_all(s, from, to) → str
+#   str.to_upper(s)            → str
+#   str.to_lower(s)            → str
+#   str.trim(s)                → str
+#   str.trim_start(s)          → str
+#   str.trim_end(s)            → str
+#   str.repeat(s, n)           → str   (n: long)
+#   str.split(s, sep)          → list  (list of str)
+
+# ── Core C bindings ───────────────────────────────────────────────────────────
 extern "C" ptr duxrt_str_concat(ptr a, ptr b)
 extern "C" ptr duxrt_str_from_int(long n)
 extern "C" ptr duxrt_str_from_double(double x)
@@ -5,6 +36,27 @@ extern "C" long duxrt_str_length(ptr s)
 extern "C" ptr duxrt_str_slice(ptr s, long start, long end)
 extern "C" ptr duxrt_str_index(ptr s, long i)
 extern "C" int duxrt_str_eq(ptr a, ptr b)
+
+# ── Extended C bindings ───────────────────────────────────────────────────────
+extern "C" long duxrt_str_ord(ptr s)
+extern "C" ptr duxrt_str_chr(long code)
+extern "C" int duxrt_str_cmp(ptr a, ptr b)
+extern "C" int duxrt_str_contains(ptr haystack, ptr needle)
+extern "C" long duxrt_str_find(ptr haystack, ptr needle)
+extern "C" long duxrt_str_rfind(ptr haystack, ptr needle)
+extern "C" int duxrt_str_starts_with(ptr s, ptr prefix)
+extern "C" int duxrt_str_ends_with(ptr s, ptr suffix)
+extern "C" ptr duxrt_str_replace(ptr s, ptr needle, ptr repl)
+extern "C" ptr duxrt_str_replace_all(ptr s, ptr needle, ptr repl)
+extern "C" ptr duxrt_str_to_upper(ptr s)
+extern "C" ptr duxrt_str_to_lower(ptr s)
+extern "C" ptr duxrt_str_trim(ptr s)
+extern "C" ptr duxrt_str_trim_start(ptr s)
+extern "C" ptr duxrt_str_trim_end(ptr s)
+extern "C" ptr duxrt_str_repeat(ptr s, long n)
+extern "C" ptr duxrt_str_split(ptr s, ptr sep)
+
+# ── Core wrappers ─────────────────────────────────────────────────────────────
 
 str concat(str a, str b) {
     str result = ""
@@ -61,3 +113,159 @@ bool eq(str a, str b) {
     }
     return result != 0
 }
+
+# ── Extended wrappers ─────────────────────────────────────────────────────────
+
+# Return the ASCII code point of the first byte of c (0 if empty).
+long ord(str c) {
+    long result = 0l
+    unsafe {
+        result = duxrt_str_ord(c)
+    }
+    return result
+}
+
+# Return a one-character string for the given ASCII code point.
+str chr(long code) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_chr(code)
+    }
+    return result
+}
+
+# Lexicographic comparison: -1, 0, or 1.
+int cmp(str a, str b) {
+    int result = 0
+    unsafe {
+        result = duxrt_str_cmp(a, b)
+    }
+    return result
+}
+
+# Return true if s contains needle as a substring.
+bool contains(str s, str needle) {
+    int result = 0
+    unsafe {
+        result = duxrt_str_contains(s, needle)
+    }
+    return result != 0
+}
+
+# Return the first index of needle in s, or -1 if not found.
+long find(str s, str needle) {
+    long result = -1l
+    unsafe {
+        result = duxrt_str_find(s, needle)
+    }
+    return result
+}
+
+# Return the last index of needle in s, or -1 if not found.
+long rfind(str s, str needle) {
+    long result = -1l
+    unsafe {
+        result = duxrt_str_rfind(s, needle)
+    }
+    return result
+}
+
+# Return true if s starts with prefix.
+bool starts_with(str s, str prefix) {
+    int result = 0
+    unsafe {
+        result = duxrt_str_starts_with(s, prefix)
+    }
+    return result != 0
+}
+
+# Return true if s ends with suffix.
+bool ends_with(str s, str suffix) {
+    int result = 0
+    unsafe {
+        result = duxrt_str_ends_with(s, suffix)
+    }
+    return result != 0
+}
+
+# Replace the first occurrence of needle with repl.
+str replace(str s, str needle, str repl) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_replace(s, needle, repl)
+    }
+    return result
+}
+
+# Replace every occurrence of needle with repl.
+str replace_all(str s, str needle, str repl) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_replace_all(s, needle, repl)
+    }
+    return result
+}
+
+# Return an uppercased copy (ASCII only).
+str to_upper(str s) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_to_upper(s)
+    }
+    return result
+}
+
+# Return a lowercased copy (ASCII only).
+str to_lower(str s) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_to_lower(s)
+    }
+    return result
+}
+
+# Return a copy with leading and trailing whitespace removed.
+str trim(str s) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_trim(s)
+    }
+    return result
+}
+
+# Return a copy with leading whitespace removed.
+str trim_start(str s) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_trim_start(s)
+    }
+    return result
+}
+
+# Return a copy with trailing whitespace removed.
+str trim_end(str s) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_trim_end(s)
+    }
+    return result
+}
+
+# Return s repeated n times.
+str repeat(str s, long n) {
+    str result = ""
+    unsafe {
+        result = duxrt_str_repeat(s, n)
+    }
+    return result
+}
+
+# Split s on literal separator sep.  Returns a list of str.
+list split(str s, str sep) {
+    list result = []
+    unsafe {
+        result = duxrt_str_split(s, sep)
+    }
+    return result
+}
+
