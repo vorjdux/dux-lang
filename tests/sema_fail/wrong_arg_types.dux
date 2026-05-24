@@ -1,0 +1,7 @@
+int add(int a, int b) {
+    return a + b
+}
+
+void main() {
+    println(add("hello", 5))  # error: argument 1 to 'add': cannot assign 'str' to 'int'
+}
