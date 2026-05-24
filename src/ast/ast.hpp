@@ -166,6 +166,7 @@ struct VarDeclStmt final : Stmt {
     TypeExpr                                     type;
     bool                                         is_const{false};
     bool                                         is_static{false};
+    bool                                         is_thread_local{false};
     std::vector<std::pair<std::string, ExprPtr>> decls;
     void accept(Visitor& v) const override;
 };

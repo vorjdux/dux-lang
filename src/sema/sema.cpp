@@ -715,6 +715,10 @@ void Sema::check_var_decl(const ast::VarDeclStmt& s) {
     bool   is_const  = s.is_const;
     bool   is_static = s.is_static;
 
+    // thread_local is only valid at module scope
+    if (s.is_thread_local && scopes_.depth() > 1)
+        err(s.loc, "thread_local is only valid at module scope");
+
     // const variables must have an initializer
     // (static vars without initializer get zero-initialization — that is valid)
 
@@ -727,6 +731,19 @@ void Sema::check_var_decl(const ast::VarDeclStmt& s) {
         }
 
         if (init_ptr) {
+            // thread_local initializer must be a compile-time constant (literal)
+            if (s.is_thread_local) {
+                bool is_literal =
+                    dynamic_cast<const ast::IntLitExpr*>(init_ptr.get())    != nullptr ||
+                    dynamic_cast<const ast::LongLitExpr*>(init_ptr.get())   != nullptr ||
+                    dynamic_cast<const ast::FloatLitExpr*>(init_ptr.get())  != nullptr ||
+                    dynamic_cast<const ast::RealLitExpr*>(init_ptr.get())   != nullptr ||
+                    dynamic_cast<const ast::StringLitExpr*>(init_ptr.get()) != nullptr ||
+                    dynamic_cast<const ast::BoolLitExpr*>(init_ptr.get())   != nullptr ||
+                    dynamic_cast<const ast::NullLitExpr*>(init_ptr.get())   != nullptr;
+                if (!is_literal)
+                    err(init_ptr->loc, "thread_local initializer must be a compile-time constant");
+            }
             TypeId init_t = check_expr(*init_ptr);
             bool is_lambda = dynamic_cast<const ast::LambdaExpr*>(init_ptr.get()) != nullptr;
             if (var_type == TR::TID_UNKNOWN || is_lambda)
