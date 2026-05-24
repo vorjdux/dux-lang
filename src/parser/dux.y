@@ -628,6 +628,9 @@ opt_func_modifier
     | KW_SET          { $$ = "set"; }
     | ARROW KW_GET    { $$ = "get"; }
     | ARROW KW_SET    { $$ = "set"; }
+    | ARROW IDENT     { if ($2 == "get") $$ = "get";
+                        else if ($2 == "set") $$ = "set";
+                        else $$ = std::nullopt; }
     ;
 
 /* =====================================================================

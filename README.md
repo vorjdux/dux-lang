@@ -602,10 +602,10 @@ class Circle {
 
     Circle(double r) { this._radius = r; }
 
-    double radius -> get { return this._radius; }
-    void   radius -> set { this._radius = value; }
+    double radius() -> get { return this._radius; }
+    void   radius(double value) -> set { this._radius = value; }
 
-    double area -> get {
+    double area() -> get {
         return 3.14159 * this._radius * this._radius
     }
 }
