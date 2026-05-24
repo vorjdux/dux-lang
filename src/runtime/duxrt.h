@@ -103,6 +103,30 @@ int     duxrt_str_eq(DuxStr* a, DuxStr* b);
    Returns a new string with refcount=1 (caller owns). O(n) in total length. */
 DuxStr* duxrt_str_join_list(DuxList* parts, int64_t count);
 
+/* ── Extended string operations ──────────────────────────────────────────────
+ * All return new DuxStr* (refcount=1, caller owns) unless otherwise noted.  */
+int64_t  duxrt_str_ord(DuxStr* s);                          /* code point of first byte  */
+DuxStr*  duxrt_str_chr(int64_t code);                       /* single-char from code pt  */
+int      duxrt_str_cmp(DuxStr* a, DuxStr* b);               /* -1 / 0 / 1 lexicographic  */
+int      duxrt_str_contains(DuxStr* haystack, DuxStr* needle);
+int64_t  duxrt_str_find(DuxStr* haystack, DuxStr* needle);  /* first index, or -1        */
+int64_t  duxrt_str_rfind(DuxStr* haystack, DuxStr* needle); /* last index, or -1         */
+int      duxrt_str_starts_with(DuxStr* s, DuxStr* prefix);
+int      duxrt_str_ends_with(DuxStr* s, DuxStr* suffix);
+DuxStr*  duxrt_str_replace(DuxStr* s, DuxStr* from, DuxStr* to);      /* first only      */
+DuxStr*  duxrt_str_replace_all(DuxStr* s, DuxStr* from, DuxStr* to);  /* all occurrences */
+DuxStr*  duxrt_str_to_upper(DuxStr* s);                     /* ASCII uppercase copy      */
+DuxStr*  duxrt_str_to_lower(DuxStr* s);                     /* ASCII lowercase copy      */
+DuxStr*  duxrt_str_trim(DuxStr* s);                         /* strip leading+trailing ws */
+DuxStr*  duxrt_str_trim_start(DuxStr* s);                   /* strip leading ws only     */
+DuxStr*  duxrt_str_trim_end(DuxStr* s);                     /* strip trailing ws only    */
+DuxStr*  duxrt_str_repeat(DuxStr* s, int64_t n);            /* concatenate s n times     */
+DuxList* duxrt_str_split(DuxStr* s, DuxStr* sep);           /* split on literal sep      */
+int      duxrt_str_to_long_valid(DuxStr* s);                /* 1 if parseable as int64   */
+int64_t  duxrt_str_to_long_val(DuxStr* s);                  /* parse (check valid first) */
+int      duxrt_str_to_double_valid(DuxStr* s);              /* 1 if parseable as double  */
+double   duxrt_str_to_double_val(DuxStr* s);                /* parse (check valid first) */
+
 /* Generic len (dispatches to DuxStr.len for strings) */
 int64_t duxrt_len(DuxStr* s);
 
