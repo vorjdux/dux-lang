@@ -278,6 +278,7 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
                 MethodInfo mi;
                 mi.name        = f->name;
                 mi.vtable_slot = slot++;
+                mi.modifier    = f->modifier ? *f->modifier : "";
                 layout.methods.push_back(mi);
             }
         }
@@ -350,6 +351,10 @@ void Codegen::declare_functions(const ast::DeclList& decls,
 static std::string mangle_class_member(const std::string& cls,
                                        const ast::FunctionDecl& f) {
     if (f.is_dtor) return cls + "___dtor";
+    // Property accessors (get/set) get a dedicated mangled name to avoid
+    // collision when both a getter and setter share the same Dux name.
+    if (f.modifier && *f.modifier == "get") return cls + "__" + f.name + "___get";
+    if (f.modifier && *f.modifier == "set") return cls + "__" + f.name + "___set";
     return cls + "__" + f.name;
 }
 
@@ -397,8 +402,9 @@ void Codegen::declare_class_methods(const ast::ClassDecl& c) {
 
             // Record in layout (non-ctor/dtor instance methods only)
             if (!f->is_ctor && !f->is_dtor && layouts_.count(c.name)) {
+                std::string fmod = f->modifier ? *f->modifier : "";
                 for (auto& mi : layouts_[c.name].methods) {
-                    if (mi.name == f->name) { mi.fn = fn; break; }
+                    if (mi.name == f->name && mi.modifier == fmod) { mi.fn = fn; break; }
                 }
             }
         }
@@ -2169,6 +2175,21 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
 }
 
 Value* Codegen::gen_assign(const ast::AssignExpr& e) {
+    // Property setter dispatch: obj.prop = val calls the setter if one exists
+    if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e.target.get())) {
+        Value* obj_v = gen_expr(*mem->object);
+        std::string cls = resolve_class_name(*mem->object, type_id_of(*mem->object));
+        auto li = layouts_.find(cls);
+        if (li != layouts_.end()) {
+            for (const auto& mi : li->second.methods) {
+                if (mi.name == mem->member && mi.modifier == "set" && mi.fn) {
+                    Value* rval = gen_expr(*e.value);
+                    return emit_call(mi.fn, {obj_v, rval});
+                }
+            }
+        }
+    }
+
     // Get lvalue slot
     Value* slot = lvalue_of(*e.target);
     Value* rhs  = gen_expr(*e.value);
@@ -2711,6 +2732,12 @@ Value* Codegen::gen_member(const ast::MemberExpr& e) {
     auto layout_it = layouts_.find(cls_name);
     if (layout_it != layouts_.end()) {
         const ClassLayout& layout = layout_it->second;
+        // Property getter dispatch: obj.prop calls the getter method if one exists
+        for (const auto& mi : layout.methods) {
+            if (mi.name == e.member && mi.modifier == "get" && mi.fn) {
+                return emit_call(mi.fn, {obj});
+            }
+        }
         for (const auto& f : layout.fields) {
             if (f.name == e.member) {
                 Value* gep = builder_->CreateStructGEP(
@@ -3449,6 +3476,12 @@ Value* Codegen::lvalue_of(const ast::Expr& e) {
         std::string cls_name = resolve_class_name(*mem->object, type_id_of(*mem->object));
         auto it = layouts_.find(cls_name);
         if (it != layouts_.end()) {
+            // If member is a property (has getter/setter), don't expose an lvalue for it
+            // (assignment is handled by gen_assign's setter dispatch)
+            for (const auto& mi : it->second.methods) {
+                if (mi.name == mem->member && !mi.modifier.empty())
+                    return nullptr;
+            }
             for (const auto& f : it->second.fields)
                 if (f.name == mem->member)
                     return builder_->CreateStructGEP(
