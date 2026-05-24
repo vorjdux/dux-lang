@@ -1,0 +1,9 @@
+import net.unix
+
+# Compile-time check that net.unix types and functions exist.
+# No socket files created — just verifies the module loads.
+
+int main() {
+    print("unix types ok")
+    return 0
+}

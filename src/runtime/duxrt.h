@@ -483,6 +483,17 @@ void    duxrt_http_req_free(void* req);
 DuxStr* duxrt_http_format_response(int32_t status, DuxStr* status_text,
                                     void* headers_dict, DuxStr* body);
 
+/* ── net.ws — RFC 6455 WebSocket client and server ───────────────────────── */
+void*   duxrt_ws_connect(DuxStr* url, int32_t use_tls_hint);
+DuxStr* duxrt_ws_last_error(void);
+void    duxrt_ws_close(void* ws);
+int32_t duxrt_ws_send_text(void* ws, DuxStr* msg);
+int32_t duxrt_ws_send_binary(void* ws, DuxStr* data);
+DuxStr* duxrt_ws_recv(void* ws);
+void*   duxrt_ws_listen(DuxStr* host, int32_t port);
+void*   duxrt_ws_accept(void* server);
+void    duxrt_ws_server_close(void* server);
+
 /* ── Future (async/await Phase 2) ───────────────────────────────────────── */
 void*   duxrt_future_new(void);
 void    duxrt_future_retain(void* fut);     /* increment ref count */
