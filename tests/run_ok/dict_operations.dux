@@ -1,0 +1,34 @@
+# Test: dict len, get, and index assignment with various value types
+
+void main() {
+    # Dict with string values; retrieve and print them
+    dict d = {"a": "alpha", "b": "beta"}
+    println(len(d))
+
+    str va = d["a"]
+    str vb = d["b"]
+    println(va)
+    println(vb)
+
+    # Index assignment: add a new key and update an existing key
+    d["c"] = "gamma"
+    println(len(d))
+    str vc = d["c"]
+    println(vc)
+
+    d["a"] = "ALPHA"
+    str va2 = d["a"]
+    println(va2)
+
+    # Dict with int values (stored as void*, unboxed on retrieval)
+    dict nums = {"x": 42, "y": 7}
+    int nx = nums["x"]
+    int ny = nums["y"]
+    println(nx)
+    println(ny)
+
+    # Update int value
+    nums["x"] = 100
+    int nx2 = nums["x"]
+    println(nx2)
+}

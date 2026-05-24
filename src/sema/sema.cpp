@@ -1243,10 +1243,15 @@ TypeId Sema::check_index(const ast::IndexExpr& e) {
         if (!types_.is_integral(idx_t) && idx_t != TR::TID_UNKNOWN)
             err(e.index->loc,
                 "list index must be integral, got '" + types_.name_of(idx_t) + "'");
-        return TR::TID_OBJECT;
+        // Return TID_UNKNOWN so the element can be assigned to any declared type.
+        // The codegen uses box_to_ptr/unbox_from_ptr to pack/unpack primitives
+        // stored as void* in the list.  TID_OBJECT would cause a sema type error
+        // when the programmer writes  int x = list[i].
+        return TR::TID_UNKNOWN;
     }
     if (obj_t == TR::TID_DICT) {
-        return TR::TID_OBJECT;
+        // Same rationale: dict values are void*, assignable to any type.
+        return TR::TID_UNKNOWN;
     }
     if (obj_t == TR::TID_STR) {
         return TR::TID_STR;
