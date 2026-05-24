@@ -1,0 +1,16 @@
+# List element iteration — 2 M outer passes × 20 int elements = 40 M element reads
+# Exercises typed list element box/unbox (void* ↔ int) and for-in loop over list.
+
+void main() {
+    list nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    long sum = 0l
+    int i = 0
+    while i < 2000000 {
+        for int v in nums {
+            sum = sum + v
+        }
+        i = i + 1
+    }
+    println(sum)
+}

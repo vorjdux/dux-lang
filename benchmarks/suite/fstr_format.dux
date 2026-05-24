@@ -1,0 +1,14 @@
+# String interpolation — 500 K f-string builds
+# Exercises f"..." interpolation: format int into string, measure total length.
+
+void main() {
+    long sum = 0l
+    int N = 500000
+    int i = 0
+    while i < N {
+        str s = f"item={i}"
+        sum = sum + len(s)
+        i = i + 1
+    }
+    println(sum)
+}
