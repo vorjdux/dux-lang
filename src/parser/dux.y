@@ -154,8 +154,9 @@ static ExprPtr make_str_concat(ExprPtr left, ExprPtr right, const yy::location& 
    ===================================================================== */
 
 /* Program */
-%type <DeclList>                         top_decl_list
 %type <DeclPtr>                          top_decl decl extern_decl
+/* Program body accumulates decls and top-level stmts (thread_local, etc.) */
+%type <std::unique_ptr<Program>>         program_body
 /* Declarations */
 %type <DeclPtr>  namespace_decl import_decl class_decl interface_decl enum_decl
 %type <DeclPtr>  func_decl field_decl ctor_decl dtor_decl
@@ -242,20 +243,26 @@ static ExprPtr make_str_concat(ExprPtr left, ExprPtr right, const yy::location& 
    ===================================================================== */
 
 program
-    : top_decl_list
+    : program_body
         {
-            auto p   = mk<Program>();
-            p->loc   = sl(@$, driver);
-            p->decls = std::move($1);
-            driver.result = std::move(p);
+            driver.result = std::move($1);
         }
     ;
 
-top_decl_list
-    : %empty                          { $$ = DeclList{}; }
-    | top_decl_list SEMI              { $$ = std::move($1); }
-    | top_decl_list top_decl          { $1.push_back(std::move($2)); $$ = std::move($1); }
-    | top_decl_list error SEMI        { $$ = std::move($1); yyerrok; }
+/* program_body: accumulate top-level declarations AND top-level statements
+   (thread_local / static var_decl_stmt at file scope).
+   Mirrors the namespace_body pattern. */
+program_body
+    : %empty
+        { $$ = mk<Program>(); }
+    | program_body SEMI
+        { $$ = std::move($1); }
+    | program_body top_decl
+        { $1->decls.push_back(std::move($2)); $$ = std::move($1); }
+    | program_body var_decl_stmt
+        { $1->stmts.push_back(std::move($2)); $$ = std::move($1); }
+    | program_body error SEMI
+        { $$ = std::move($1); yyerrok; }
     ;
 
 top_decl : decl { $$ = std::move($1); } ;
