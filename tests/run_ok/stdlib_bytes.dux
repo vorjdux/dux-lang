@@ -8,7 +8,7 @@ int main() {
     if l == 2 {
         print("len ok")
     }
-    long v = bytes.at(b, 0)
+    long v = bytes.get(b, 0)
     if v == 72 {
         print("at ok")
     }

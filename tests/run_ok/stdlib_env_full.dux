@@ -8,7 +8,7 @@ int main() {
     }
 
     # Set and get_or with set var
-    env.store("DUX_TEST_GET_OR", "hello")
+    env.set("DUX_TEST_GET_OR", "hello")
     str val2 = env.get_or("DUX_TEST_GET_OR", "fallback")
     if val2 == "hello" {
         print("get_or set ok")

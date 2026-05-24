@@ -1,0 +1,6 @@
+stat none ok
+stat some ok
+listdir err ok
+listdir ok
+cwd ok
+fs option ok

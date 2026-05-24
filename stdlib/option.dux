@@ -1,32 +1,90 @@
-# stdlib/option.dux — Option type
+# stdlib/option.dux — Option type (monomorphised over object until generics land)
 #
-# Represents an optional value: either Some (containing a value) or None.
-# Note: full generic parameterization (Option<T>) requires the generics
-# milestone. Until then, payload is carried as `object`.
+# Represents an optional value: either Some(value) or None.
+#
+# Construction:
+#   Option o = Option.Some("hello")
+#   Option o = Option.None
+#
+# Pattern-matching (preferred):
+#   match o {
+#       Option.Some(val) => {
+#           print(val)
+#       }
+#       Option.None => {
+#           print("nothing")
+#       }
+#   }
+#
+# Helper functions:
+#   option_is_some(o)        → bool
+#   option_is_none(o)        → bool
+#   option_unwrap(o)         → object  (throws PanicError on None)
+#   option_unwrap_or(o, def) → object  (returns def on None)
 
 enum Option {
     None,
-    Some
+    Some(object)
 }
 
-# Helper: wrap a value as Some (returns the Some discriminant)
-# The actual value must be tracked alongside in user code until
-# generics land.
-int option_some() {
-    return Option.Some
+# ── Predicates ────────────────────────────────────────────────────────────────
+
+bool option_is_some(Option o) {
+    match o {
+        Option.Some(v) => {
+            return true
+        }
+        Option.None => {
+            return false
+        }
+    }
+    return false
 }
 
-# Helper: return the None discriminant
-int option_none() {
-    return Option.None
+bool option_is_none(Option o) {
+    match o {
+        Option.None => {
+            return true
+        }
+        Option.Some(v) => {
+            return false
+        }
+    }
+    return true
 }
 
-# Check if an option is Some
-bool option_is_some(int opt) {
-    return opt == Option.Some
+# ── Unwrap ────────────────────────────────────────────────────────────────────
+
+# PanicError is thrown by option_unwrap when called on None.
+class PanicError(object) {
+    str message
+    PanicError(str msg) {
+        this.message = msg
+    }
 }
 
-# Check if an option is None
-bool option_is_none(int opt) {
-    return opt == Option.None
+# Return the contained value. Throws PanicError if the option is None.
+object option_unwrap(Option o) {
+    match o {
+        Option.Some(val) => {
+            return val
+        }
+        Option.None => {
+            throw new PanicError("option_unwrap called on None")
+        }
+    }
+    return null
+}
+
+# Return the contained value, or default_val if None.
+object option_unwrap_or(Option o, object default_val) {
+    match o {
+        Option.Some(val) => {
+            return val
+        }
+        Option.None => {
+            return default_val
+        }
+    }
+    return default_val
 }

@@ -1,0 +1,7 @@
+some:hello
+none ok
+is_some ok
+is_none ok
+unwrap:hello
+unwrap_or:default
+option ok
