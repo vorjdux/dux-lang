@@ -1,0 +1,31 @@
+# Test: list storing class instances and retrieving them
+
+class Point {
+    int x
+    int y
+    Point(int px, int py) {
+        x = px
+        y = py
+    }
+}
+
+void main() {
+    # List of class instances (stored as pointers, no boxing needed)
+    list pts = [new Point(1, 2), new Point(3, 4), new Point(5, 6)]
+    println(len(pts))
+
+    # Retrieve and access fields
+    Point p0 = pts[0]
+    Point p1 = pts[1]
+    Point p2 = pts[2]
+    println(p0.x)
+    println(p0.y)
+    println(p1.x)
+    println(p2.x)
+
+    # Mutate via index assignment
+    pts[1] = new Point(99, 88)
+    Point pm = pts[1]
+    println(pm.x)
+    println(pm.y)
+}

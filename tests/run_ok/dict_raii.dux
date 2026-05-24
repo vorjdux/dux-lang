@@ -1,0 +1,19 @@
+# Test: dict RAII and atomic refcounting
+# Dict's refcount ensures safe sharing and automatic release at scope exit.
+import str
+
+void main() {
+    dict d = {'a': "alpha", 'b': "beta"}
+    println(d['a'])
+    println(d['b'])
+
+    # Share the dict: d2 now holds a reference to the same dict (refcount=2)
+    dict d2 = d
+    println(d2['a'])
+
+    # Explicit delete: release d's reference; d2 still valid (refcount=1)
+    delete d
+    println(d2['b'])
+
+    # d2 is released by RAII at scope exit (refcount -> 0, freed automatically)
+}

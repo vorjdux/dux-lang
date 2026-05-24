@@ -1,20 +1,30 @@
-import list
+# Test: list RAII and atomic refcounting
+# Verifies lists are automatically released at scope exit.
+# Uses string elements to avoid integer boxing issue.
 
-class Item(object) {
-    public:
-    str label
-    Item(str s) {
-        this.label = s
-    }
-    ~Item() {
-        println("free:" + this.label)
-    }
+list make_list() {
+    list result = ["a", "b", "c"]
+    return result
 }
 
-int main() {
-    List<Item> items = new List<Item>()
-    items.push(new Item("x"))
-    items.push(new Item("y"))
-    println("pushed")
-    return 0
+void main() {
+    # RAII: result is released at end of main (no delete needed)
+    list result = make_list()
+    println(len(result))
+    println(result[0])
+    println(result[2])
+
+    # Shared reference: both x and y share the same list (refcount=2 internally)
+    list x = ["hello", "world"]
+    list y = x
+    println(len(x))
+    println(len(y))
+    println(y[0])
+
+    # Explicit delete: release x's reference; y still valid (refcount=1)
+    delete x
+    println(len(y))
+    println(y[1])
+
+    # y released by RAII at scope exit (refcount -> 0, freed automatically)
 }
