@@ -986,42 +986,50 @@ See [`docs/spec.md`](docs/spec.md) for the full language specification and
 
 ---
 
-## Self-hosted bootstrap (proof of concept)
+## Bootstrap test suite (dogfood demos)
 
 The [`bootstrap/`](bootstrap/) directory contains two Dux programs written in Dux
-itself. They exist to demonstrate that the language is expressive enough for
-non-trivial software — **not** as an alternative compiler pipeline or a step
-toward replacing the C++ implementation.
+itself.  They are **test programs**, not infrastructure — both `dux_stage2` and
+`dux_stage3` are test suites that exercise the language and verify the compiler's
+output, nothing more.
 
 ```
 bootstrap/
-  dux_stage2.dux   — a Dux-written lexer + parser + pretty-printer (~2 400 lines)
+  dux_stage2.dux   — a Dux-written lexer + re-printer for Dux source (~2 400 lines)
   dux_stage3.dux   — a round-trip test suite that validates stage2 output
 ```
 
-**What they do:**
+**The real implementations live in `src/`:**
 
-`dux_stage2` reads a `.dux` source file and pretty-prints it as a normalised
-AST dump.  It is a *parser/pretty-printer*, not a compiler — it produces
-human-readable Dux source, not machine code.
+| Concern | Location |
+|---------|----------|
+| Lexer | `src/lexer/dux.l` (Flex) |
+| Parser | `src/parser/dux.y` (Bison) |
+| AST printer | `src/ast/printer.hpp` / `src/ast/ast.hpp` |
+| Semantic analysis | `src/sema/` |
+| Code generation | `src/codegen/codegen.cpp` (LLVM IR) |
 
-`dux_stage3` tests the round-trip: it writes small Dux snippets to `/tmp`,
-runs `dux_stage2 --dump-ast` on each, feeds the dump back to the main compiler,
-executes the resulting binary, and compares stdout to the expected output.
+`dux_stage2` does not replace any of those.  It is a standalone Dux program that
+re-implements a minimal hand-written lexer and a recursive-descent re-printer —
+written purely to demonstrate that Dux can express non-trivial programs.  It has
+no codegen, no semantic analysis, and no optimiser.
 
-**What they are not:**
+`dux_stage3` drives the verification: it writes small Dux snippets to `/tmp`,
+runs `dux_stage2 --dump-ast` on each, feeds the output back to the **real** C++
+compiler, executes the resulting binary, and compares stdout to the expected value.
 
-- They are **not** a self-hosting compiler.  The authoritative, production
-  compiler is `src/` (C++, Bison/Flex, LLVM).  Stage2 has no codegen, no
-  semantic analysis, and no optimiser.
-- They are **not** part of the build.  Building the project always uses the C++
-  compiler.  Stage2 and stage3 are pre-compiled into `bootstrap/dux_stage2` and
-  `bootstrap/dux_stage3` by running the main compiler manually.
+**Neither file is part of the build.**  Building the project always uses the C++
+toolchain.  The binaries in `bootstrap/dux_stage2` and `bootstrap/dux_stage3` are
+pre-compiled by running the main compiler manually:
+
+```bash
+./build/dux --compile bootstrap/dux_stage2.dux -o bootstrap/dux_stage2
+./build/dux --compile bootstrap/dux_stage3.dux -o bootstrap/dux_stage3
+```
 
 **Running the round-trip suite:**
 
 ```bash
-# Assumes the main compiler is already built
 ./bootstrap/dux_stage3
 # dux stage3 — round-trip test suite
 # =====================================
