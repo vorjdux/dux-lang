@@ -56,6 +56,16 @@ bool Sema::run(const ast::Program& prog) {
     return error_count_ == 0;
 }
 
+// ─── Re-check a set of new declarations ──────────────────────────────────────
+// Intended for checking concrete generic instantiations that were added to
+// the program after the initial run() completed.  We hoist first so that
+// mutually-referencing instantiated types register their symbols, then run
+// the full checking pass over each declaration.
+void Sema::check_decls(const ast::DeclList& decls) {
+    hoist_top(decls);
+    for (const auto& d : decls) check_decl(*d);
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 void Sema::err(const ast::SourceLoc& loc, const std::string& msg) {

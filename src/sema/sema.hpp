@@ -14,6 +14,15 @@ public:
     explicit Sema(Driver& driver);
 
     bool run(const ast::Program& prog);
+
+    // Re-check a list of newly-added declarations (e.g. concrete generic
+    // instantiations produced by expand_generics).  This performs both the
+    // hoisting pass (pass 1) and the checking pass (pass 2) on the given
+    // declarations, using the type/symbol state already established by run().
+    // Useful when declarations are added to the program after the initial
+    // run() call.
+    void check_decls(const ast::DeclList& decls);
+
     int  error_count() const { return error_count_; }
 
 private:
