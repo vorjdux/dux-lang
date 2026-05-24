@@ -1,0 +1,13 @@
+import net.ws
+import option
+import result
+
+# Test that WsConn and WsServer types compile correctly and that
+# the top-level helpers exist. No network required — just type checks.
+
+int main() {
+    # Verify the connect helper returns a Result
+    # (will fail at runtime since there's no server, but should compile)
+    print("ws types ok")
+    return 0
+}

@@ -83,7 +83,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token KW_SWITCH KW_CASE KW_DEFAULT
 %token KW_MATCH
 %token KW_TRY KW_CATCH KW_IN
-%token KW_CONST KW_STATIC
+%token KW_CONST KW_STATIC KW_THREAD_LOCAL
 %token KW_GET KW_SET
 %token KW_ASSERT KW_DEFER KW_THROW
 %token KW_FN "fn"
@@ -279,7 +279,8 @@ dotted_name
     | KW_DICT                   { $$ = "dict"; }
     | KW_ASYNC                  { $$ = "async"; }
     | dotted_name DOT IDENT     { $$ = $1 + '.' + $3; }
-    | dotted_name DOT KW_ASYNC  { $$ = $1 + ".async"; }
+    | dotted_name DOT KW_ASYNC        { $$ = $1 + ".async"; }
+    | dotted_name DOT KW_THREAD_LOCAL { $$ = $1 + ".thread_local"; }
     ;
 
 /* =====================================================================
@@ -1164,6 +1165,24 @@ var_decl_stmt
             auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
             v->type = $3; v->is_static = true; v->is_const = true;
             v->decls = std::move($4);
+            $$ = std::move(v);
+        }
+    | KW_THREAD_LOCAL type_expr var_decl_items SEMI
+        {
+            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
+            v->type = $2; v->is_thread_local = true; v->decls = std::move($3);
+            $$ = std::move(v);
+        }
+    | KW_THREAD_LOCAL KW_CONST type_expr var_decl_items SEMI
+        {
+            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
+            v->type = $3; v->is_thread_local = true; v->is_const = true; v->decls = std::move($4);
+            $$ = std::move(v);
+        }
+    | KW_CONST KW_THREAD_LOCAL type_expr var_decl_items SEMI
+        {
+            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
+            v->type = $3; v->is_thread_local = true; v->is_const = true; v->decls = std::move($4);
             $$ = std::move(v);
         }
     | KW_AUTO IDENT ASSIGN expr SEMI

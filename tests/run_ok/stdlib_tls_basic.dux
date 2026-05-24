@@ -1,0 +1,17 @@
+thread_local int tls_count = 0
+thread_local str tls_label = "init"
+thread_local bool tls_flag = false
+
+int main() {
+    tls_count = 42
+    tls_label = "hello"
+    tls_flag = true
+
+    print(tls_count)
+    print(tls_label)
+    if tls_flag {
+        print("flag ok")
+    }
+    print("tls ok")
+    return 0
+}

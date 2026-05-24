@@ -1,0 +1,11 @@
+# thread_local: per-thread module-scope variables
+thread_local int tls_counter = 0
+thread_local str tls_msg = ""
+
+int main() {
+    tls_counter = 1
+    tls_msg = "hello"
+    print(tls_counter)
+    print(tls_msg)
+    return 0
+}
