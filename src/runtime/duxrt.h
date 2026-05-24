@@ -266,6 +266,7 @@ int64_t  duxrt_date_weekday(int64_t unix_ts);
 int64_t  duxrt_date_to_unix(int64_t y, int64_t mo, int64_t d, int64_t h, int64_t mi, int64_t s);
 DuxStr*  duxrt_date_format(int64_t unix_ts, DuxStr* fmt);
 DuxStr*  duxrt_date_iso(int64_t unix_ts);
+int64_t  duxrt_timefmt_parse(DuxStr* s, DuxStr* fmt);
 
 /* ── System / Environment / Args ─────────────────────────────────────────── */
 void     duxrt_sys_init(int argc, char** argv);
@@ -445,6 +446,8 @@ DuxStr* duxrt_sock_peer_addr(void* s);
 DuxStr* duxrt_sock_local_addr(void* s);
 int32_t duxrt_sock_join_multicast(void* s, DuxStr* group);
 int32_t duxrt_sock_leave_multicast(void* s, DuxStr* group);
+void    duxrt_unix_unlink(DuxStr* path);
+int64_t duxrt_sock_send_to_unix(void* s, DuxStr* dest, DuxStr* data, int32_t flags);
 
 /* ── net.tls — OpenSSL TLS wrappers ──────────────────────────────────────── */
 void*   duxrt_tls_ctx_new_client(void);

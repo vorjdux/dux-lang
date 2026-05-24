@@ -1,0 +1,60 @@
+import time.fmt
+import result
+import time.clock
+
+int main() {
+    # Format current timestamp as ISO 8601
+    long now = clock.unix()
+    str iso = fmt.to_iso(now)
+    # Should start with "20" (year)
+    str prefix = iso[0]
+    str prefix2 = iso[1]
+    if prefix == "2" {
+        if prefix2 == "0" {
+            print("iso ok")
+        }
+    }
+
+    # Parse a known ISO 8601 date — 2024-01-15T09:30:00 UTC
+    Result r = fmt.from_iso("2024-01-15T09:30:00")
+    match r {
+        Result.Ok(ts) => {
+            print("parse ok")
+        }
+        Result.Err(msg) => {
+            print("parse failed: " + msg)
+        }
+    }
+
+    # Parse with custom format
+    Result r2 = fmt.parse("15/01/2024", "%d/%m/%Y")
+    match r2 {
+        Result.Ok(ts) => {
+            print("custom parse ok")
+        }
+        Result.Err(msg) => {
+            print("custom parse failed")
+        }
+    }
+
+    # Parse invalid string returns Err
+    Result r3 = fmt.from_iso("not-a-date")
+    match r3 {
+        Result.Err(msg) => {
+            print("bad parse ok")
+        }
+        Result.Ok(ts) => {
+            print("bad")
+        }
+    }
+
+    # format() with DATE_ONLY constant
+    str dated = fmt.format(now, fmt.DATE_ONLY())
+    # Should be non-empty
+    if len(dated) > 0 {
+        print("format ok")
+    }
+
+    print("timefmt ok")
+    return 0
+}

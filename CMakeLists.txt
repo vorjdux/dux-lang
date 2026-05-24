@@ -59,6 +59,7 @@ add_library(duxrt STATIC
     src/runtime/fs_rt.c
     src/runtime/file_rt.c
     src/runtime/time_rt.c
+    src/runtime/timefmt_rt.c
     src/runtime/sys_rt.c
     src/runtime/random_rt.c
     src/runtime/thread_rt.c

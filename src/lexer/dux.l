@@ -121,7 +121,8 @@ ALNUM   [a-zA-Z0-9_]
 "catch"      { need_semi = false; return yy::parser::make_KW_CATCH(loc);     }
 "in"         { need_semi = false; return yy::parser::make_KW_IN(loc);        }
 "const"      { need_semi = false; return yy::parser::make_KW_CONST(loc);     }
-"static"     { need_semi = false; return yy::parser::make_KW_STATIC(loc);    }
+"static"       { need_semi = false; return yy::parser::make_KW_STATIC(loc);       }
+"thread_local" { need_semi = false; return yy::parser::make_KW_THREAD_LOCAL(loc); }
 "__get__"    { need_semi = false; return yy::parser::make_KW_GET(loc);       }
 "__set__"    { need_semi = false; return yy::parser::make_KW_SET(loc);       }
 "assert"     { need_semi = false; return yy::parser::make_KW_ASSERT(loc);    }
