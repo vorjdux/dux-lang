@@ -1037,10 +1037,23 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
                 {"max_i", TR::TID_LONG},
             }},
             {"str",  {
+                // core
                 {"concat",      TR::TID_STR},  {"from_int",    TR::TID_STR},
                 {"from_double", TR::TID_STR},  {"length",      TR::TID_LONG},
                 {"slice",       TR::TID_STR},  {"index",       TR::TID_STR},
                 {"eq",          TR::TID_BOOL},
+                // extended
+                {"ord",         TR::TID_LONG}, {"chr",         TR::TID_STR},
+                {"cmp",         TR::TID_INT},
+                {"contains",    TR::TID_BOOL}, {"find",        TR::TID_LONG},
+                {"rfind",       TR::TID_LONG},
+                {"starts_with", TR::TID_BOOL}, {"ends_with",   TR::TID_BOOL},
+                {"replace",     TR::TID_STR},  {"replace_all", TR::TID_STR},
+                {"to_upper",    TR::TID_STR},  {"to_lower",    TR::TID_STR},
+                {"trim",        TR::TID_STR},  {"trim_start",  TR::TID_STR},
+                {"trim_end",    TR::TID_STR},  {"repeat",      TR::TID_STR},
+                {"split",       TR::TID_LIST},
+                {"to_long",     TR::TID_UNKNOWN},{"to_double",  TR::TID_UNKNOWN},
             }},
             {"io",   {{"readline", TR::TID_STR}}},
         };

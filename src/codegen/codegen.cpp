@@ -899,13 +899,37 @@ static const std::unordered_map<std::string, StdlibMod>& stdlib_table() {
             {"max_i", {"duxrt_math_max_i",  TR::TID_LONG,   {TR::TID_LONG, TR::TID_LONG}}},
         }},
         {"str", {
+            // ── core ──────────────────────────────────────────────────────────
             {"concat",      {"duxrt_str_concat",      TR::TID_STR,  {TR::TID_STR, TR::TID_STR}}},
             {"from_int",    {"duxrt_str_from_int",    TR::TID_STR,  {TR::TID_LONG}}},
             {"from_double", {"duxrt_str_from_double", TR::TID_STR,  {TR::TID_DOUBLE}}},
             {"length",      {"duxrt_str_length",      TR::TID_LONG, {TR::TID_STR}}},
             {"slice",       {"duxrt_str_slice",       TR::TID_STR,  {TR::TID_STR, TR::TID_LONG, TR::TID_LONG}}},
             {"index",       {"duxrt_str_index",       TR::TID_STR,  {TR::TID_STR, TR::TID_LONG}}},
-            {"eq",          {"duxrt_str_eq",          TR::TID_BOOL, {TR::TID_STR, TR::TID_STR}}},
+            // C functions that return int (0/1) — declare as TID_INT (i32) to
+            // avoid conflicts with the i32-based string-comparison path in gen_binary.
+            {"eq",          {"duxrt_str_eq",          TR::TID_INT,  {TR::TID_STR, TR::TID_STR}}},
+            // ── extended ──────────────────────────────────────────────────────
+            {"ord",         {"duxrt_str_ord",         TR::TID_LONG, {TR::TID_STR}}},
+            {"chr",         {"duxrt_str_chr",         TR::TID_STR,  {TR::TID_LONG}}},
+            {"cmp",         {"duxrt_str_cmp",         TR::TID_INT,  {TR::TID_STR, TR::TID_STR}}},
+            // contains/starts_with/ends_with return C int (0/1) → TID_INT
+            {"contains",    {"duxrt_str_contains",    TR::TID_INT,  {TR::TID_STR, TR::TID_STR}}},
+            {"find",        {"duxrt_str_find",        TR::TID_LONG, {TR::TID_STR, TR::TID_STR}}},
+            {"rfind",       {"duxrt_str_rfind",       TR::TID_LONG, {TR::TID_STR, TR::TID_STR}}},
+            {"starts_with", {"duxrt_str_starts_with", TR::TID_INT,  {TR::TID_STR, TR::TID_STR}}},
+            {"ends_with",   {"duxrt_str_ends_with",   TR::TID_INT,  {TR::TID_STR, TR::TID_STR}}},
+            {"replace",     {"duxrt_str_replace",     TR::TID_STR,  {TR::TID_STR, TR::TID_STR, TR::TID_STR}}},
+            {"replace_all", {"duxrt_str_replace_all", TR::TID_STR,  {TR::TID_STR, TR::TID_STR, TR::TID_STR}}},
+            {"to_upper",    {"duxrt_str_to_upper",    TR::TID_STR,  {TR::TID_STR}}},
+            {"to_lower",    {"duxrt_str_to_lower",    TR::TID_STR,  {TR::TID_STR}}},
+            {"trim",        {"duxrt_str_trim",        TR::TID_STR,  {TR::TID_STR}}},
+            {"trim_start",  {"duxrt_str_trim_start",  TR::TID_STR,  {TR::TID_STR}}},
+            {"trim_end",    {"duxrt_str_trim_end",    TR::TID_STR,  {TR::TID_STR}}},
+            {"repeat",      {"duxrt_str_repeat",      TR::TID_STR,  {TR::TID_STR, TR::TID_LONG}}},
+            {"split",       {"duxrt_str_split",       TR::TID_LIST, {TR::TID_STR, TR::TID_STR}}},
+            // to_long / to_double are Dux wrappers (not direct C); handled by
+            // the fallback path in try_stdlib_call.
         }},
         {"io", {
             {"println",  {"duxrt_println_str",  TR::TID_VOID, {TR::TID_STR}}},
@@ -991,7 +1015,23 @@ Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
     }
 
     auto it_fn = it_mod->second.find(mem->member);
-    if (it_fn == it_mod->second.end()) return nullptr;
+    if (it_fn == it_mod->second.end()) {
+        // Function not in the hard-coded table — it may be a Dux-level wrapper
+        // compiled from the stdlib .dux file (e.g. str.to_long, str.to_double).
+        // Try it as a plain global function (stdlib globals are not namespace-mangled).
+        if (Function* fallback_fn = mod_->getFunction(mem->member)) {
+            std::vector<Value*> args;
+            auto param_it = fallback_fn->arg_begin();
+            for (const auto& a : e.args) {
+                Value* v = gen_expr(*a);
+                if (param_it != fallback_fn->arg_end())
+                    v = coerce_to_llvm_type(v, (param_it++)->getType());
+                args.push_back(v);
+            }
+            return builder_->CreateCall(fallback_fn, args);
+        }
+        return nullptr;
+    }
 
     const StdlibFn& sf = it_fn->second;
     Function* fn = mod_->getFunction(sf.rt_sym);
@@ -2265,15 +2305,24 @@ Value* Codegen::gen_binary(const ast::BinaryExpr& e) {
         }
     }
 
-    // String equality/inequality — use runtime comparison (not pointer equality)
+    // String equality/inequality — use runtime comparison (not pointer equality).
+    // duxrt_str_eq is declared as returning i32 (from the stdlib_table TID_INT entry),
+    // but handle i1 gracefully in case it was pre-declared differently.
     if ((op == "==" || op == "!=") && (lt == TR::TID_STR || rt == TR::TID_STR)) {
         auto* eq_fn = get_or_declare_rt("duxrt_str_eq",
             llvm::Type::getInt32Ty(*ctx_), {ptr_type(), ptr_type()});
         Value* eq = builder_->CreateCall(eq_fn, {L, R});
+        llvm::Type* i1  = llvm::Type::getInt1Ty(*ctx_);
+        llvm::Type* i32 = llvm::Type::getInt32Ty(*ctx_);
+        if (eq->getType() == i1) {
+            // Already a boolean (i1) — just negate for !=
+            return (op == "!=") ? builder_->CreateNot(eq) : eq;
+        }
+        // i32 result — convert to i1
         if (op == "!=")
-            eq = builder_->CreateICmpEQ(eq, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
+            eq = builder_->CreateICmpEQ(eq, llvm::ConstantInt::get(i32, 0));
         else
-            eq = builder_->CreateICmpNE(eq, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
+            eq = builder_->CreateICmpNE(eq, llvm::ConstantInt::get(i32, 0));
         return eq;
     }
 
