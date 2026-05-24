@@ -1,0 +1,21 @@
+import async.task
+
+async int compute(int n) {
+    int acc = 0
+    int i = 0
+    while i < n {
+        acc = acc + i
+        i = i + 1
+    }
+    return acc
+}
+
+void main() {
+    # Invoke 5 async tasks sequentially via await — each one is submitted
+    # to the global thread pool instead of spawning a new detached pthread
+    println(await compute(100))
+    println(await compute(200))
+    println(await compute(300))
+    println(await compute(400))
+    println(await compute(500))
+}
