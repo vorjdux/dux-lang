@@ -1,0 +1,7 @@
+int double_value(int x) {
+    return "not a number"  # error: return value: cannot assign 'str' to 'int'
+}
+
+void main() {
+    println(double_value(5))
+}

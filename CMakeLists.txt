@@ -354,3 +354,19 @@ foreach(F ${DUX_RUN_OK})
         )
     endif()
 endforeach()
+
+# run_fail: files that must compile but exit non-zero at runtime.
+# Used for testing assert failures, runtime panics, etc.
+file(GLOB DUX_RUN_FAIL "${CMAKE_SOURCE_DIR}/tests/run_fail/*.dux")
+foreach(F ${DUX_RUN_FAIL})
+    cmake_path(GET F STEM name)
+    add_test(
+        NAME    run_fail_${name}
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_fail_test.sh
+                $<TARGET_FILE:dux>
+                ${F}
+    )
+    set_tests_properties(run_fail_${name} PROPERTIES
+        DEPENDS duxrt
+    )
+endforeach()
