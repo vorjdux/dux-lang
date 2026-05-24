@@ -2497,6 +2497,42 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
             return rt_println(arg, t);
         }
 
+        // __fstr_to_str — synthetic builtin emitted by the f-string desugaring.
+        // Converts any value to a DuxStr* (str) by dispatching on its sema TypeId.
+        if (name == "__fstr_to_str") {
+            Value* arg = e.args.empty() ? str_literal("") : gen_expr(*e.args[0]);
+            TypeId t   = e.args.empty() ? TR::TID_STR    : type_id_of(*e.args[0]);
+            // Infer from LLVM type when sema type is unknown
+            if (t == TR::TID_UNKNOWN) {
+                if (arg->getType()->isIntegerTy()) t = TR::TID_INT;
+                else if (arg->getType()->isFloatingPointTy()) t = TR::TID_DOUBLE;
+                else t = TR::TID_STR;
+            }
+            if (t == TR::TID_STR) return arg;
+            if (t == TR::TID_BOOL) {
+                llvm::Type* i1 = llvm::Type::getInt1Ty(*ctx_);
+                Value* cond = (arg->getType() == i1)
+                    ? arg : builder_->CreateTrunc(arg, i1);
+                return builder_->CreateSelect(cond, str_literal("true"), str_literal("false"));
+            }
+            if (t == TR::TID_INT || t == TR::TID_LONG) {
+                auto* fn = get_or_declare_rt("duxrt_str_from_int",
+                    ptr_type(), {llvm::Type::getInt64Ty(*ctx_)});
+                Value* v64 = arg->getType() == llvm::Type::getInt64Ty(*ctx_)
+                    ? arg : builder_->CreateSExt(arg, llvm::Type::getInt64Ty(*ctx_));
+                return builder_->CreateCall(fn, {v64});
+            }
+            if (t == TR::TID_DOUBLE || t == TR::TID_REAL) {
+                auto* fn = get_or_declare_rt("duxrt_str_from_double",
+                    ptr_type(), {llvm::Type::getDoubleTy(*ctx_)});
+                Value* vd = arg->getType() == llvm::Type::getDoubleTy(*ctx_)
+                    ? arg : builder_->CreateFPExt(arg, llvm::Type::getDoubleTy(*ctx_));
+                return builder_->CreateCall(fn, {vd});
+            }
+            // Fallback: already a pointer — treat as str
+            return arg;
+        }
+
         // assert built-in — handled as stmt but might appear as expr
         if (name == "assert") {
             if (!e.args.empty()) {

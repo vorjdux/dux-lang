@@ -59,6 +59,38 @@ template<typename T, typename... Args>
 static std::unique_ptr<T> mk(Args&&... a) {
     return std::make_unique<T>(std::forward<Args>(a)...);
 }
+
+/* Build a string-literal ExprPtr from a std::string value */
+static ExprPtr make_str_lit(const std::string& s, const yy::location& l, Driver& d) {
+    auto e = mk<StringLitExpr>();
+    e->loc = d.make_loc(l);
+    e->value = s;
+    return e;
+}
+
+/* Wrap an expression in __fstr_to_str(expr) — a synthetic call that codegen
+   handles to convert any type to str for f-string concatenation. */
+static ExprPtr make_fstr_to_str(ExprPtr expr, const yy::location& l, Driver& d) {
+    auto callee = mk<IdentExpr>();
+    callee->loc = d.make_loc(l);
+    callee->name = "__fstr_to_str";
+    auto call = mk<CallExpr>();
+    call->loc = d.make_loc(l);
+    call->callee = std::move(callee);
+    call->args.push_back(std::move(expr));
+    return call;
+}
+
+/* Concatenate two str ExprPtrs with BinaryExpr("+") */
+static ExprPtr make_str_concat(ExprPtr left, ExprPtr right, const yy::location& l, Driver& d) {
+    if (!left) return right;
+    auto e = mk<BinaryExpr>();
+    e->loc = d.make_loc(l);
+    e->op = "+";
+    e->left  = std::move(left);
+    e->right = std::move(right);
+    return e;
+}
 }
 
 /* =====================================================================
@@ -73,6 +105,12 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %token <std::string> STRING     "string literal"
 %token <std::string> IDENT      "identifier"
 %token <bool>        BOOL_LIT   "bool literal"
+
+/* F-string tokens */
+%token                FSTR_BEGIN       "f\""
+%token <std::string>  FSTR_INTERP_BEGIN  /* chunk before '{', carries the literal text */
+%token                FSTR_INTERP_END    /* '}' closing an interpolation */
+%token <std::string>  FSTR_FINISH        /* '"' closing the f-string, carries final literal chunk */
 
 /* Keywords */
 %token KW_NAMESPACE KW_IMPORT KW_FROM KW_AS KW_CLASS KW_INTERFACE KW_ENUM
@@ -177,7 +215,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
 %type <ExprPtr>  expr assign_expr or_expr and_expr eq_expr rel_expr
 %type <ExprPtr>  add_expr mul_expr unary_expr postfix_expr primary_expr
 %type <ExprList>                         arg_list arg_list_ne expr_list
-%type <ExprPtr>                          list_lit dict_lit
+%type <ExprPtr>                          list_lit dict_lit fstring_expr fstr_parts
 %type <PairList>                         dict_pairs
 
 /* =====================================================================
@@ -1346,8 +1384,9 @@ primary_expr
     | LPAREN expr RPAREN          { $$ = std::move($2); }
     | KW_NEW type_expr LPAREN arg_list RPAREN
         { auto e = mk<NewExpr>(); e->loc = sl(@$, driver); e->type = $2; e->args = std::move($4); $$ = std::move(e); }
-    | list_lit  { $$ = std::move($1); }
-    | dict_lit  { $$ = std::move($1); }
+    | list_lit      { $$ = std::move($1); }
+    | dict_lit      { $$ = std::move($1); }
+    | fstring_expr  { $$ = std::move($1); }
     | KW_FN LPAREN param_list RPAREN FAT_ARROW expr
         {
             auto e = mk<LambdaExpr>(); e->loc = sl(@$, driver);
@@ -1405,6 +1444,53 @@ dict_pairs
     | expr COLON expr                     { $$.emplace_back(std::move($1), std::move($3)); }
     | dict_pairs COMMA expr COLON expr    { $1.emplace_back(std::move($3), std::move($5)); $$ = std::move($1); }
     | dict_pairs COMMA                    { $$ = std::move($1); }
+    ;
+
+/* ── F-string ────────────────────────────────────────────────────────────────
+   f"Hello {name}, you are {age} years old!"
+   desugars to:
+     "Hello " + __fstr_to_str(name) + ", you are " + __fstr_to_str(age) + " years old!"
+   FSTR_BEGIN opens the scan; each FSTR_INTERP_BEGIN carries the literal chunk
+   accumulated so far (before the '{'); FSTR_FINISH carries the final chunk. */
+
+fstring_expr
+    : FSTR_BEGIN fstr_parts FSTR_FINISH
+        {
+            /* $2 is the tree built from interleaved chunks and interpolations.
+               $3 is the final literal chunk (possibly empty). */
+            ExprPtr tree = std::move($2);
+            const std::string& tail = $3;
+            if (!tail.empty()) {
+                auto chunk = make_str_lit(tail, @3, driver);
+                tree = make_str_concat(std::move(tree), std::move(chunk), @$, driver);
+            }
+            /* If the entire f-string was empty (""), produce an empty string lit */
+            if (!tree) {
+                tree = make_str_lit("", @$, driver);
+            }
+            $$ = std::move(tree);
+        }
+    ;
+
+/* fstr_parts accumulates the running concatenation expression.
+   It starts as nullptr (no pieces yet) and grows left. */
+fstr_parts
+    : %empty
+        { $$ = ExprPtr{}; }
+    | fstr_parts FSTR_INTERP_BEGIN expr FSTR_INTERP_END
+        {
+            /* $2 = literal chunk before '{'   $3 = interpolated expression */
+            ExprPtr tree = std::move($1);
+            const std::string& chunk = $2;
+            if (!chunk.empty()) {
+                auto str_chunk = make_str_lit(chunk, @2, driver);
+                tree = make_str_concat(std::move(tree), std::move(str_chunk), @2, driver);
+            }
+            /* Wrap interpolated expr in __fstr_to_str() */
+            auto conv = make_fstr_to_str(std::move($3), @3, driver);
+            tree = make_str_concat(std::move(tree), std::move(conv), @$, driver);
+            $$ = std::move(tree);
+        }
     ;
 
 expr_list
