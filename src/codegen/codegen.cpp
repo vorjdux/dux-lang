@@ -1542,6 +1542,57 @@ llvm::Value* Codegen::gen_enum_ctor(const sema::TypeInfo& ti,
 }
 
 void Codegen::gen_match(const ast::MatchStmt& s) {
+    // Dispatch: string-pattern match uses an if-chain; integer/enum/bool match
+    // uses an LLVM switch instruction.
+    bool is_str_match = std::any_of(s.arms.begin(), s.arms.end(),
+        [](const ast::MatchArm& arm) {
+            return arm.pattern.kind == ast::MatchPattern::Kind::StrLit;
+        });
+
+    if (is_str_match) {
+        // ── String match: emit a cascade of duxrt_str_eq comparisons ──────────
+        Function* fn      = builder_->GetInsertBlock()->getParent();
+        Value*    subject = gen_expr(*s.expr);
+        auto*     exit_bb = BasicBlock::Create(*ctx_, "match.end", fn);
+        auto* eq_fn = get_or_declare_rt("duxrt_str_eq",
+            llvm::Type::getInt32Ty(*ctx_), {ptr_type(), ptr_type()});
+
+        const ast::MatchArm* wildcard_arm = nullptr;
+        for (const auto& arm : s.arms) {
+            if (arm.pattern.kind == ast::MatchPattern::Kind::Wildcard) {
+                wildcard_arm = &arm;
+                continue;
+            }
+            if (arm.pattern.kind != ast::MatchPattern::Kind::StrLit) continue;
+
+            auto* arm_bb  = BasicBlock::Create(*ctx_, "match.str.arm",  fn);
+            auto* next_bb = BasicBlock::Create(*ctx_, "match.str.next", fn);
+
+            Value* pat  = str_literal(arm.pattern.str_value);
+            Value* cmp  = builder_->CreateCall(eq_fn, {subject, pat});
+            Value* hit  = builder_->CreateICmpNE(cmp,
+                llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0));
+            builder_->CreateCondBr(hit, arm_bb, next_bb);
+
+            builder_->SetInsertPoint(arm_bb);
+            env_push(); gen_stmts(arm.body); env_pop();
+            if (!builder_->GetInsertBlock()->getTerminator())
+                builder_->CreateBr(exit_bb);
+
+            builder_->SetInsertPoint(next_bb);
+        }
+        // Fall through to wildcard (or straight to exit)
+        if (wildcard_arm) {
+            env_push(); gen_stmts(wildcard_arm->body); env_pop();
+        }
+        if (!builder_->GetInsertBlock()->getTerminator())
+            builder_->CreateBr(exit_bb);
+
+        builder_->SetInsertPoint(exit_bb);
+        return;
+    }
+
+    // ── Integer / enum / bool match: use LLVM switch instruction ─────────────
     Function* fn = builder_->GetInsertBlock()->getParent();
     Value* match_raw = gen_expr(*s.expr);
 
@@ -1579,8 +1630,9 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
         case ast::MatchPattern::Kind::Wildcard:
             wildcard_arm = &arm;
             break;
+        case ast::MatchPattern::Kind::StrLit:
+            break; // handled above
         case ast::MatchPattern::Kind::EnumVariant: {
-            // Look up the tag value for this variant
             auto it = enum_types_.find(arm.pattern.enum_name);
             if (it != enum_types_.end()) {
                 const sema::TypeInfo& ti = types_.info(it->second);
@@ -1602,7 +1654,6 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
         }
     }
 
-    // Build wildcard block if any; otherwise fall through to trap
     if (wildcard_arm) {
         default_bb = BasicBlock::Create(*ctx_, "match.wildcard", fn);
     } else {
@@ -1612,11 +1663,14 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
     auto* sw = builder_->CreateSwitch(match_val, default_bb,
                                       static_cast<unsigned>(case_arms.size()));
 
-    // Emit case arms
     for (const auto& [tag, arm] : case_arms) {
         auto* case_bb = BasicBlock::Create(*ctx_, "match.arm", fn);
+        // Use the actual switch subject type so i1 (bool) subjects get i1
+        // constants and i32 (int/enum) subjects get i32 constants.
+        // Cast to IntegerType* to get ConstantInt* (required by addCase).
         auto* case_val = llvm::ConstantInt::get(
-            llvm::Type::getInt32Ty(*ctx_), static_cast<uint64_t>(tag));
+            llvm::cast<llvm::IntegerType>(match_val->getType()),
+            static_cast<uint64_t>(tag));
         sw->addCase(case_val, case_bb);
         builder_->SetInsertPoint(case_bb);
         env_push();
@@ -1660,17 +1714,14 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
             builder_->CreateBr(exit_bb);
     }
 
-    // Emit wildcard arm
     if (wildcard_arm) {
         builder_->SetInsertPoint(default_bb);
-        env_push();
-        gen_stmts(wildcard_arm->body);
-        env_pop();
+        env_push(); gen_stmts(wildcard_arm->body); env_pop();
         if (!builder_->GetInsertBlock()->getTerminator())
             builder_->CreateBr(exit_bb);
     }
 
-    // Emit trap block (reached when match is not exhaustive)
+    // Trap for non-exhaustive match
     builder_->SetInsertPoint(trap_bb);
     {
         auto* trap_fn = llvm::Intrinsic::getDeclaration(mod_.get(), llvm::Intrinsic::trap);
@@ -2438,20 +2489,26 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
                 llvm::cast<llvm::PointerType>(ptr_type()));
         }
 
-        // len() — dispatch to the correct runtime function based on type
+        // len() — dispatch to the correct runtime function based on type.
+        // Sema declares len() → TID_INT (i32); the runtime functions return i64.
+        // We truncate here to keep the IR type consistent with the sema type, which
+        // prevents silent i64-into-i32-alloca stack corruption on assignment.
         if (name == "len") {
             Value* arg = e.args.empty() ? nullptr : gen_expr(*e.args[0]);
             if (!arg) return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), 0);
             TypeId arg_tid = e.args.empty() ? TR::TID_UNKNOWN : type_id_of(*e.args[0]);
+            llvm::Type* i32 = llvm::Type::getInt32Ty(*ctx_);
             if (arg_tid == TR::TID_LIST) {
                 auto* fn = get_or_declare_rt("duxrt_list_len",
                     llvm::Type::getInt64Ty(*ctx_), {ptr_type()});
-                return builder_->CreateCall(fn, {arg});
+                Value* v = builder_->CreateCall(fn, {arg});
+                return builder_->CreateTrunc(v, i32);
             }
             // str and fallback
             auto* fn = get_or_declare_rt("duxrt_str_length",
                 llvm::Type::getInt64Ty(*ctx_), {ptr_type()});
-            return builder_->CreateCall(fn, {arg});
+            Value* v = builder_->CreateCall(fn, {arg});
+            return builder_->CreateTrunc(v, i32);
         }
 
         // Closure variable call — use fn_var_types_ (TypeId is from sema's registry)

@@ -207,173 +207,178 @@ class Lexer {
     }
 
     str _kw_or_ident(str word) {
-        if word == "void"          {
-            return "KW_VOID"
-        }
-        if word == "int"           {
-            return "KW_INT"
-        }
-        if word == "long"          {
-            return "KW_LONG"
-        }
-        if word == "str"           {
-            return "KW_STR"
-        }
-        if word == "bool"          {
-            return "KW_BOOL"
-        }
-        if word == "double"        {
-            return "KW_DOUBLE"
-        }
-        if word == "float"         {
-            return "KW_FLOAT"
-        }
-        if word == "real"          {
-            return "KW_REAL"
-        }
-        if word == "object"        {
-            return "KW_OBJECT"
-        }
-        if word == "ptr"           {
-            return "KW_PTR"
-        }
-        if word == "list"          {
-            return "KW_LIST"
-        }
-        if word == "return"        {
-            return "KW_RETURN"
-        }
-        if word == "if"            {
-            return "KW_IF"
-        }
-        if word == "else"          {
-            return "KW_ELSE"
-        }
-        if word == "while"         {
-            return "KW_WHILE"
-        }
-        if word == "for"           {
-            return "KW_FOR"
-        }
-        if word == "in"            {
-            return "KW_IN"
-        }
-        if word == "do"            {
-            return "KW_DO"
-        }
-        if word == "class"         {
-            return "KW_CLASS"
-        }
-        if word == "new"           {
-            return "KW_NEW"
-        }
-        if word == "this"          {
-            return "KW_THIS"
-        }
-        if word == "super"         {
-            return "KW_SUPER"
-        }
-        if word == "interface"     {
-            return "KW_INTERFACE"
-        }
-        if word == "import"        {
-            return "KW_IMPORT"
-        }
-        if word == "namespace"     {
-            return "KW_NAMESPACE"
-        }
-        if word == "enum"          {
-            return "KW_ENUM"
-        }
-        if word == "extern"        {
-            return "KW_EXTERN"
-        }
-        if word == "from"          {
-            return "KW_FROM"
-        }
-        if word == "as"            {
-            return "KW_AS"
-        }
-        if word == "true"          {
-            return "KW_TRUE"
-        }
-        if word == "false"         {
-            return "KW_FALSE"
-        }
-        if word == "null"          {
-            return "KW_NULL"
-        }
-        if word == "const"         {
-            return "KW_CONST"
-        }
-        if word == "static"        {
-            return "KW_STATIC"
-        }
-        if word == "unsafe"        {
-            return "KW_UNSAFE"
-        }
-        if word == "defer"         {
-            return "KW_DEFER"
-        }
-        if word == "throw"         {
-            return "KW_THROW"
-        }
-        if word == "try"           {
-            return "KW_TRY"
-        }
-        if word == "catch"         {
-            return "KW_CATCH"
-        }
-        if word == "public"        {
-            return "KW_PUBLIC"
-        }
-        if word == "private"       {
-            return "KW_PRIVATE"
-        }
-        if word == "protected"     {
-            return "KW_PROTECTED"
-        }
-        if word == "match"         {
-            return "KW_MATCH"
-        }
-        if word == "async"         {
-            return "KW_ASYNC"
-        }
-        if word == "await"         {
-            return "KW_AWAIT"
-        }
-        if word == "fn"            {
-            return "KW_FN"
-        }
-        if word == "auto"          {
-            return "KW_AUTO"
-        }
-        if word == "delete"        {
-            return "KW_DELETE"
-        }
-        if word == "assert"        {
-            return "KW_ASSERT"
-        }
-        if word == "break"         {
-            return "KW_BREAK"
-        }
-        if word == "continue"      {
-            return "KW_CONTINUE"
-        }
-        if word == "switch"        {
-            return "KW_SWITCH"
-        }
-        if word == "case"          {
-            return "KW_CASE"
-        }
-        if word == "default"       {
-            return "KW_DEFAULT"
-        }
-        if word == "thread_local"  {
-            return "KW_THREAD_LOCAL"
-        }
-        if word == "range"         {
-            return "KW_RANGE"
+        match word {
+            "void" => {
+                return "KW_VOID"
+            }
+            "int" => {
+                return "KW_INT"
+            }
+            "long" => {
+                return "KW_LONG"
+            }
+            "str" => {
+                return "KW_STR"
+            }
+            "bool" => {
+                return "KW_BOOL"
+            }
+            "double" => {
+                return "KW_DOUBLE"
+            }
+            "float" => {
+                return "KW_FLOAT"
+            }
+            "real" => {
+                return "KW_REAL"
+            }
+            "object" => {
+                return "KW_OBJECT"
+            }
+            "ptr" => {
+                return "KW_PTR"
+            }
+            "list" => {
+                return "KW_LIST"
+            }
+            "return" => {
+                return "KW_RETURN"
+            }
+            "if" => {
+                return "KW_IF"
+            }
+            "else" => {
+                return "KW_ELSE"
+            }
+            "while" => {
+                return "KW_WHILE"
+            }
+            "for" => {
+                return "KW_FOR"
+            }
+            "in" => {
+                return "KW_IN"
+            }
+            "do" => {
+                return "KW_DO"
+            }
+            "class" => {
+                return "KW_CLASS"
+            }
+            "new" => {
+                return "KW_NEW"
+            }
+            "this" => {
+                return "KW_THIS"
+            }
+            "super" => {
+                return "KW_SUPER"
+            }
+            "interface" => {
+                return "KW_INTERFACE"
+            }
+            "import" => {
+                return "KW_IMPORT"
+            }
+            "namespace" => {
+                return "KW_NAMESPACE"
+            }
+            "enum" => {
+                return "KW_ENUM"
+            }
+            "extern" => {
+                return "KW_EXTERN"
+            }
+            "from" => {
+                return "KW_FROM"
+            }
+            "as" => {
+                return "KW_AS"
+            }
+            "true" => {
+                return "KW_TRUE"
+            }
+            "false" => {
+                return "KW_FALSE"
+            }
+            "null" => {
+                return "KW_NULL"
+            }
+            "const" => {
+                return "KW_CONST"
+            }
+            "static" => {
+                return "KW_STATIC"
+            }
+            "unsafe" => {
+                return "KW_UNSAFE"
+            }
+            "defer" => {
+                return "KW_DEFER"
+            }
+            "throw" => {
+                return "KW_THROW"
+            }
+            "try" => {
+                return "KW_TRY"
+            }
+            "catch" => {
+                return "KW_CATCH"
+            }
+            "public" => {
+                return "KW_PUBLIC"
+            }
+            "private" => {
+                return "KW_PRIVATE"
+            }
+            "protected" => {
+                return "KW_PROTECTED"
+            }
+            "match" => {
+                return "KW_MATCH"
+            }
+            "async" => {
+                return "KW_ASYNC"
+            }
+            "await" => {
+                return "KW_AWAIT"
+            }
+            "fn" => {
+                return "KW_FN"
+            }
+            "auto" => {
+                return "KW_AUTO"
+            }
+            "delete" => {
+                return "KW_DELETE"
+            }
+            "assert" => {
+                return "KW_ASSERT"
+            }
+            "break" => {
+                return "KW_BREAK"
+            }
+            "continue" => {
+                return "KW_CONTINUE"
+            }
+            "switch" => {
+                return "KW_SWITCH"
+            }
+            "case" => {
+                return "KW_CASE"
+            }
+            "default" => {
+                return "KW_DEFAULT"
+            }
+            "thread_local" => {
+                return "KW_THREAD_LOCAL"
+            }
+            "range" => {
+                return "KW_RANGE"
+            }
+            _ => {
+                return "IDENT"
+            }
         }
         return "IDENT"
     }
@@ -699,49 +704,48 @@ class Parser {
     str parse_type() {
         str base = ""
         str t = this.lx.tt()
-        if t == "KW_VOID" {
-            base = "void"
-            this.lx.advance()
-        } else if t == "KW_INT" {
-            base = "int"
-            this.lx.advance()
-        } else if t == "KW_LONG" {
-            base = "long"
-            this.lx.advance()
-        } else if t == "KW_STR" {
-            base = "str"
-            this.lx.advance()
-        } else if t == "KW_BOOL" {
-            base = "bool"
-            this.lx.advance()
-        } else if t == "KW_DOUBLE" {
-            base = "double"
-            this.lx.advance()
-        } else if t == "KW_FLOAT" {
-            base = "float"
-            this.lx.advance()
-        } else if t == "KW_REAL" {
-            base = "real"
-            this.lx.advance()
-        } else if t == "KW_OBJECT" {
-            base = "object"
-            this.lx.advance()
-        } else if t == "KW_PTR" {
-            base = "ptr"
-            this.lx.advance()
-        } else if t == "KW_LIST" {
-            base = "list"
-            this.lx.advance()
-        } else if t == "KW_AUTO" {
-            base = "__auto"
-            this.lx.advance()
-        } else if t == "IDENT" {
-            base = this.lx.tv()
-            this.lx.advance()
-        } else {
-            base = this.lx.tv()
-            this.lx.advance()
+        match t {
+            "KW_VOID" => {
+                base = "void"
+            }
+            "KW_INT" => {
+                base = "int"
+            }
+            "KW_LONG" => {
+                base = "long"
+            }
+            "KW_STR" => {
+                base = "str"
+            }
+            "KW_BOOL" => {
+                base = "bool"
+            }
+            "KW_DOUBLE" => {
+                base = "double"
+            }
+            "KW_FLOAT" => {
+                base = "float"
+            }
+            "KW_REAL" => {
+                base = "real"
+            }
+            "KW_OBJECT" => {
+                base = "object"
+            }
+            "KW_PTR" => {
+                base = "ptr"
+            }
+            "KW_LIST" => {
+                base = "list"
+            }
+            "KW_AUTO" => {
+                base = "__auto"
+            }
+            _ => {
+                base = this.lx.tv()
+            }
         }
+        this.lx.advance()
         if this.check("LT") {
             this.lx.advance()
             str inner = this.parse_type()
@@ -757,47 +761,52 @@ class Parser {
 
     bool _is_type_start() {
         str t = this.lx.tt()
-        if t == "KW_VOID"       {
-            return true
-        }
-        if t == "KW_INT"        {
-            return true
-        }
-        if t == "KW_LONG"       {
-            return true
-        }
-        if t == "KW_STR"        {
-            return true
-        }
-        if t == "KW_BOOL"       {
-            return true
-        }
-        if t == "KW_DOUBLE"     {
-            return true
-        }
-        if t == "KW_FLOAT"      {
-            return true
-        }
-        if t == "KW_REAL"       {
-            return true
-        }
-        if t == "KW_OBJECT"     {
-            return true
-        }
-        if t == "KW_PTR"        {
-            return true
-        }
-        if t == "KW_LIST"       {
-            return true
-        }
-        if t == "KW_AUTO"       {
-            return true
-        }
-        if t == "KW_CONST"      {
-            return true
-        }
-        if t == "KW_STATIC"     {
-            return true
+        match t {
+            "KW_VOID" => {
+                return true
+            }
+            "KW_INT" => {
+                return true
+            }
+            "KW_LONG" => {
+                return true
+            }
+            "KW_STR" => {
+                return true
+            }
+            "KW_BOOL" => {
+                return true
+            }
+            "KW_DOUBLE" => {
+                return true
+            }
+            "KW_FLOAT" => {
+                return true
+            }
+            "KW_REAL" => {
+                return true
+            }
+            "KW_OBJECT" => {
+                return true
+            }
+            "KW_PTR" => {
+                return true
+            }
+            "KW_LIST" => {
+                return true
+            }
+            "KW_AUTO" => {
+                return true
+            }
+            "KW_CONST" => {
+                return true
+            }
+            "KW_STATIC" => {
+                return true
+            }
+            _ => {
+                return false
+            }
         }
         return false
     }
@@ -1099,6 +1108,26 @@ class Parser {
 
     # ── Statement parsers (print to stdout with indentation) ──────────────────
 
+    # Print a block whose opening "{" was already emitted inline.
+    # Consumes LBRACE … RBRACE and prints the body + closing "}".
+    void parse_block_body(int d) {
+        this.expect("LBRACE")
+        int d1 = d + 1
+        while !this.check("RBRACE") && !this.check("EOF") {
+            this.parse_stmt(d1)
+        }
+        this.expect("RBRACE")
+        print(pad_str(d) + "}")
+    }
+
+    # Print header + " {" on one line, then body and "}" — keeps "{" inline
+    # so the output is re-parseable by the compiler (auto-semicolon safe).
+    void parse_block_header(str header, int d) {
+        print(header + " {")
+        this.parse_block_body(d)
+    }
+
+    # Standalone block as a statement (the "{" appears directly).
     void parse_block(int d) {
         this.expect("LBRACE")
         print(pad_str(d) + "{")
@@ -1112,224 +1141,236 @@ class Parser {
 
     void parse_stmt(int d) {
         str t = this.lx.tt()
-        if t == "SEMI" {
-            this.lx.advance()
-            return
-        }
-        if t == "KW_RETURN" {
-            this.lx.advance()
-            if this.check("RBRACE") || this.check("EOF") || this.check("SEMI") {
+        match t {
+            "SEMI" => {
+                this.lx.advance()
+            }
+            "KW_RETURN" => {
+                this.lx.advance()
+                if this.check("RBRACE") || this.check("EOF") || this.check("SEMI") {
+                    if this.check("SEMI") {
+                        this.lx.advance()
+                    }
+                    print(pad_str(d) + "return")
+                } else {
+                    str val = this.parse_expr()
+                    if this.check("SEMI") {
+                        this.lx.advance()
+                    }
+                    print(pad_str(d) + "return " + val)
+                }
+            }
+            "KW_IF" => {
+                this.parse_if_stmt(d)
+            }
+            "KW_WHILE" => {
+                this.parse_while_stmt(d)
+            }
+            "KW_DO" => {
+                this.parse_do_while_stmt(d)
+            }
+            "KW_FOR" => {
+                this.parse_for_stmt(d)
+            }
+            "KW_SWITCH" => {
+                this.parse_switch_stmt(d)
+            }
+            "KW_MATCH" => {
+                this.parse_match_stmt(d)
+            }
+            "KW_BREAK" => {
+                this.lx.advance()
                 if this.check("SEMI") {
                     this.lx.advance()
                 }
-                print(pad_str(d) + "return")
-            } else {
-                str val = this.parse_expr()
+                print(pad_str(d) + "break")
+            }
+            "KW_CONTINUE" => {
+                this.lx.advance()
                 if this.check("SEMI") {
                     this.lx.advance()
                 }
-                print(pad_str(d) + "return " + val)
+                print(pad_str(d) + "continue")
             }
-            return
-        }
-        if t == "KW_IF" {
-            this.parse_if_stmt(d)
-            return
-        }
-        if t == "KW_WHILE" {
-            this.parse_while_stmt(d)
-            return
-        }
-        if t == "KW_DO" {
-            this.parse_do_while_stmt(d)
-            return
-        }
-        if t == "KW_FOR" {
-            this.parse_for_stmt(d)
-            return
-        }
-        if t == "KW_SWITCH" {
-            this.parse_switch_stmt(d)
-            return
-        }
-        if t == "KW_MATCH" {
-            this.parse_match_stmt(d)
-            return
-        }
-        if t == "KW_BREAK" {
-            this.lx.advance()
-            if this.check("SEMI") {
+            "KW_DELETE" => {
                 this.lx.advance()
+                str dexpr = this.parse_expr()
+                if this.check("SEMI") {
+                    this.lx.advance()
+                }
+                print(pad_str(d) + "delete " + dexpr)
             }
-            print(pad_str(d) + "break")
-            return
-        }
-        if t == "KW_CONTINUE" {
-            this.lx.advance()
-            if this.check("SEMI") {
+            "KW_THROW" => {
                 this.lx.advance()
+                str texpr = this.parse_expr()
+                if this.check("SEMI") {
+                    this.lx.advance()
+                }
+                print(pad_str(d) + "throw " + texpr)
             }
-            print(pad_str(d) + "continue")
-            return
-        }
-        if t == "KW_DELETE" {
-            this.lx.advance()
-            str expr = this.parse_expr()
-            if this.check("SEMI") {
+            "KW_ASSERT" => {
                 this.lx.advance()
+                this.expect("LPAREN")
+                str aexpr = this.parse_expr()
+                this.expect("RPAREN")
+                if this.check("SEMI") {
+                    this.lx.advance()
+                }
+                print(pad_str(d) + "assert(" + aexpr + ")")
             }
-            print(pad_str(d) + "delete " + expr)
-            return
-        }
-        if t == "KW_THROW" {
-            this.lx.advance()
-            str expr = this.parse_expr()
-            if this.check("SEMI") {
+            "KW_DEFER" => {
                 this.lx.advance()
+                print(pad_str(d) + "defer {")
+                int dd = d + 1
+                if this.check("LBRACE") {
+                    this.lx.advance()
+                    while !this.check("RBRACE") && !this.check("EOF") {
+                        this.parse_stmt(dd)
+                    }
+                    this.expect("RBRACE")
+                } else {
+                    this.parse_stmt(dd)
+                }
+                print(pad_str(d) + "}")
             }
-            print(pad_str(d) + "throw " + expr)
-            return
-        }
-        if t == "KW_ASSERT" {
-            this.lx.advance()
-            this.expect("LPAREN")
-            str expr = this.parse_expr()
-            this.expect("RPAREN")
-            if this.check("SEMI") {
-                this.lx.advance()
+            "KW_TRY" => {
+                this.parse_try_catch(d)
             }
-            print(pad_str(d) + "assert(" + expr + ")")
-            return
-        }
-        if t == "KW_DEFER" {
-            this.lx.advance()
-            print(pad_str(d) + "defer {")
-            int d1 = d + 1
-            if this.check("LBRACE") {
+            "KW_UNSAFE" => {
                 this.lx.advance()
+                print(pad_str(d) + "unsafe {")
+                int du = d + 1
+                this.expect("LBRACE")
                 while !this.check("RBRACE") && !this.check("EOF") {
-                    this.parse_stmt(d1)
+                    this.parse_stmt(du)
                 }
                 this.expect("RBRACE")
-            } else {
-                this.parse_stmt(d1)
+                print(pad_str(d) + "}")
             }
-            print(pad_str(d) + "}")
-            return
-        }
-        if t == "KW_TRY" {
-            this.parse_try_catch(d)
-            return
-        }
-        if t == "KW_UNSAFE" {
-            this.lx.advance()
-            print(pad_str(d) + "unsafe {")
-            int d1 = d + 1
-            this.expect("LBRACE")
-            while !this.check("RBRACE") && !this.check("EOF") {
-                this.parse_stmt(d1)
+            "LBRACE" => {
+                this.parse_block(d)
             }
-            this.expect("RBRACE")
-            print(pad_str(d) + "}")
-            return
-        }
-        if t == "LBRACE" {
-            this.parse_block(d)
-            return
-        }
-        if t == "KW_CONST" {
-            this.lx.advance()
-            str type_str = this.parse_type()
-            str name = this.lx.tv()
-            this.lx.advance()
-            if this.check("ASSIGN") {
+            "KW_CONST" => {
                 this.lx.advance()
-                str init = this.parse_expr()
-                if this.check("SEMI") {
-                    this.lx.advance()
-                }
-                print(pad_str(d) + "const " + type_str + " " + name + " = " + init)
-            } else {
-                if this.check("SEMI") {
-                    this.lx.advance()
-                }
-                print(pad_str(d) + "const " + type_str + " " + name)
-            }
-            return
-        }
-        if this._is_type_start() {
-            str type_str = this.parse_type()
-            if this.check("IDENT") {
-                str name = this.lx.tv()
+                str ctype = this.parse_type()
+                str cname = this.lx.tv()
                 this.lx.advance()
                 if this.check("ASSIGN") {
                     this.lx.advance()
-                    str init = this.parse_expr()
+                    str cinit = this.parse_expr()
                     if this.check("SEMI") {
                         this.lx.advance()
                     }
-                    print(pad_str(d) + type_str + " " + name + " = " + init)
-                } else if this.check("COMMA") {
-                    str decls = " " + name
-                    while this.check("COMMA") {
-                        this.lx.advance()
-                        str n2 = this.lx.tv()
-                        this.lx.advance()
-                        if this.check("ASSIGN") {
-                            this.lx.advance()
-                            str i2 = this.parse_expr()
-                            decls = decls + ", " + n2 + " = " + i2
-                        } else {
-                            decls = decls + ", " + n2
-                        }
-                    }
-                    if this.check("SEMI") {
-                        this.lx.advance()
-                    }
-                    print(pad_str(d) + type_str + decls)
+                    print(pad_str(d) + "const " + ctype + " " + cname + " = " + cinit)
                 } else {
                     if this.check("SEMI") {
                         this.lx.advance()
                     }
-                    print(pad_str(d) + type_str + " " + name)
+                    print(pad_str(d) + "const " + ctype + " " + cname)
                 }
-                return
             }
-            str rest = this.parse_assign_rest(type_str)
-            if this.check("SEMI") {
-                this.lx.advance()
-            }
-            print(pad_str(d) + rest)
-            return
-        }
-        # User-defined type variable declaration: IDENT IDENT [= expr]
-        # Detected via lookahead: current is IDENT, peek is IDENT
-        if t == "IDENT" && this.lx.peek_tt() == "IDENT" {
-            str type_str = this.lx.tv()
-            this.lx.advance()
-            str name = this.lx.tv()
-            this.lx.advance()
-            if this.check("ASSIGN") {
-                this.lx.advance()
-                str init = this.parse_expr()
-                if this.check("SEMI") {
-                    this.lx.advance()
+            _ => {
+                if this._is_type_start() {
+                    str type_str = this.parse_type()
+                    if this.check("IDENT") {
+                        str name = this.lx.tv()
+                        this.lx.advance()
+                        if this.check("ASSIGN") {
+                            this.lx.advance()
+                            str init = this.parse_expr()
+                            if this.check("SEMI") {
+                                this.lx.advance()
+                            }
+                            print(pad_str(d) + type_str + " " + name + " = " + init)
+                        } else if this.check("COMMA") {
+                            str decls = " " + name
+                            while this.check("COMMA") {
+                                this.lx.advance()
+                                str n2 = this.lx.tv()
+                                this.lx.advance()
+                                if this.check("ASSIGN") {
+                                    this.lx.advance()
+                                    str i2 = this.parse_expr()
+                                    decls = decls + ", " + n2 + " = " + i2
+                                } else {
+                                    decls = decls + ", " + n2
+                                }
+                            }
+                            if this.check("SEMI") {
+                                this.lx.advance()
+                            }
+                            print(pad_str(d) + type_str + decls)
+                        } else {
+                            if this.check("SEMI") {
+                                this.lx.advance()
+                            }
+                            print(pad_str(d) + type_str + " " + name)
+                        }
+                    } else {
+                        str rest = this.parse_assign_rest(type_str)
+                        if this.check("SEMI") {
+                            this.lx.advance()
+                        }
+                        print(pad_str(d) + rest)
+                    }
+                } else if t == "IDENT" && (this.lx.peek_tt() == "IDENT" || this.lx.peek_tt() == "LT") {
+                    # User-defined type variable declaration: TypeName varName [= expr]
+                    # Also handles generic types: Box<int> b = ...
+                    # Use parse_type() so that "Box<int>" is consumed atomically.
+                    str type_str = this.parse_type()
+                    if this.check("IDENT") {
+                        str name = this.lx.tv()
+                        this.lx.advance()
+                        if this.check("ASSIGN") {
+                            this.lx.advance()
+                            str init = this.parse_expr()
+                            if this.check("SEMI") {
+                                this.lx.advance()
+                            }
+                            print(pad_str(d) + type_str + " " + name + " = " + init)
+                        } else if this.check("COMMA") {
+                            str decls = " " + name
+                            while this.check("COMMA") {
+                                this.lx.advance()
+                                str n2 = this.lx.tv()
+                                this.lx.advance()
+                                if this.check("ASSIGN") {
+                                    this.lx.advance()
+                                    str i2 = this.parse_expr()
+                                    decls = decls + ", " + n2 + " = " + i2
+                                } else {
+                                    decls = decls + ", " + n2
+                                }
+                            }
+                            if this.check("SEMI") {
+                                this.lx.advance()
+                            }
+                            print(pad_str(d) + type_str + decls)
+                        } else {
+                            if this.check("SEMI") {
+                                this.lx.advance()
+                            }
+                            print(pad_str(d) + type_str + " " + name)
+                        }
+                    } else {
+                        # Not a var decl (e.g. a comparison like a < b > c):
+                        # type_str holds what we already parsed; finish the expression.
+                        str rest = this.parse_assign_rest(type_str)
+                        if this.check("SEMI") {
+                            this.lx.advance()
+                        }
+                        print(pad_str(d) + rest)
+                    }
+                } else {
+                    # Expression statement
+                    str expr = this.parse_expr()
+                    if this.check("SEMI") {
+                        this.lx.advance()
+                    }
+                    print(pad_str(d) + expr)
                 }
-                print(pad_str(d) + type_str + " " + name + " = " + init)
-            } else {
-                if this.check("SEMI") {
-                    this.lx.advance()
-                }
-                print(pad_str(d) + type_str + " " + name)
             }
-            return
         }
-        # Expression statement
-        str expr = this.parse_expr()
-        if this.check("SEMI") {
-            this.lx.advance()
-        }
-        print(pad_str(d) + expr)
     }
 
     str parse_assign_rest(str left) {
@@ -1343,6 +1384,52 @@ class Parser {
         return left
     }
 
+    # parse_if_body: called after the "if cond {" header has been printed.
+    # Parses the block body and any trailing else/else-if chain, printing
+    # "} else if cond {" or "} else {" on the SAME line as "}" to prevent
+    # the auto-SEMI rule from inserting a semicolon between "}" and "else".
+    void parse_if_body(int d) {
+        this.expect("LBRACE")
+        int d1 = d + 1
+        while !this.check("RBRACE") && !this.check("EOF") {
+            this.parse_stmt(d1)
+        }
+        this.expect("RBRACE")
+        if this.check("KW_ELSE") {
+            this.lx.advance()
+            if this.check("KW_IF") {
+                this.lx.advance()
+                bool had_paren2 = false
+                if this.check("LPAREN") {
+                    had_paren2 = true
+                    this.lx.advance()
+                }
+                str cond2 = this.parse_expr()
+                if had_paren2 {
+                    this.expect("RPAREN")
+                }
+                print(pad_str(d) + "} else if " + cond2 + " {")
+                this.parse_if_body(d)
+            } else {
+                if this.check("LBRACE") {
+                    print(pad_str(d) + "} else {")
+                    this.expect("LBRACE")
+                    while !this.check("RBRACE") && !this.check("EOF") {
+                        this.parse_stmt(d1)
+                    }
+                    this.expect("RBRACE")
+                    print(pad_str(d) + "}")
+                } else {
+                    print(pad_str(d) + "} else {")
+                    this.parse_stmt(d1)
+                    print(pad_str(d) + "}")
+                }
+            }
+        } else {
+            print(pad_str(d) + "}")
+        }
+    }
+
     void parse_if_stmt(int d) {
         this.expect("KW_IF")
         bool had_paren = false
@@ -1354,26 +1441,14 @@ class Parser {
         if had_paren {
             this.expect("RPAREN")
         }
-        print(pad_str(d) + "if (" + cond + ")")
         int d1 = d + 1
         if this.check("LBRACE") {
-            this.parse_block(d1)
+            print(pad_str(d) + "if " + cond + " {")
+            this.parse_if_body(d)
         } else {
+            print(pad_str(d) + "if " + cond + " {")
             this.parse_stmt(d1)
-        }
-        if this.check("KW_ELSE") {
-            this.lx.advance()
-            if this.check("KW_IF") {
-                print(pad_str(d) + "else")
-                this.parse_if_stmt(d1)
-            } else {
-                print(pad_str(d) + "else")
-                if this.check("LBRACE") {
-                    this.parse_block(d1)
-                } else {
-                    this.parse_stmt(d1)
-                }
-            }
+            print(pad_str(d) + "}")
         }
     }
 
@@ -1388,22 +1463,22 @@ class Parser {
         if had_paren {
             this.expect("RPAREN")
         }
-        print(pad_str(d) + "while (" + cond + ")")
         int d1 = d + 1
         if this.check("LBRACE") {
-            this.parse_block(d1)
+            this.parse_block_header(pad_str(d) + "while " + cond, d)
         } else {
+            print(pad_str(d) + "while " + cond)
             this.parse_stmt(d1)
         }
     }
 
     void parse_do_while_stmt(int d) {
         this.expect("KW_DO")
-        print(pad_str(d) + "do")
         int d1 = d + 1
         if this.check("LBRACE") {
-            this.parse_block(d1)
+            this.parse_block_header(pad_str(d) + "do", d)
         } else {
+            print(pad_str(d) + "do")
             this.parse_stmt(d1)
         }
         this.expect("KW_WHILE")
@@ -1419,7 +1494,7 @@ class Parser {
         if this.check("SEMI") {
             this.lx.advance()
         }
-        print(pad_str(d) + "while (" + cond + ")")
+        print(pad_str(d) + "while " + cond)
     }
 
     void parse_for_stmt(int d) {
@@ -1444,11 +1519,11 @@ class Parser {
                 str end_e = this.parse_expr()
                 iter = "(" + iter + " .. " + end_e + ")"
             }
-            print(pad_str(d) + "for " + var_type + " " + var_name + " in " + iter)
             int d1 = d + 1
             if this.check("LBRACE") {
-                this.parse_block(d1)
+                this.parse_block_header(pad_str(d) + "for " + var_type + " " + var_name + " in " + iter, d)
             } else {
+                print(pad_str(d) + "for " + var_type + " " + var_name + " in " + iter)
                 this.parse_stmt(d1)
             }
         } else {
@@ -1458,11 +1533,11 @@ class Parser {
             str cond_e = this.parse_expr()
             this.expect("COMMA")
             str incr_e = this.parse_expr()
-            print(pad_str(d) + "for " + var_type + " " + var_name + " = " + init_e + ", " + cond_e + ", " + incr_e)
             int d1 = d + 1
             if this.check("LBRACE") {
-                this.parse_block(d1)
+                this.parse_block_header(pad_str(d) + "for " + var_type + " " + var_name + " = " + init_e + ", " + cond_e + ", " + incr_e, d)
             } else {
+                print(pad_str(d) + "for " + var_type + " " + var_name + " = " + init_e + ", " + cond_e + ", " + incr_e)
                 this.parse_stmt(d1)
             }
         }
@@ -1503,48 +1578,60 @@ class Parser {
 
     void parse_match_stmt(int d) {
         this.expect("KW_MATCH")
-        this.expect("LPAREN")
-        str expr = this.parse_expr()
-        this.expect("RPAREN")
-        print(pad_str(d) + "match (" + expr + ") {")
+        str mxpr = this.parse_expr()
+        print(pad_str(d) + "match " + mxpr + " {")
         this.expect("LBRACE")
         int d1 = d + 1
         int d2 = d + 2
         while !this.check("RBRACE") && !this.check("EOF") {
-            str pat = ""
-            if this.check("IDENT") {
-                pat = this.lx.tv()
-                this.lx.advance()
-                if this.check("DOT") {
-                    this.lx.advance()
-                    pat = pat + "." + this.lx.tv()
-                    this.lx.advance()
-                }
-            } else if this.check("KW_TRUE") {
-                pat = "true"
-                this.lx.advance()
-            } else if this.check("KW_FALSE") {
-                pat = "false"
-                this.lx.advance()
-            } else if this.check("INT_LIT") {
-                pat = this.lx.tv()
+            if this.check("SEMI") {
                 this.lx.advance()
             } else {
-                pat = "_"
-                this.lx.advance()
-            }
-            this.expect("FAT_ARROW")
-            print(pad_str(d1) + pat + " => {")
-            if this.check("LBRACE") {
-                this.lx.advance()
+                str pat = ""
+                str mtt = this.lx.tt()
+                match mtt {
+                    "IDENT" => {
+                        pat = this.lx.tv()
+                        this.lx.advance()
+                        if this.check("DOT") {
+                            this.lx.advance()
+                            pat = pat + "." + this.lx.tv()
+                            this.lx.advance()
+                        }
+                    }
+                    "KW_TRUE" => {
+                        pat = "true"
+                        this.lx.advance()
+                    }
+                    "KW_FALSE" => {
+                        pat = "false"
+                        this.lx.advance()
+                    }
+                    "INT_LIT" => {
+                        pat = this.lx.tv()
+                        this.lx.advance()
+                    }
+                    "STR_LIT" => {
+                        pat = "\"" + this.lx.tv() + "\""
+                        this.lx.advance()
+                    }
+                    _ => {
+                        pat = "_"
+                        this.lx.advance()
+                    }
+                }
+                this.expect("FAT_ARROW")
+                print(pad_str(d1) + pat + " => {")
+                this.expect("LBRACE")
                 while !this.check("RBRACE") && !this.check("EOF") {
                     this.parse_stmt(d2)
                 }
                 this.expect("RBRACE")
-            } else {
-                this.parse_stmt(d2)
+                if this.check("SEMI") {
+                    this.lx.advance()
+                }
+                print(pad_str(d1) + "}")
             }
-            print(pad_str(d1) + "}")
         }
         this.expect("RBRACE")
         print(pad_str(d) + "}")
@@ -1552,11 +1639,11 @@ class Parser {
 
     void parse_try_catch(int d) {
         this.expect("KW_TRY")
-        print(pad_str(d) + "try")
         int d1 = d + 1
         if this.check("LBRACE") {
-            this.parse_block(d1)
+            this.parse_block_header(pad_str(d) + "try", d)
         } else {
+            print(pad_str(d) + "try")
             this.parse_stmt(d1)
         }
         if this.check("KW_CATCH") {
@@ -1575,10 +1662,10 @@ class Parser {
                     this.lx.advance()
                 }
             }
-            print(pad_str(d) + catch_hdr)
             if this.check("LBRACE") {
-                this.parse_block(d1)
+                this.parse_block_header(pad_str(d) + catch_hdr, d)
             } else {
+                print(pad_str(d) + catch_hdr)
                 this.parse_stmt(d1)
             }
         }
@@ -1680,6 +1767,36 @@ class Parser {
     }
 
     void parse_func_decl(str ret_type_in, str name_in, int d) {
+        # Optional generic type parameters <T, U, ...>
+        str tparams = ""
+        if this.check("LT") {
+            this.lx.advance()
+            tparams = "<"
+            int first = 1
+            while !this.check("GT") && !this.check("SHR") && !this.check("LBRACE") && !this.check("EOF") {
+                if first == 0 {
+                    tparams = tparams + ", "
+                }
+                first = 0
+                str tp = this.lx.tv()
+                this.lx.advance()
+                if this.check("COLON") {
+                    this.lx.advance()
+                    tp = tp + ": " + this.lx.tv()
+                    this.lx.advance()
+                }
+                tparams = tparams + tp
+                if this.check("COMMA") {
+                    this.lx.advance()
+                }
+            }
+            if this.check("GT") {
+                this.lx.advance()
+            } else if this.check("SHR") {
+                this.lx.advance()
+            }
+            tparams = tparams + ">"
+        }
         str params = this.parse_params()
         str modifier = ""
         if this.check("IDENT") {
@@ -1688,17 +1805,17 @@ class Parser {
         }
         str header = ""
         if ret_type_in == "" {
-            header = name_in + "(" + params + ")"
+            header = name_in + tparams + "(" + params + ")"
         } else {
-            header = ret_type_in + " " + name_in + "(" + params + ")"
+            header = ret_type_in + " " + name_in + tparams + "(" + params + ")"
         }
         if modifier != "" {
             header = header + modifier
         }
-        print(pad_str(d) + header)
         if this.check("LBRACE") {
-            int d1 = d + 1
-            this.parse_block(d1)
+            this.parse_block_header(pad_str(d) + header, d)
+        } else {
+            print(pad_str(d) + header)
         }
     }
 
@@ -1707,10 +1824,10 @@ class Parser {
         str name = this.lx.tv()
         this.lx.advance()
         str params = this.parse_params()
-        print(pad_str(d) + "~" + name + "(" + params + ")")
         if this.check("LBRACE") {
-            int d1 = d + 1
-            this.parse_block(d1)
+            this.parse_block_header(pad_str(d) + "~" + name + "(" + params + ")", d)
+        } else {
+            print(pad_str(d) + "~" + name + "(" + params + ")")
         }
     }
 
@@ -1718,19 +1835,35 @@ class Parser {
         this.expect("KW_CLASS")
         str name = this.lx.tv()
         this.lx.advance()
+        # Collect generic type params <T, U, ...>
+        str tparams = ""
         if this.check("LT") {
             this.lx.advance()
-            int depth = 1
-            while depth > 0 && !this.check("EOF") {
-                if this.check("LT") {
-                    depth = depth + 1
-                } else if this.check("GT") {
-                    depth = depth - 1
-                } else if this.check("SHR") {
-                    depth = depth - 2
+            tparams = "<"
+            int first = 1
+            while !this.check("GT") && !this.check("SHR") && !this.check("LPAREN") && !this.check("LBRACE") && !this.check("EOF") {
+                if first == 0 {
+                    tparams = tparams + ", "
                 }
+                first = 0
+                str tp = this.lx.tv()
+                this.lx.advance()
+                if this.check("COLON") {
+                    this.lx.advance()
+                    tp = tp + ": " + this.lx.tv()
+                    this.lx.advance()
+                }
+                tparams = tparams + tp
+                if this.check("COMMA") {
+                    this.lx.advance()
+                }
+            }
+            if this.check("GT") {
+                this.lx.advance()
+            } else if this.check("SHR") {
                 this.lx.advance()
             }
+            tparams = tparams + ">"
         }
         str bases_str = ""
         if this.check("LPAREN") {
@@ -1763,9 +1896,9 @@ class Parser {
             this.expect("RPAREN")
         }
         if bases_str != "" {
-            print(pad_str(d) + "class " + name + "(" + bases_str + ") {")
+            print(pad_str(d) + "class " + name + tparams + "(" + bases_str + ") {")
         } else {
-            print(pad_str(d) + "class " + name + " {")
+            print(pad_str(d) + "class " + name + tparams + " {")
         }
         this.expect("LBRACE")
         int d1 = d + 1
@@ -1778,93 +1911,93 @@ class Parser {
 
     void parse_class_member(str class_name, int d) {
         str t = this.lx.tt()
-        if t == "KW_PUBLIC" {
-            this.lx.advance()
-            if this.check("COLON") {
+        match t {
+            "KW_PUBLIC" => {
                 this.lx.advance()
-                print(pad_str(d) + "public:")
-            } else {
-                str member_type = this.parse_type()
-                this.parse_member_after_type(member_type, class_name, d)
+                if this.check("COLON") {
+                    this.lx.advance()
+                    print(pad_str(d) + "public:")
+                } else {
+                    str mt = this.parse_type()
+                    this.parse_member_after_type(mt, class_name, d)
+                }
             }
-            return
-        }
-        if t == "KW_PRIVATE" {
-            this.lx.advance()
-            if this.check("COLON") {
+            "KW_PRIVATE" => {
                 this.lx.advance()
-                print(pad_str(d) + "private:")
-            } else {
-                str member_type = this.parse_type()
-                this.parse_member_after_type(member_type, class_name, d)
+                if this.check("COLON") {
+                    this.lx.advance()
+                    print(pad_str(d) + "private:")
+                } else {
+                    str mt = this.parse_type()
+                    this.parse_member_after_type(mt, class_name, d)
+                }
             }
-            return
-        }
-        if t == "KW_PROTECTED" {
-            this.lx.advance()
-            if this.check("COLON") {
+            "KW_PROTECTED" => {
                 this.lx.advance()
-                print(pad_str(d) + "protected:")
-            } else {
-                str member_type = this.parse_type()
-                this.parse_member_after_type(member_type, class_name, d)
+                if this.check("COLON") {
+                    this.lx.advance()
+                    print(pad_str(d) + "protected:")
+                } else {
+                    str mt = this.parse_type()
+                    this.parse_member_after_type(mt, class_name, d)
+                }
             }
-            return
-        }
-        if t == "TILDE" {
-            this.parse_dtor_decl(class_name, d)
-            return
-        }
-        if t == "IDENT" && this.lx.tv() == class_name && this.lx.peek_tt() == "LPAREN" {
-            str ctor_name = this.lx.tv()
-            this.lx.advance()
-            this.parse_func_decl("", ctor_name, d)
-            return
-        }
-        if this._is_type_start() {
-            bool is_static = false
-            bool is_const = false
-            str ct = this.lx.tt()
-            if ct == "KW_STATIC" {
-                is_static = true
-                this.lx.advance()
+            "TILDE" => {
+                this.parse_dtor_decl(class_name, d)
             }
-            if ct == "KW_CONST" {
-                is_const = true
-                this.lx.advance()
-            }
-            str member_type = this.parse_type()
-            if is_static {
-                member_type = "static " + member_type
-            }
-            if is_const {
-                member_type = "const " + member_type
-            }
-            this.parse_member_after_type(member_type, class_name, d)
-            return
-        }
-        if t == "IDENT" {
-            str iname = this.lx.tv()
-            this.lx.advance()
-            if this.check("LPAREN") {
-                this.parse_func_decl("", iname, d)
-            } else if this.check("ASSIGN") {
-                this.lx.advance()
-                str init = this.parse_expr()
-                if this.check("SEMI") {
+            _ => {
+                if t == "IDENT" && this.lx.tv() == class_name && this.lx.peek_tt() == "LPAREN" {
+                    str ctor_name = this.lx.tv()
+                    this.lx.advance()
+                    this.parse_func_decl("", ctor_name, d)
+                } else if this._is_type_start() {
+                    bool is_static = false
+                    bool is_const = false
+                    str ct = this.lx.tt()
+                    if ct == "KW_STATIC" {
+                        is_static = true
+                        this.lx.advance()
+                    }
+                    if ct == "KW_CONST" {
+                        is_const = true
+                        this.lx.advance()
+                    }
+                    str member_type = this.parse_type()
+                    if is_static {
+                        member_type = "static " + member_type
+                    }
+                    if is_const {
+                        member_type = "const " + member_type
+                    }
+                    this.parse_member_after_type(member_type, class_name, d)
+                } else if t == "IDENT" {
+                    str iname = this.lx.tv()
+                    this.lx.advance()
+                    if this.check("LPAREN") || this.check("LT") {
+                        # Method with no return type (or unknown ident name), e.g. "foo(...)"
+                        this.parse_func_decl("", iname, d)
+                    } else if this.check("IDENT") {
+                        # "T val" or "MyType fieldName" — iname is the type
+                        this.parse_member_after_type(iname, class_name, d)
+                    } else if this.check("ASSIGN") {
+                        this.lx.advance()
+                        str init = this.parse_expr()
+                        if this.check("SEMI") {
+                            this.lx.advance()
+                        }
+                        print(pad_str(d) + iname + " = " + init)
+                    } else {
+                        if this.check("SEMI") {
+                            this.lx.advance()
+                        }
+                        print(pad_str(d) + iname)
+                    }
+                } else {
+                    # Skip unknown token
                     this.lx.advance()
                 }
-                print(pad_str(d) + iname + " = " + init)
-            } else {
-                if this.check("SEMI") {
-                    this.lx.advance()
-                }
-                print(pad_str(d) + iname)
             }
-            return
         }
-        # Skip unknown token
-        this.lx.advance()
     }
 
     void parse_member_after_type(str member_type, str class_name, int d) {
@@ -1950,9 +2083,11 @@ class Parser {
                         }
                     }
                     this.expect("RPAREN")
-                    print(pad_str(d1) + vname + "(" + payload + ")")
+                    # Trailing comma so that newline-separated variants re-parse correctly
+                    print(pad_str(d1) + vname + "(" + payload + "),")
                 } else {
-                    print(pad_str(d1) + vname)
+                    # Trailing comma so newline-separated variants don't trigger auto-SEMI issues
+                    print(pad_str(d1) + vname + ",")
                 }
                 if this.check("COMMA") {
                     this.lx.advance()
@@ -1987,104 +2122,95 @@ class Parser {
 
     void parse_top_decl_at(int d) {
         str t = this.lx.tt()
-        if t == "KW_IMPORT" {
-            this.parse_import(d)
-            return
-        }
-        if t == "KW_CLASS" {
-            this.parse_class_decl(d)
-            return
-        }
-        if t == "KW_INTERFACE" {
-            this.parse_interface_decl(d)
-            return
-        }
-        if t == "KW_NAMESPACE" {
-            this.parse_namespace_decl(d)
-            return
-        }
-        if t == "KW_ENUM" {
-            this.parse_enum_decl(d)
-            return
-        }
-        if t == "KW_EXTERN" {
-            this.parse_extern_decl(d)
-            return
-        }
-        if t == "SEMI" {
-            this.lx.advance()
-            return
-        }
-        if t == "KW_CONST" {
-            this.lx.advance()
-            str ctype = this.parse_type()
-            str cname = this.lx.tv()
-            this.lx.advance()
-            if this.check("ASSIGN") {
-                this.lx.advance()
-                str cinit = this.parse_expr()
-                if this.check("SEMI") {
-                    this.lx.advance()
-                }
-                print(pad_str(d) + "const " + ctype + " " + cname + " = " + cinit)
-            } else {
-                if this.check("SEMI") {
-                    this.lx.advance()
-                }
-                print(pad_str(d) + "const " + ctype + " " + cname)
+        match t {
+            "KW_IMPORT" => {
+                this.parse_import(d)
             }
-            return
-        }
-        if this._is_type_start() {
-            str ret_type = this.parse_type()
-            if this.check("IDENT") {
-                str fname = this.lx.tv()
+            "KW_CLASS" => {
+                this.parse_class_decl(d)
+            }
+            "KW_INTERFACE" => {
+                this.parse_interface_decl(d)
+            }
+            "KW_NAMESPACE" => {
+                this.parse_namespace_decl(d)
+            }
+            "KW_ENUM" => {
+                this.parse_enum_decl(d)
+            }
+            "KW_EXTERN" => {
+                this.parse_extern_decl(d)
+            }
+            "SEMI" => {
                 this.lx.advance()
-                if this.check("LPAREN") {
-                    this.parse_func_decl(ret_type, fname, d)
+            }
+            "KW_CONST" => {
+                this.lx.advance()
+                str ctype = this.parse_type()
+                str cname = this.lx.tv()
+                this.lx.advance()
+                if this.check("ASSIGN") {
+                    this.lx.advance()
+                    str cinit = this.parse_expr()
+                    if this.check("SEMI") {
+                        this.lx.advance()
+                    }
+                    print(pad_str(d) + "const " + ctype + " " + cname + " = " + cinit)
                 } else {
-                    if this.check("ASSIGN") {
+                    if this.check("SEMI") {
+                        this.lx.advance()
+                    }
+                    print(pad_str(d) + "const " + ctype + " " + cname)
+                }
+            }
+            "TILDE" => {
+                this.parse_dtor_decl("", d)
+            }
+            _ => {
+                if this._is_type_start() {
+                    str ret_type = this.parse_type()
+                    if this.check("IDENT") {
+                        str fname = this.lx.tv()
+                        this.lx.advance()
+                        if this.check("LPAREN") || this.check("LT") {
+                            this.parse_func_decl(ret_type, fname, d)
+                        } else {
+                            if this.check("ASSIGN") {
+                                this.lx.advance()
+                                str init = this.parse_expr()
+                                if this.check("SEMI") {
+                                    this.lx.advance()
+                                }
+                                print(pad_str(d) + ret_type + " " + fname + " = " + init)
+                            } else {
+                                if this.check("SEMI") {
+                                    this.lx.advance()
+                                }
+                                print(pad_str(d) + ret_type + " " + fname)
+                            }
+                        }
+                    }
+                } else if t == "IDENT" {
+                    str iname = this.lx.tv()
+                    this.lx.advance()
+                    if this.check("LPAREN") || this.check("LT") {
+                        this.parse_func_decl("", iname, d)
+                    } else if this.check("ASSIGN") {
                         this.lx.advance()
                         str init = this.parse_expr()
                         if this.check("SEMI") {
                             this.lx.advance()
                         }
-                        print(pad_str(d) + ret_type + " " + fname + " = " + init)
+                        print(pad_str(d) + iname + " = " + init)
                     } else {
-                        if this.check("SEMI") {
-                            this.lx.advance()
-                        }
-                        print(pad_str(d) + ret_type + " " + fname)
+                        print(pad_str(d) + iname)
                     }
-                }
-                return
-            }
-        }
-        if t == "IDENT" {
-            str iname = this.lx.tv()
-            this.lx.advance()
-            if this.check("LPAREN") {
-                this.parse_func_decl("", iname, d)
-                return
-            }
-            if this.check("ASSIGN") {
-                this.lx.advance()
-                str init = this.parse_expr()
-                if this.check("SEMI") {
+                } else {
+                    # Unknown: skip
                     this.lx.advance()
                 }
-                print(pad_str(d) + iname + " = " + init)
-                return
             }
-            print(pad_str(d) + iname)
-            return
         }
-        if t == "TILDE" {
-            this.parse_dtor_decl("", d)
-            return
-        }
-        # Unknown: skip
-        this.lx.advance()
     }
 
     void parse_top_decl() {
