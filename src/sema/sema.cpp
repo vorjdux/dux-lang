@@ -1151,6 +1151,50 @@ TypeId Sema::check_member(const ast::MemberExpr& e) {
         if (sym) return sym->type;
     }
 
+    // Validate that the member exists on the class type.
+    // Only check when obj_t is a known user-defined class (TypeKind::Class),
+    // not TID_UNKNOWN, not a primitive, and not the root 'object' type.
+    if (obj_t != TR::TID_UNKNOWN && obj_t != TR::TID_OBJECT &&
+        obj_t >= 0 && types_.info(obj_t).kind == TypeKind::Class) {
+        // Helper: check if a ClassDecl has a field or method named 'member'.
+        auto class_has_member = [&](const ast::ClassDecl* cd, const std::string& member) -> bool {
+            for (const auto& m : cd->members) {
+                if (!m.decl) continue;
+                if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
+                    if (f->name == member) return true;
+                } else if (auto* fd = dynamic_cast<const ast::FieldDecl*>(m.decl.get())) {
+                    if (fd->name == member) return true;
+                }
+            }
+            return false;
+        };
+
+        // Walk the class hierarchy (current class + parent chain) looking for member.
+        // Use global_scope() to avoid picking up constructor/method symbols that
+        // shadow the class symbol inside the class's own scope.
+        bool found = false;
+        TypeId cur = obj_t;
+        while (cur != TR::TID_UNKNOWN && cur >= 0 && cur != TR::TID_OBJECT) {
+            const std::string& cls_name = types_.info(cur).name;
+            Symbol* cls_sym = scopes_.global_scope().lookup(cls_name);
+            if (!cls_sym || cls_sym->kind != SymKind::Class) break;  // unknown/external class
+            auto* cd = dynamic_cast<const ast::ClassDecl*>(cls_sym->decl);
+            if (!cd) break;  // built-in class symbol with no AST decl
+            if (class_has_member(cd, e.member)) {
+                found = true;
+                break;
+            }
+            TypeId parent = types_.info(cur).parent;
+            if (parent == cur) break;  // avoid infinite loop
+            cur = parent;
+        }
+
+        if (!found) {
+            const std::string& cls_name = types_.info(obj_t).name;
+            err(e.loc, "type '" + cls_name + "' has no member '" + e.member + "'");
+        }
+    }
+
     // Return unknown — type will be refined during codegen
     return TR::TID_UNKNOWN;
 }
