@@ -76,6 +76,7 @@ add_library(duxrt STATIC
     src/runtime/async_rt.c
     src/runtime/achan_rt.c
     src/runtime/future_rt.c
+    src/runtime/pool_rt.c
 )
 
 target_include_directories(duxrt PUBLIC src/runtime)
