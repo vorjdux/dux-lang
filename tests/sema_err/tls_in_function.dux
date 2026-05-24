@@ -1,0 +1,4 @@
+int main() {
+    thread_local int local_tls = 0
+    return 0
+}
