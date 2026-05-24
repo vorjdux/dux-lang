@@ -52,6 +52,7 @@ struct MethodInfo {
     std::string    name;
     unsigned       vtable_slot;
     llvm::Function* fn{nullptr};
+    std::string    modifier;  // "get", "set", or ""
 };
 
 struct ClassLayout {

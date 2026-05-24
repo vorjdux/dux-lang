@@ -24,6 +24,13 @@
 
 static bool need_semi = false;
 static int  nesting   = 0;   /* depth of ( [ — suppress SEMI when > 0 */
+
+/* F-string state:
+   fstr_interp_depth > 0 means we are inside a {...} interpolation.
+   The INITIAL-mode '}' rule checks this to decide whether to return
+   FSTR_INTERP_END (and switch back to FSTR) or plain RBRACE. */
+static std::string fstr_buf;
+static int         fstr_interp_depth = 0;
 %}
 
 %option noyywrap nounput noinput batch
@@ -32,6 +39,7 @@ static int  nesting   = 0;   /* depth of ( [ — suppress SEMI when > 0 */
 %x ML_COMMENT
 %x STR_SQ
 %x STR_DQ
+%x FSTR
 
 DIGIT   [0-9]
 ALPHA   [a-zA-Z_]
@@ -89,6 +97,45 @@ ALNUM   [a-zA-Z0-9_]
     \n      { driver.string_buf() += '\n'; loc.lines(1); }
     .       { driver.string_buf() += yytext[0]; }
     <<EOF>> { throw yy::parser::syntax_error(loc, "unterminated string"); }
+}
+
+f\"   {
+    fstr_buf.clear();
+    fstr_interp_depth = 0;
+    need_semi = false;
+    BEGIN(FSTR);
+    return yy::parser::make_FSTR_BEGIN(loc);
+}
+
+<FSTR>{
+    /* End of f-string literal */
+    "\""    {
+        std::string chunk = fstr_buf;
+        fstr_buf.clear();
+        BEGIN(INITIAL);
+        need_semi = true;
+        return yy::parser::make_FSTR_FINISH(chunk, loc);
+    }
+    /* Open interpolation: emit accumulated chunk, switch back to INITIAL */
+    "{"     {
+        std::string chunk = fstr_buf;
+        fstr_buf.clear();
+        fstr_interp_depth = 1;
+        BEGIN(INITIAL);
+        return yy::parser::make_FSTR_INTERP_BEGIN(chunk, loc);
+    }
+    /* Escape sequences */
+    "\\n"   { fstr_buf += '\n'; }
+    "\\t"   { fstr_buf += '\t'; }
+    "\\r"   { fstr_buf += '\r'; }
+    "\\\\"  { fstr_buf += '\\'; }
+    "\\\""  { fstr_buf += '"';  }
+    "\\{"   { fstr_buf += '{';  }
+    /* Newlines inside f-string literal */
+    \n      { fstr_buf += '\n'; loc.lines(1); }
+    /* Accumulate ordinary characters */
+    [^"{\\\n]+  { fstr_buf += yytext; }
+    <<EOF>> { throw yy::parser::syntax_error(loc, "unterminated f-string"); }
 }
 
 "namespace"  { need_semi = false; return yy::parser::make_KW_NAMESPACE(loc); }
@@ -220,8 +267,22 @@ ALNUM   [a-zA-Z0-9_]
 ":"  { need_semi = false; return yy::parser::make_COLON(loc);    }
 "("  { need_semi = false; nesting++; return yy::parser::make_LPAREN(loc);   }
 ")"  { need_semi = true;  nesting--; return yy::parser::make_RPAREN(loc);   }
-"{"  { need_semi = false;            return yy::parser::make_LBRACE(loc);   }
-"}"  { need_semi = true;             return yy::parser::make_RBRACE(loc);   }
+"{"  { need_semi = false;
+         if (fstr_interp_depth > 0) fstr_interp_depth++;
+         return yy::parser::make_LBRACE(loc);   }
+"}"  {
+         if (fstr_interp_depth > 0) {
+             fstr_interp_depth--;
+             if (fstr_interp_depth == 0) {
+                 /* Closing brace of top-level interpolation: back to f-string scan */
+                 need_semi = false;
+                 BEGIN(FSTR);
+                 return yy::parser::make_FSTR_INTERP_END(loc);
+             }
+         }
+         need_semi = true;
+         return yy::parser::make_RBRACE(loc);
+     }
 "["  { need_semi = false; nesting++; return yy::parser::make_LBRACKET(loc); }
 "]"  { need_semi = true;  nesting--; return yy::parser::make_RBRACKET(loc); }
 

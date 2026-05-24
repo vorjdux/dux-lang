@@ -15,6 +15,7 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 typedef struct DuxFuture {
     pthread_mutex_t  mu;
@@ -89,19 +90,44 @@ void* duxrt_future_await(void* fut) {
     return r;
 }
 
+/* ── Global thread pool ──────────────────────────────────────────────────── */
+
+/*
+ * Global thread pool — lazily initialised on first async spawn.
+ *
+ * Pool size defaults to the online CPU count (capped at 16, minimum 2).
+ * Call duxrt_pool_set_size() before the first async spawn to override.
+ */
+static void*          g_pool      = NULL;
+static pthread_once_t g_pool_once = PTHREAD_ONCE_INIT;
+static int32_t        g_pool_size = 0;  /* 0 = use CPU count */
+
+static void init_global_pool(void) {
+    int32_t n = g_pool_size > 0 ? g_pool_size : 4;
+    /* Try to get CPU count */
+    long cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    if (cpus > 0 && g_pool_size == 0) n = (int32_t)cpus;
+    if (n < 2)  n = 2;
+    if (n > 16) n = 16;   /* cap at 16 */
+    g_pool = duxrt_pool_new(n);
+}
+
+/* Configure pool size before first async spawn (optional). */
+void duxrt_pool_set_size(int32_t n) {
+    g_pool_size = n;
+}
+
 /* ── Spawn ───────────────────────────────────────────────────────────────── */
 
 /*
- * Spawn a detached thread that calls fn(env).
+ * Submit fn(env) to the global thread pool.
  * fn must be a pthread-compatible worker: (void*) -> void*
- * The thread is detached so no join is needed; completion is signalled via
- * the future (duxrt_future_set).
+ * Completion is signalled via the future (duxrt_future_set).
+ *
+ * Previously this created a new detached pthread per call; now it reuses the
+ * fixed pool, preventing thread exhaustion under load.
  */
 void duxrt_future_spawn_detached(void* fn, void* env) {
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    pthread_t tid;
-    pthread_create(&tid, &attr, (void*(*)(void*))fn, env);
-    pthread_attr_destroy(&attr);
+    pthread_once(&g_pool_once, init_global_pool);
+    duxrt_pool_submit(g_pool, fn, env);
 }
