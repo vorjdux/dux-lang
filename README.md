@@ -1,81 +1,117 @@
 # Dux Lang
 
-## Why did we create yet another programming language?
+> A statically-typed compiled language — Python elegance, C performance, native code.
 
-- We love a good challenge
-- Why not?
-- We've seen plenty of languages drowning in crazy syntax sugar — but really, *do we need all that*?
-- Our goal: fuse the elegance of Python with the strength of C++, without going completely insane *(just a little bit 😄)*
-- And it **compiles**! Yeahhh \nn/_
+[![CI](https://github.com/vorjdux/dux-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/vorjdux/dux-lang/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/vorjdux/dux-lang)](https://github.com/vorjdux/dux-lang/releases/latest)
+
+Dux compiles to native machine code via LLVM, achieves C-level performance with
+link-time optimisation, and provides clean Python-like syntax with full type inference,
+classes, closures, async/await, and a reference-counted runtime.
 
 ---
 
-An experimental compiled programming language that targets native code via LLVM IR.
-Statically typed, clean syntax, no runtime surprises.
+## Install
 
-## Requirements
-
-| Tool | Version |
-|------|---------|
-| CMake | ≥ 3.25 |
-| C++ compiler | C++23 (GCC 13+ or Clang 16+) |
-| Flex | ≥ 2.6 |
-| Bison | ≥ 3.8 |
-| LLVM | 18 |
+### Linux / macOS — one-liner
 
 ```bash
-# Ubuntu / Debian
-sudo apt install cmake flex bison g++-13 llvm-18-dev clang-18
+curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
 ```
 
-> `clang-18` is optional but enables **LTO** (link-time optimisation): the compiler
-> merges the runtime into your program module before optimisation, allowing LLVM to
-> inline runtime helpers end-to-end.  Without it the compiler still works; LTO is
-> silently skipped.
+Detects your OS and architecture, downloads the right pre-built binary, and installs
+`dux` to `/usr/local/bin` (or `~/.local/bin` if you prefer a user install).
 
-## Build
+### Pre-built packages
+
+Download from the [latest release](https://github.com/vorjdux/dux-lang/releases/latest):
+
+| Platform | Package |
+|----------|---------|
+| Ubuntu 22.04 / 24.04 | `dux-lang_0.1.0_amd64.deb` |
+| Debian Bookworm | `dux-0.1.0-linux-x86_64-debian.tar.gz` |
+| Fedora / RHEL | `dux-lang-0.1.0-1.x86_64.rpm` |
+| macOS Apple Silicon | `dux-0.1.0-macos-arm64.tar.gz` |
+| macOS Intel | `dux-0.1.0-macos-x86_64.tar.gz` |
+| Generic Linux x86_64 | `dux-0.1.0-linux-x86_64.tar.gz` |
+
+**Ubuntu / Debian:**
+```bash
+wget https://github.com/vorjdux/dux-lang/releases/download/v0.1.0/dux-lang_0.1.0_amd64.deb
+sudo dpkg -i dux-lang_0.1.0_amd64.deb
+```
+
+**Fedora / RHEL:**
+```bash
+sudo dnf localinstall dux-lang-0.1.0-1.x86_64.rpm
+```
+
+**macOS / Generic Linux (tarball):**
+```bash
+tar -xzf dux-0.1.0-linux-x86_64.tar.gz
+sudo mv dux /usr/local/bin/
+```
+
+### Verify
 
 ```bash
+dux --version   # dux 0.1.0 (x86_64-Linux)
+dux --help
+```
+
+### Build from source
+
+See [docs/install.md](docs/install.md) for full build instructions on all platforms.
+
+```bash
+# Quick build (Ubuntu/Debian)
+sudo apt install cmake flex bison g++-13 llvm-18-dev clang-18
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
+sudo cmake --install build
 ```
 
-Debug build includes AddressSanitizer and UBSan:
+---
+
+## Quick start
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j$(nproc)
+# Write your first program
+cat > hello.dux << 'EOF'
+void main() {
+    str name = "world"
+    println(f"Hello, {name}!")
+}
+EOF
+
+# Compile and run
+dux --compile hello.dux -o hello
+./hello     # Hello, world!
 ```
 
-## Usage
+## Compiler flags
 
 ```
-Usage: ./build/dux [options] [file]
+Usage: dux [options] [file]
 
-Options:
-  --dump-ast      Print the parsed AST to stdout
-  --check         Run semantic analysis and report errors
-  --emit-ir       Emit LLVM IR (to -o path or stdout)
+  --compile       Compile to a native executable
+  --emit-ir       Emit LLVM IR (to stdout or -o path)
   --emit-obj      Emit native object file (requires -o path)
-  --compile       Compile to a runnable native executable
+  --check         Run semantic analysis only
+  --dump-ast      Print the parsed AST
+  --repl          Start interactive REPL
   -o <path>       Output path
   -O0/-O1/-O2/-O3 Optimisation level (default -O0)
-  -g              Emit DWARF debug information
+  -g              Emit DWARF debug info
+  --version       Print version and exit
 ```
 
 ```bash
-# Compile and run a program
-./build/dux --compile -O2 examples/euler12.dux -o euler12
-./euler12        # prints 842161320
-
-# Dump AST
-./build/dux --dump-ast examples/design.dux
-
-# Emit LLVM IR
-./build/dux --emit-ir examples/euler12.dux
-
-# Check for semantic errors only
-./build/dux --check examples/design.dux
+# Examples
+dux --compile -O3 examples/euler12.dux -o euler12 && ./euler12
+dux --emit-ir  examples/euler12.dux
+dux --check    examples/design.dux
 ```
 
 ## Run tests

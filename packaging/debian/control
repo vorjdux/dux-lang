@@ -1,0 +1,32 @@
+Source: dux-lang
+Section: devel
+Priority: optional
+Maintainer: Dux Lang <vorj.dux@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake (>= 3.25),
+               flex,
+               bison (>= 3.8),
+               g++-13,
+               llvm-18-dev,
+               clang-18,
+               libzstd-dev,
+               libssl-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/vorjdux/dux-lang
+Rules-Requires-Root: no
+
+Package: dux-lang
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: The Dux programming language compiler
+ Dux is a statically typed, compiled programming language that targets
+ LLVM IR and produces native binaries. It features a clean, expressive
+ syntax with modern constructs including generics, closures, algebraic
+ data types with exhaustive pattern matching, RAII-based resource
+ management, and an async/await concurrency model built on lightweight
+ coroutines.
+ .
+ This package contains the dux compiler binary, the duxrt runtime
+ static library, the duxrt C headers, and the Dux standard library
+ source files covering I/O, networking, threading, time, data structures,
+ and system interfaces.
