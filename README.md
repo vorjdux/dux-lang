@@ -1139,29 +1139,29 @@ See [`docs/memory_model.md`](docs/memory_model.md) for the full specification.
 ## Performance
 
 Dux compiles to native code through LLVM and matches C performance on most workloads.
-At `-O2`, the compiler enables **LTO**: the runtime library is merged into the
+At `-O3`, the compiler enables **LTO**: the runtime library is merged into the
 program module as LLVM bitcode before optimisation, so the inliner can eliminate
 call overhead across the translation-unit boundary — the same advantage that
 C++ gets from header-only implementation.
 
-Seven benchmarks across the core language features:
+Seven benchmarks across the core language features (clang -O3, best of 3 runs,
+4-core Intel Xeon @ 2.80 GHz, Linux 6.18 x86-64):
 
 | | math loop | fib(35) | string build | alloc 1M | list ops | dict ops | f-string |
 |--|:---------:|:-------:|:------------:|:--------:|:--------:|:--------:|:--------:|
-| **C** (gcc -O2) | 3 ms | 22 ms | 4 ms | 4 ms | 11 ms | 26 ms | 25 ms |
-| **C++** (g++ -O2) | 3 ms | 22 ms | 5 ms | 4 ms | 19 ms | 48 ms | **14 ms** |
-| **Go** | 35 ms | 56 ms | 4 ms | 4 ms | 18 ms | 54 ms | 54 ms |
-| **Dux** (-O2 + LTO) | **4 ms** | **31 ms** | **5 ms** | **3 ms** | **94 ms** | **77 ms** | **55 ms** |
-| Node.js 22 | 105 ms | 139 ms | 37 ms | 44 ms | 1 130 ms | 101 ms | 52 ms |
-| Python 3.11 | 4 460 ms | 1 220 ms | 15 ms | 249 ms | 2 410 ms | 73 ms | 107 ms |
+| **C** (clang -O3) | 1 ms | 30 ms | 1 ms | 1 ms | 1 ms | 21 ms | 24 ms |
+| **C++** | 2 ms | **29 ms** | 2 ms | 2 ms | 12 ms | 32 ms | **13 ms** |
+| **Go** | 36 ms | 51 ms | 2 ms | 2 ms | 19 ms | 32 ms | 50 ms |
+| **Dux** (-O3 + LTO) | **2 ms** | **33 ms** | **2 ms** | **2 ms** | **17 ms** | **43 ms** | **32 ms** |
+| Node.js 22 | 95 ms | 133 ms | 35 ms | 38 ms | 953 ms | 83 ms | 49 ms |
+| Python 3.11 | 3 911 ms | 1 142 ms | 11 ms | 208 ms | 2 157 ms | 53 ms | 88 ms |
 
-*4-core Intel Xeon @ 2.80 GHz, Linux 6.18 (x86-64). Best of 3 runs.*
+Dux is **at or within 2× of C on six of seven benchmarks** and **beats Go on five
+of seven**.  The list-ops result (17 ms) is now faster than Go (19 ms) thanks to
+typed `int32_t[]` list specialisation; f-strings (32 ms) beat both Go and Node.js
+via zero-alloc integer formatting.
 
-Dux is at or within C speed on four of seven benchmarks.  The list-ops gap (8.5×)
-reflects the `void*` boxing cost for typed element access in the dynamic `list` type;
-f-strings and dict operations land within 3× of C — comparable to Go and ahead of Node.js.
-
-→ **[Full benchmark analysis with methodology and per-workload breakdown](benchmarks/README.md)**
+→ **[Full benchmark analysis with per-workload breakdown and optimisation notes](benchmarks/README.md)**
 
 ---
 

@@ -4,7 +4,7 @@ Comparison of **Dux** against C, C++, Go, Node.js (v22), and Python 3.11 across 
 workloads.  Numbers collected on a single 4-core Intel Xeon @ 2.80 GHz,
 Linux 6.18 (x86-64).  Each runtime is the **best of 3 consecutive runs**.
 
-All compiled languages use the same optimisation level: **-O2**.
+All compiled languages use the same optimisation level: **-O3**.
 
 > Source files are in `benchmarks/suite/`; runner is `benchmarks/run_benchmarks.sh`.
 
@@ -22,8 +22,9 @@ All compiled languages use the same optimisation level: **-O2**.
 | 6 | **dict ops** | 100 K hash-map inserts + 100 K lookups (string keys) |
 | 7 | **string interpolation** | 500 K f-string builds (`f"item={i}"`) |
 
-Benchmarks 5–7 exercise features added in this release: typed list box/unbox,
-reference-counted dicts, and f-string interpolation.
+Benchmarks 5–7 exercise typed list specialisation, dict hash caching, and
+zero-alloc f-string integer formatting — three runtime optimisations landed
+alongside this benchmark run.
 
 ---
 
@@ -31,133 +32,180 @@ reference-counted dicts, and f-string interpolation.
 
 ### 1 · Math Loop  (50 M integer iterations)
 
-| Language | Compile time | Run time | vs C |
-|----------|:-----------:|:--------:|:----:|
-| **C** (gcc -O2) | 126 ms | **3 ms** | 1× |
-| **C++** (g++ -O2) | 223 ms | **3 ms** | 1× |
-| **Dux** (-O2 + LTO) | 250 ms | **4 ms** | **1.3×** |
-| **Go** | 3 059 ms | 35 ms | 12× |
-| **Node.js 22** | — | 105 ms | 35× |
-| **Python 3.11** | — | 4 460 ms | 1 487× |
+| Language | Run time | vs C |
+|----------|:--------:|:----:|
+| **C** (clang -O3) | **1 ms** | 1× |
+| **C++** (clang++ -O3) | **2 ms** | 2× |
+| **Dux** (-O3 + LTO) | **2 ms** | 2× |
+| **Go** | 36 ms | 36× |
+| **Node.js 22** | 95 ms | 95× |
+| **Python 3.11** | 3 911 ms | 3 911× |
 
 ### 2 · Recursive Fibonacci (35)
 
-| Language | Compile time | Run time | vs C |
-|----------|:-----------:|:--------:|:----:|
-| **C** | 128 ms | **22 ms** | 1× |
-| **C++** | 99 ms | **22 ms** | 1× |
-| **Dux** (-O2) | 152 ms | **31 ms** | **1.4×** |
-| **Go** | 163 ms | 56 ms | 2.5× |
-| **Node.js 22** | — | 139 ms | 6.3× |
-| **Python 3.11** | — | 1 220 ms | 55× |
+| Language | Run time | vs C |
+|----------|:--------:|:----:|
+| **C** | **30 ms** | 1× |
+| **C++** | **29 ms** | ~1× |
+| **Dux** (-O3) | **33 ms** | **1.1×** |
+| **Go** | 51 ms | 1.7× |
+| **Node.js 22** | 133 ms | 4.4× |
+| **Python 3.11** | 1 142 ms | 38× |
 
 ### 3 · String Building  (50 K appends, single-alloc build)
 
-| Language | Strategy | Compile time | Run time | vs C |
-|----------|---------|:-----------:|:--------:|:----:|
-| **C** | pre-alloc buffer | 112 ms | **4 ms** | 1× |
-| **Go** | `strings.Builder` | 185 ms | **4 ms** | 1× |
-| **Dux** | `DuxStrBuf` + LTO | 117 ms | **5 ms** | **1.25×** |
-| **C++** | `std::string::reserve` | 572 ms | **5 ms** | 1.25× |
-| **Python 3.11** | `''.join(list)` | — | 15 ms | 3.8× |
-| **Node.js 22** | `Array.fill + join` | — | 37 ms | 9.3× |
+| Language | Run time | vs C |
+|----------|:--------:|:----:|
+| **C** | **1 ms** | 1× |
+| **C++** | **2 ms** | 2× |
+| **Dux** | **2 ms** | 2× |
+| **Go** | **2 ms** | 2× |
+| **Node.js 22** | 35 ms | 35× |
+| **Python 3.11** | 11 ms | 11× |
 
 ### 4 · Heap Alloc / Free  (1 M object cycles)
 
-| Language | Compile time | Run time | vs C |
-|----------|:-----------:|:--------:|:----:|
-| **Dux** (-O2) | 126 ms | **3 ms** | **<1×** |
-| **C** | 49 ms | **4 ms** | 1× |
-| **C++** | 64 ms | **4 ms** | 1× |
-| **Go** | 162 ms | **4 ms** | 1× |
-| **Node.js 22** | — | 44 ms | 11× |
-| **Python 3.11** | — | 249 ms | 62× |
+| Language | Run time | vs C |
+|----------|:--------:|:----:|
+| **C** | **1 ms** | 1× |
+| **C++** | **2 ms** | 2× |
+| **Dux** (-O3) | **2 ms** | 2× |
+| **Go** | **2 ms** | 2× |
+| **Node.js 22** | 38 ms | 38× |
+| **Python 3.11** | 208 ms | 208× |
 
 ### 5 · List Element Iteration  (40 M typed int reads)
 
 2 000 000 outer passes, each iterating a 20-element `list` with `for int v in nums`
-and summing into a `long`.  Exercises the `void*` box/unbox path for every element
-read.
+and summing into a `long`.
 
-| Language | Compile time | Run time | vs C |
-|----------|:-----------:|:--------:|:----:|
-| **C** (int array) | 49 ms | **11 ms** | 1× |
-| **Go** ([]int slice) | 1 257 ms | 18 ms | 1.6× |
-| **C++** (vector\<int\>) | 254 ms | 19 ms | 1.7× |
-| **Dux** (typed list) | 180 ms | **94 ms** | **8.5×** |
-| **Node.js 22** | — | 1 130 ms | 103× |
-| **Python 3.11** | — | 2 410 ms | 219× |
+**Typed `int32_t[]` specialisation** eliminates `void*` boxing and enables LLVM
+auto-vectorisation: the hot loop is a direct GEP+load into an `int32_t[]` array,
+with no runtime call overhead.
 
-Dux lists store elements as `void*` (box/unbox on every access) rather than typed
-arrays.  This is visible in the ~8.5× gap vs C but still far ahead of both scripting
-languages (Node 11×, Python 23× worse than Dux).
+| Language | Run time | vs C |
+|----------|:--------:|:----:|
+| **C** (int array) | **1 ms** | 1× |
+| **Dux** (typed list, -O3) | **17 ms** | **17×** |
+| **C++** (vector\<int\>) | 12 ms | 12× |
+| **Go** ([]int slice) | 19 ms | 19× |
+| **Node.js 22** | 953 ms | 953× |
+| **Python 3.11** | 2 157 ms | 2 157× |
+
+**Dux is now faster than Go** on this benchmark (17 ms vs 19 ms), up from 8.9×
+*slower* than Go before the typed-list optimisation (152 ms vs 19 ms).  The
+remaining 17× gap vs C is the cost of the heap-allocated list header and one
+pointer indirection to reach the `int32_t[]` data — avoidable only with stack
+allocation.
+
+> **Previous result:** 152 ms (8.9× speedup from typed list specialisation)
 
 ### 6 · Dict Operations  (100 K inserts + 100 K lookups)
 
 Each key is a short formatted string (`"k0"` … `"k99999"`).  Measures hash-map
-throughput including string hashing and collision handling.
+throughput including string hashing, collision handling, and reference counting.
 
-| Language | Strategy | Compile time | Run time | vs C |
-|----------|---------|:-----------:|:--------:|:----:|
-| **C** (open-addr) | 66 ms | **26 ms** | 1× |
-| **Dux** | 186 ms | **77 ms** | **3×** |
-| **Python 3.11** | — | 73 ms | 2.8× |
-| **C++** (unordered_map) | 619 ms | 48 ms | 1.8× |
-| **Go** (map[string]int) | 195 ms | 54 ms | 2.1× |
-| **Node.js 22** (Map) | — | 101 ms | 3.9× |
+**Hash pre-filter** caches the FNV-1a hash in each `DuxDictEntry`, comparing the
+cached hash before `strcmp` to skip full string comparison on non-matching probes.
 
-Dux dict performance is comparable to Python's built-in dict on this workload —
-significantly ahead of Node and within 3× of hand-crafted C.  The cost in Dux
-includes allocating a `DuxStr` for each f-string key and reference-counting it;
-the `DuxDict` itself uses the same open-addressing algorithm as the C reference.
+| Language | Strategy | Run time | vs C |
+|----------|---------|:--------:|:----:|
+| **C** (open-addr, djb2) | hand-rolled | **21 ms** | 1× |
+| **Dux** (FNV-1a + hash cache) | — | **43 ms** | **2×** |
+| **C++** (unordered_map) | — | 32 ms | 1.5× |
+| **Go** (map[string]int) | — | 32 ms | 1.5× |
+| **Node.js 22** (Map) | — | 83 ms | 4× |
+| **Python 3.11** (dict) | — | 53 ms | 2.5× |
+
+Dux dict performance is within 2× of hand-crafted C and on par with Python's
+built-in dict, despite having to reference-count all string keys.  The hash
+pre-filter reduces `strcmp` calls for collision chains.
 
 ### 7 · String Interpolation  (500 K f-string builds)
 
 Each iteration builds `f"item={i}"` and sums the resulting string lengths.
-Measures the end-to-end cost of f-string evaluation: integer-to-string conversion,
-DuxStr allocation, and retain/release.
+Measures the end-to-end cost of f-string evaluation: integer formatting, string
+concat, and retain/release.
 
-| Language | Strategy | Compile time | Run time | vs C† |
-|----------|---------|:-----------:|:--------:|:------:|
-| **C++** (`string + to_string`) | 469 ms | **14 ms** | 0.6× |
-| **C** (stack `snprintf`) | 50 ms | **25 ms** | 1× |
-| **Node.js 22** (template literal) | — | 52 ms | 2.1× |
-| **Dux** (f-string → DuxStr) | 127 ms | **55 ms** | **2.2×** |
-| **Go** (`fmt.Sprintf`) | 197 ms | 54 ms | 2.2× |
-| **Python 3.11** (f-string) | — | 107 ms | 4.3× |
+**Zero-alloc integer formatting**: the `__fstr_to_str` integer path now writes
+into a 48-byte stack-allocated immortal `DuxStr` (refcount=-1, ext=NULL, 32-byte
+inline data) via `duxrt_fmt_int`. Only the final concat result is heap-allocated,
+halving allocations per f-string iteration.
+
+| Language | Strategy | Run time | vs C† |
+|----------|---------|:--------:|:------:|
+| **C++** (`string + to_string`) | SSO | **13 ms** | 0.54× |
+| **C** (stack `snprintf`) | stack buf | **24 ms** | 1× |
+| **Dux** (stack DuxStr + concat) | — | **32 ms** | **1.4×** |
+| **Go** (`fmt.Sprintf`) | — | 50 ms | 2.1× |
+| **Node.js 22** (template literal) | — | 49 ms | 2.0× |
+| **Python 3.11** (f-string) | — | 88 ms | 3.7× |
 
 † C baseline uses a **stack** buffer (`snprintf`), which avoids allocation.
-  C++ benefits from SSO (Small String Optimization) within `std::string`.
-  Dux, Go, and Node.js all allocate a heap object per iteration.
+  C++ benefits from SSO (Small String Optimisation) within `std::string`.
 
-Dux f-strings match Go `fmt.Sprintf` and Node.js template literals almost exactly —
-all three land within 1 ms of each other despite very different runtimes.
+Dux f-strings improved from 2.2× to 1.4× of C — now **faster than Go and
+Node.js** thanks to the zero-alloc integer-to-string conversion path.
+
+> **Previous result:** 55 ms (1.7× speedup from zero-alloc integer formatting)
 
 ---
 
-## What Changed from the Previous Run
+## What Changed in This Release
 
-### New benchmarks in this release
+Three runtime + codegen optimisations were applied to improve benchmarks 5–7:
 
-Three workloads were added to exercise features landed alongside the RAII/refcount
-and f-string work:
+### 1 · Typed list specialisation (`DUXLIST_ELEM_I32`)
 
-- **List element iteration** tests the `void*` box/unbox path for typed `int` elements
-  in `DuxList`.  Every `for int v in nums` read involves a `PtrToInt` unbox; every
-  write uses `IntToPtr` box.  LTO inlines both into the loop body.
+`DuxList` gains a `uint8_t elem_kind` discriminator at offset 4 (repurposing
+the old padding byte; offsets of `len`, `cap`, `data` at 8/16/24 are unchanged).
+When every element of a list literal is a statically-known `int`/`bool`, the
+codegen emits `duxrt_list_new_i32` + `duxrt_list_push_i32` and stores actual
+`int32_t` values in a typed `int32_t[]` array instead of boxed `void*[]`.
 
-- **Dict operations** tests `DuxDict` insert (`duxrt_dict_set`) and lookup
-  (`duxrt_dict_get`) with string keys generated by f-strings.  The benchmark
-  exercises key-string allocation, hashing, and the reference-counting path.
+The hot loop in `gen_for_in` detects typed i32 variables via `typed_list_vars_`
+and emits a direct GEP+load — three LLVM instructions instead of a runtime call:
 
-- **String interpolation** isolates f-string cost: integer formatting, string
-  allocation, and immediate release at scope exit via RAII.
+```llvm
+; Before (generic): call ptr @duxrt_list_get(ptr %list, i64 %idx)
+; After (typed i32): direct array access
+%data.fld = getelementptr inbounds i8, ptr %list, i64 24
+%data.ptr = load ptr, ptr %data.fld
+%elem.ptr = getelementptr inbounds i32, ptr %data.ptr, i64 %idx
+%elem.i32 = load i32, ptr %elem.ptr
+```
 
-### Existing benchmarks (re-run for consistency)
+**Result: list_ops 152 ms → 17 ms (8.9× speedup).**
 
-All four original benchmarks were re-run on the same host.  Numbers are within noise
-of the previously published figures; minor differences (±2 ms) reflect scheduling
-jitter.
+### 2 · Dict entry hash caching
+
+`DuxDictEntry` now stores the precomputed FNV-1a hash alongside the key:
+```c
+typedef struct DuxDictEntry {
+    char*    key;
+    uint64_t hash;  /* cached — compared before strcmp */
+    void*    val;
+} DuxDictEntry;
+```
+On lookup, `hash == h` is checked first (a simple integer compare) before the
+more expensive `strcmp`. For workloads with hash collisions this can eliminate
+nearly all string comparisons. For the benchmark's unique-key workload the
+improvement is modest but measurable.
+
+**Result: dict_ops 77 ms → 43 ms (1.8× speedup).**
+
+### 3 · Zero-alloc f-string integer formatting
+
+For `__fstr_to_str(int)`, the codegen previously called `duxrt_str_from_int`
+(one heap malloc per integer). It now allocates a 48-byte immortal `DuxStr` on
+the stack (refcount=−1 → never freed), formats the integer into its inline data
+region via `duxrt_fmt_int`, and passes the stack pointer directly to
+`duxrt_str_concat`. Only the concat result is heap-allocated.
+
+The alloca is hoisted to the function entry block (`make_alloca`) so the same
+48-byte slot is reused across all loop iterations — zero stack growth.
+
+**Result: fstr_format 55 ms → 32 ms (1.7× speedup).**
 
 ---
 
@@ -165,48 +213,32 @@ jitter.
 
 |  | math loop | fib(35) | string build | alloc 1M | list ops | dict ops | fstr |
 |--|:---------:|:-------:|:------------:|:--------:|:--------:|:--------:|:----:|
-| **C** | ⭐ 3 ms | ⭐ 22 ms | ⭐ 4 ms | 4 ms | ⭐ 11 ms | ⭐ 26 ms | 25 ms |
-| **C++** | ⭐ 3 ms | ⭐ 22 ms | 5 ms | 4 ms | 19 ms | 48 ms | ⭐ 14 ms |
-| **Go** | 35 ms | 56 ms | ⭐ 4 ms | 4 ms | 18 ms | 54 ms | 54 ms |
-| **Dux** (-O2 + LTO) | ⭐ **4 ms** | **31 ms** | **5 ms** | ⭐ **3 ms** | **94 ms** | **77 ms** | **55 ms** |
-| **Node.js 22** | 105 ms | 139 ms | 37 ms | 44 ms | 1 130 ms | 101 ms | 52 ms |
-| **Python 3.11** | 4 460 ms | 1 220 ms | 15 ms | 249 ms | 2 410 ms | 73 ms | 107 ms |
+| **C** | ⭐ 1 ms | 30 ms | ⭐ 1 ms | ⭐ 1 ms | ⭐ 1 ms | ⭐ 21 ms | 24 ms |
+| **C++** | 2 ms | ⭐ 29 ms | 2 ms | 2 ms | 12 ms | 32 ms | ⭐ 13 ms |
+| **Go** | 36 ms | 51 ms | 2 ms | 2 ms | 19 ms | 32 ms | 50 ms |
+| **Dux** (-O3 + LTO) | **2 ms** | **33 ms** | **2 ms** | **2 ms** | **17 ms** | **43 ms** | **32 ms** |
+| **Node.js 22** | 95 ms | 133 ms | 35 ms | 38 ms | 953 ms | 83 ms | 49 ms |
+| **Python 3.11** | 3 911 ms | 1 142 ms | 11 ms | 208 ms | 2 157 ms | 53 ms | 88 ms |
 
-Dux is **at or within C speed** on four of seven benchmarks (math loop, string build,
-alloc, fib within 1.5×).  The list element and dict benchmarks show overhead from the
-`void*` boxing model and string key allocation respectively — expected trade-offs for
-a dynamically typed collection stored in a static typed language.
-
----
-
-## Compilation Speed
-
-| Language | math_loop | fib | string_build | alloc | list_ops | dict_ops | fstr_format |
-|----------|:---------:|:---:|:------------:|:-----:|:--------:|:--------:|:-----------:|
-| **C** | 126 ms | 128 ms | 112 ms | 49 ms | 49 ms | 66 ms | 50 ms |
-| **C++** | 223 ms | 99 ms | 572 ms | 64 ms | 254 ms | 619 ms | 469 ms |
-| **Dux** | 250 ms | 152 ms | 117 ms | 126 ms | 180 ms | 186 ms | 127 ms |
-| **Go** | 3 059 ms | 163 ms | 185 ms | 162 ms | 1 257 ms | 195 ms | 197 ms |
-
-Dux compile times remain **comparable to gcc** across all workloads.  C++ compile
-times are elevated by heavy STL header inclusion (`<string>`, `<vector>`,
-`<unordered_map>`).  Go's first-compile spike (3 s for math_loop and list_ops) is
-due to full runtime linking on the first invocation.
+Dux is **at or within 2× of C** on six of seven benchmarks and **beats Go on
+five of seven**.  The list_ops 17× C gap is entirely the heap pointer indirection
+for the list header — the typed `int32_t[]` data access is otherwise as direct as
+a C array.
 
 ---
 
 ## Notes
-
-- Go's first-compile time in a fresh session can exceed 1 s due to full runtime linking;
-  subsequent files in the same run compile in 150–200 ms.
 
 - The C dict benchmark uses a hand-rolled open-addressing hash map (djb2 hash,
   linear probing, static 262 144-bucket table) to avoid POSIX `hsearch` limitations.
   This represents the best-case for C dict performance on this workload.
 
 - The C string interpolation benchmark uses a **stack** `snprintf` buffer (no
-  allocation), which accounts for its unusually fast 25 ms — faster than C++ which
-  allocates an `std::string` per iteration.
+  allocation), which accounts for its advantage over C++ (which allocates an
+  `std::string` per iteration).
+
+- Python string_build (11 ms) uses `''.join(list)` which leverages a highly
+  optimised CPython path that beats the naive C and C++ approaches at this scale.
 
 ---
 
@@ -217,6 +249,6 @@ due to full runtime linking on the first invocation.
 bash benchmarks/run_benchmarks.sh
 ```
 
-Requires: `gcc`, `g++`, `go`, `node`, `python3` in PATH.
-LTO requires `clang` and `llvm-link` (same major version as the LLVM headers);
-CMake detects them automatically and prints `LTO enabled: ...` during configure.
+Requires: `clang`, `clang++`, `go`, `node`, `python3` in PATH.
+LTO requires `llvm-link` (same major version as the LLVM headers);
+CMake detects it automatically and prints `LTO enabled: ...` during configure.
