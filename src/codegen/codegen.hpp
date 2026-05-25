@@ -156,6 +156,15 @@ private:
     // Maps variable name → class name (for member access resolution)
     std::unordered_map<std::string, std::string> var_class_;
 
+    // Typed-list tracking: maps variable name → DUXLIST_ELEM_* kind (1=i32).
+    // Set when a 'list' variable is initialised from an all-primitive literal so
+    // gen_for_in can emit direct typed-array access instead of duxrt_list_get.
+    std::unordered_map<std::string, int> typed_list_vars_;
+
+    // Transient flag: set by gen_list() before returning, consumed by gen_var_decl()
+    // to record the elem_kind for the variable being initialised.
+    int last_list_elem_kind_{0};
+
     // Maps alloca → its element type (needed for opaque-pointer loads)
     std::unordered_map<llvm::Value*, llvm::Type*> alloca_type_;
 

@@ -77,6 +77,19 @@ DuxStr* duxrt_str_from_double(double v) {
     return duxrt_str_new(buf, (int64_t)(n > 0 ? n : 0));
 }
 
+/* ── Stack-buffer format helpers (no heap allocation) ───────────────────── */
+/* buf must be at least 32 bytes. Returns byte count (excluding NUL). */
+int32_t duxrt_fmt_int(int64_t v, char* buf) {
+    int n = snprintf(buf, 32, "%ld", (long)v);
+    return (int32_t)(n > 0 ? n : 0);
+}
+
+/* buf must be at least 64 bytes. Returns byte count (excluding NUL). */
+int32_t duxrt_fmt_double(double v, char* buf) {
+    int n = snprintf(buf, 64, "%g", v);
+    return (int32_t)(n > 0 ? n : 0);
+}
+
 int64_t duxrt_str_length(DuxStr* s) {
     return s ? (int64_t)s->len : 0;
 }

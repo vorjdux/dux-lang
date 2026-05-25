@@ -1278,6 +1278,18 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
         TypeId iter_tid = type_id_of(*s.iterable);
         bool is_list = (iter_tid == TR::TID_LIST || iter_tid == TR::TID_UNKNOWN);
 
+        // Check whether the iterable is a statically-typed i32 list variable.
+        // If so, the body will use a direct GEP+load instead of duxrt_list_get,
+        // bypassing the call overhead and enabling LLVM auto-vectorisation.
+        bool is_typed_i32 = false;
+        if (is_list) {
+            if (auto* id = dynamic_cast<const ast::IdentExpr*>(s.iterable.get())) {
+                auto it = typed_list_vars_.find(id->name);
+                if (it != typed_list_vars_.end() && it->second == 1 /*DUXLIST_ELEM_I32*/)
+                    is_typed_i32 = true;
+            }
+        }
+
         if (is_list) {
             // List iteration: evaluate iterable, get length, iterate with index
             Value* list_val = gen_expr(*s.iterable);
@@ -1313,14 +1325,33 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
             Value* list_v = builder_->CreateLoad(ptr_type(), list_ptr_alloca, "list.v");
             Value* idx_body = builder_->CreateLoad(
                 llvm::Type::getInt64Ty(*ctx_), idx_alloca, "idx.body");
-            auto* get_fn = get_or_declare_rt("duxrt_list_get",
-                ptr_type(), {ptr_type(), llvm::Type::getInt64Ty(*ctx_)});
-            Value* elem = builder_->CreateCall(get_fn, {list_v, idx_body}, "elem");
-            // Always store element into var_alloca, unboxing to the declared
-            // element type when needed (e.g. int elements stored via box_to_ptr).
+
+            // Load element: typed i32 fast path or generic duxrt_list_get.
             {
-                Value* elem_to_store = (elem->getType() != var_t)
-                    ? coerce_to_llvm_type(elem, var_t) : elem;
+                Value* elem_to_store;
+                if (is_typed_i32) {
+                    // Direct i32 typed-array access: ((int32_t*)l->data)[idx]
+                    // DuxList->data is at byte offset 24 within the struct.
+                    llvm::Type* i8_ty  = llvm::Type::getInt8Ty(*ctx_);
+                    llvm::Type* i32_ty = llvm::Type::getInt32Ty(*ctx_);
+                    Value* data_fld = builder_->CreateConstInBoundsGEP1_64(
+                        i8_ty, list_v, 24, "data.fld");
+                    Value* data_ptr = builder_->CreateLoad(ptr_type(), data_fld, "data.ptr");
+                    Value* elem_ptr = builder_->CreateInBoundsGEP(
+                        i32_ty, data_ptr, idx_body, "elem.ptr");
+                    Value* elem_i32 = builder_->CreateLoad(i32_ty, elem_ptr, "elem.i32");
+                    elem_to_store = (elem_i32->getType() != var_t)
+                        ? coerce_to_llvm_type(elem_i32, var_t) : elem_i32;
+                } else {
+                    // Generic path: call duxrt_list_get and unbox.
+                    auto* get_fn = get_or_declare_rt("duxrt_list_get",
+                        ptr_type(), {ptr_type(), llvm::Type::getInt64Ty(*ctx_)});
+                    Value* elem = builder_->CreateCall(get_fn, {list_v, idx_body}, "elem");
+                    // Unbox to the declared element type when needed
+                    // (e.g. int elements stored via box_to_ptr).
+                    elem_to_store = (elem->getType() != var_t)
+                        ? coerce_to_llvm_type(elem, var_t) : elem;
+                }
                 builder_->CreateStore(elem_to_store, var_alloca);
             }
 
@@ -2041,10 +2072,12 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
         } else {
             // Normal (non-static) local variable
             Value* init_val = nullptr;
+            TypeId init_tid = TR::TID_UNKNOWN;
 
             if (init_ptr) {
+                last_list_elem_kind_ = 0;  // reset before gen_expr may call gen_list
                 init_val = gen_expr(*init_ptr);
-                TypeId init_tid = type_id_of(*init_ptr);
+                init_tid = type_id_of(*init_ptr);
                 if (var_tid == TR::TID_UNKNOWN) var_tid = init_tid;
                 init_val = coerce(init_val, init_tid, var_tid);
             }
@@ -2078,6 +2111,23 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
                     if (!cleanup_scopes_.empty())
                         cleanup_scopes_.back().push_back({alloca, "__closure", {}, nullptr, nullptr});
                 }
+            }
+            // Propagate typed-list element kind so gen_for_in can use the fast path.
+            // last_list_elem_kind_ is set by gen_list() when every element is i32.
+            // Also propagate when RHS is an identifier pointing to a known typed list.
+            if (var_tid == TR::TID_LIST || init_tid == TR::TID_LIST) {
+                int kind = last_list_elem_kind_;
+                if (kind == 0 && init_ptr) {
+                    if (auto* id = dynamic_cast<const ast::IdentExpr*>(init_ptr.get())) {
+                        auto it = typed_list_vars_.find(id->name);
+                        if (it != typed_list_vars_.end())
+                            kind = it->second;
+                    }
+                }
+                if (kind != 0)
+                    typed_list_vars_[name] = kind;
+                else
+                    typed_list_vars_.erase(name);
             }
             // Track variable→class for member access resolution
             if (!s.type.name.empty() && layouts_.count(s.type.name))
@@ -2649,11 +2699,43 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
                 return builder_->CreateSelect(cond, str_literal("true"), str_literal("false"));
             }
             if (t == TR::TID_INT || t == TR::TID_LONG) {
-                auto* fn = get_or_declare_rt("duxrt_str_from_int",
-                    ptr_type(), {llvm::Type::getInt64Ty(*ctx_)});
-                Value* v64 = arg->getType() == llvm::Type::getInt64Ty(*ctx_)
-                    ? arg : builder_->CreateSExt(arg, llvm::Type::getInt64Ty(*ctx_));
-                return builder_->CreateCall(fn, {v64});
+                // Zero-alloc path: build an immortal DuxStr on the stack.
+                // DuxStr layout (LP64): { i32 refcount, i32 len, ptr ext, char data[] }
+                // A concrete struct { i32, i32, ptr, [32 x i8] } matches perfectly:
+                //   - header  = 16 bytes (offsets match the C struct)
+                //   - 32 bytes of inline data covers the longest i64 representation
+                // refcount=-1 marks it immortal so duxrt_str_retain/release are no-ops.
+                llvm::Type* i8_ty  = llvm::Type::getInt8Ty(*ctx_);
+                llvm::Type* i32_ty = llvm::Type::getInt32Ty(*ctx_);
+                llvm::Type* i64_ty = llvm::Type::getInt64Ty(*ctx_);
+                llvm::StructType* stk_ty = llvm::StructType::get(*ctx_,
+                    {i32_ty, i32_ty, ptr_type(), llvm::ArrayType::get(i8_ty, 32)});
+
+                // Use make_alloca so the slot is hoisted to the function entry
+                // block — avoids stack growth when this expression appears inside
+                // a loop (each iteration reuses the same 48-byte stack slot).
+                Value* str_alloca = make_alloca(stk_ty, "fstr.stk");
+                // refcount = -1 (immortal — never freed)
+                builder_->CreateStore(
+                    llvm::ConstantInt::getSigned(i32_ty, -1),
+                    builder_->CreateStructGEP(stk_ty, str_alloca, 0));
+                // ext = NULL (use inline data[] below)
+                builder_->CreateStore(
+                    llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type())),
+                    builder_->CreateStructGEP(stk_ty, str_alloca, 2));
+                // Format the integer into data[] (field 3)
+                Value* data_fld = builder_->CreateStructGEP(stk_ty, str_alloca, 3);
+                auto* fmt_fn = get_or_declare_rt("duxrt_fmt_int", i32_ty,
+                    {i64_ty, ptr_type()});
+                Value* v64 = (arg->getType() == i64_ty)
+                    ? arg : builder_->CreateSExt(arg, i64_ty);
+                Value* len_val = builder_->CreateCall(fmt_fn, {v64, data_fld}, "fmt.len");
+                // Store the formatted length into field 1
+                builder_->CreateStore(len_val,
+                    builder_->CreateStructGEP(stk_ty, str_alloca, 1));
+                // Return pointer to the stack DuxStr (immortal ⟹ safe to alias)
+                return str_alloca;
             }
             if (t == TR::TID_DOUBLE || t == TR::TID_REAL) {
                 auto* fn = get_or_declare_rt("duxrt_str_from_double",
@@ -3025,6 +3107,36 @@ Value* Codegen::gen_new(const ast::NewExpr& e) {
 }
 
 Value* Codegen::gen_list(const ast::ListExpr& e) {
+    // ── Typed i32 fast path ──────────────────────────────────────────────
+    // When every element is a statically-known int/bool, use a typed int32_t[]
+    // list.  This lets gen_for_in emit direct GEP loads (no boxing, SIMD-able).
+    bool all_i32 = !e.elements.empty();
+    for (const auto& elem : e.elements) {
+        TypeId tid = type_id_of(*elem);
+        if (tid != TR::TID_INT && tid != TR::TID_BOOL) { all_i32 = false; break; }
+    }
+
+    if (all_i32) {
+        auto* new_fn  = get_or_declare_rt("duxrt_list_new_i32", ptr_type(), {});
+        auto* push_fn = get_or_declare_rt("duxrt_list_push_i32",
+            llvm::Type::getVoidTy(*ctx_),
+            {ptr_type(), llvm::Type::getInt32Ty(*ctx_)});
+        Value* list = builder_->CreateCall(new_fn, {});
+        for (const auto& elem : e.elements) {
+            Value* v = gen_expr(*elem);
+            // Ensure i32 (bool/i1 get zero-extended to i32)
+            if (v->getType() != llvm::Type::getInt32Ty(*ctx_))
+                v = builder_->CreateZExtOrTrunc(v, llvm::Type::getInt32Ty(*ctx_));
+            builder_->CreateCall(push_fn, {list, v});
+        }
+        // Mark this anonymous result as typed — caller (gen_var_decl) will
+        // propagate to the variable via last_list_was_typed_ flag.
+        last_list_elem_kind_ = 1 /*DUXLIST_ELEM_I32*/;
+        return list;
+    }
+
+    // ── Generic void* path ───────────────────────────────────────────────
+    last_list_elem_kind_ = 0;
     auto* new_fn = get_or_declare_rt("duxrt_list_new", ptr_type(), {});
     Value* list  = builder_->CreateCall(new_fn, {});
     auto* push_fn = get_or_declare_rt("duxrt_list_push",

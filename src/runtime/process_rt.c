@@ -118,7 +118,7 @@ void* duxrt_proc_spawn(DuxList* argv_list, int32_t cap_out, int32_t cap_err) {
     char** argv = (char**)malloc((size_t)(argc + 1) * sizeof(char*));
     if (!argv) { free(p); return NULL; }
     for (int i = 0; i < argc; i++)
-        argv[i] = (char*)duxrt_str_cstr((DuxStr*)argv_list->data[i]);
+        argv[i] = (char*)duxrt_str_cstr((DuxStr*)((void**)argv_list->data)[i]);
     argv[argc] = NULL;
 
     int out_pipe[2] = {-1, -1};
