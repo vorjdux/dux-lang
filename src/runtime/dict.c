@@ -16,8 +16,8 @@ static inline int is_empty(char* k)     { return k == NULL; }
 static inline int is_tombstone(char* k) { return k == TOMBSTONE; }
 static inline int is_live(char* k)      { return k != NULL && k != TOMBSTONE; }
 
+/* FNV-1a 64-bit hash — not static so dict_insert_raw and callers can share it. */
 static uint64_t hash_str(const char* s) {
-    /* FNV-1a 64-bit */
     uint64_t h = 14695981039346656037ULL;
     while (*s) {
         h ^= (uint8_t)*s++;
@@ -39,14 +39,16 @@ DuxDict* duxrt_dict_new(void) {
     return d;
 }
 
-static void dict_insert_raw(DuxDict* d, char* key, void* val) {
-    uint64_t h   = hash_str(key);
+/* Insert a pre-strdup'd key (caller transfers ownership) with its hash. */
+static void dict_insert_raw(DuxDict* d, char* key, uint64_t h, void* val) {
     int64_t  idx = (int64_t)(h & (uint64_t)(d->cap - 1));
     int64_t  tombstone_idx = -1;
     while (!is_empty(d->entries[idx].key)) {
         if (is_tombstone(d->entries[idx].key)) {
             if (tombstone_idx < 0) tombstone_idx = idx;
-        } else if (strcmp(d->entries[idx].key, key) == 0) {
+        } else if (d->entries[idx].hash == h &&
+                   strcmp(d->entries[idx].key, key) == 0) {
+            /* Update path: free the incoming key (caller strdup'd it). */
             free(key);
             d->entries[idx].val = val;
             return;
@@ -54,8 +56,9 @@ static void dict_insert_raw(DuxDict* d, char* key, void* val) {
         idx = (idx + 1) & (d->cap - 1);
     }
     if (tombstone_idx >= 0) idx = tombstone_idx;
-    d->entries[idx].key = key;
-    d->entries[idx].val = val;
+    d->entries[idx].key  = key;
+    d->entries[idx].hash = h;
+    d->entries[idx].val  = val;
     d->len++;
 }
 
@@ -64,12 +67,12 @@ static void dict_grow(DuxDict* d) {
     DuxDictEntry* old_ents = d->entries;
     d->cap    *= 2;
     d->len     = 0;
-    d->tomb    = 0;
+    d->tomb    = 0;   /* tombstones cleared on resize */
     d->entries = (DuxDictEntry*)calloc((size_t)d->cap, sizeof(DuxDictEntry));
     if (!d->entries) abort();
     for (int64_t i = 0; i < old_cap; ++i) {
         if (is_live(old_ents[i].key))
-            dict_insert_raw(d, old_ents[i].key, old_ents[i].val);
+            dict_insert_raw(d, old_ents[i].key, old_ents[i].hash, old_ents[i].val);
     }
     free(old_ents);
 }
@@ -78,9 +81,10 @@ void duxrt_dict_set(DuxDict* d, const char* key, void* val) {
     if (!d || !key) return;
     if ((d->len + d->tomb) * DICT_LOAD_DEN >= d->cap * DICT_LOAD_NUM)
         dict_grow(d);
+    uint64_t h = hash_str(key);
     char* k = strdup(key);
     if (!k) abort();
-    dict_insert_raw(d, k, val);
+    dict_insert_raw(d, k, h, val);
 }
 
 void* duxrt_dict_get(DuxDict* d, const char* key) {
@@ -89,6 +93,7 @@ void* duxrt_dict_get(DuxDict* d, const char* key) {
     int64_t  idx = (int64_t)(h & (uint64_t)(d->cap - 1));
     while (!is_empty(d->entries[idx].key)) {
         if (is_live(d->entries[idx].key) &&
+            d->entries[idx].hash == h &&          /* cheap pre-filter */
             strcmp(d->entries[idx].key, key) == 0)
             return d->entries[idx].val;
         idx = (idx + 1) & (d->cap - 1);
@@ -102,6 +107,7 @@ int duxrt_dict_has(DuxDict* d, const char* key) {
     int64_t  idx = (int64_t)(h & (uint64_t)(d->cap - 1));
     while (!is_empty(d->entries[idx].key)) {
         if (is_live(d->entries[idx].key) &&
+            d->entries[idx].hash == h &&
             strcmp(d->entries[idx].key, key) == 0) return 1;
         idx = (idx + 1) & (d->cap - 1);
     }
@@ -114,10 +120,12 @@ void duxrt_dict_del(DuxDict* d, const char* key) {
     int64_t  idx = (int64_t)(h & (uint64_t)(d->cap - 1));
     while (!is_empty(d->entries[idx].key)) {
         if (is_live(d->entries[idx].key) &&
+            d->entries[idx].hash == h &&
             strcmp(d->entries[idx].key, key) == 0) {
             free(d->entries[idx].key);
-            d->entries[idx].key = TOMBSTONE;
-            d->entries[idx].val = NULL;
+            d->entries[idx].key  = TOMBSTONE;
+            d->entries[idx].hash = 0;
+            d->entries[idx].val  = NULL;
             d->len--;
             d->tomb++;
             return;
