@@ -1,0 +1,22 @@
+# Dict insert + lookup — 100 K inserts then 100 K lookups with f-string keys
+# Exercises hash map operations and string-key formatting.
+
+void main() {
+    int N = 100000
+    dict d = {}
+    int i = 0
+    while i < N {
+        str k = f"k{i}"
+        d[k] = i
+        i = i + 1
+    }
+    long sum = 0l
+    int j = 0
+    while j < N {
+        str k = f"k{j}"
+        int v = d[k]
+        sum = sum + v
+        j = j + 1
+    }
+    println(sum)
+}

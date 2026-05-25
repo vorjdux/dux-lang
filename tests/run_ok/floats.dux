@@ -1,0 +1,10 @@
+double square(double x) {
+    return x * x
+}
+
+void main() {
+    double pi = 3.14159
+    double r = 5.0
+    double area = pi * square(r)
+    println(area)
+}

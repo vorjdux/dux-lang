@@ -1,0 +1,9 @@
+class Point {
+    int x
+    int y
+}
+
+void main() {
+    Point p = new Point()
+    println(p.z)  # error: type 'Point' has no member 'z'
+}

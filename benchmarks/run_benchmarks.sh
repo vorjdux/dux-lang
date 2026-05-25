@@ -66,7 +66,7 @@ header() {
 
 echo "=== Compiling binaries ==="
 
-for bench in math_loop fib string_build alloc; do
+for bench in math_loop fib string_build alloc list_ops dict_ops fstr_format; do
     echo -n "  $bench ... "
 
     ct_c=$(compile_time gcc   -O2 -o "$BINDIR/${bench}_c"   "$SUITE/${bench}.c")
@@ -133,6 +133,42 @@ for lang in c cpp go dux; do
 done
 print_row "node"   "-" "$(best_of_3 node "$SUITE/alloc.js")"
 print_row "python" "-" "$(best_of_3 python3 "$SUITE/alloc.py")"
+
+# ── list_ops ─────────────────────────────────────────────────────────────────
+
+header "list element iteration  (2 M passes × 20 int elements = 40 M reads)"
+
+for lang in c cpp go dux; do
+    run_ms=$(best_of_3 "$BINDIR/list_ops_${lang}")
+    ct_var="CT_${lang^^}_list_ops"
+    print_row "$lang" "${!ct_var}" "$run_ms"
+done
+print_row "node"   "-" "$(best_of_3 node "$SUITE/list_ops.js")"
+print_row "python" "-" "$(best_of_3 python3 "$SUITE/list_ops.py")"
+
+# ── dict_ops ─────────────────────────────────────────────────────────────────
+
+header "dict ops  (100 K inserts + 100 K lookups, string keys)"
+
+for lang in c cpp go dux; do
+    run_ms=$(best_of_3 "$BINDIR/dict_ops_${lang}")
+    ct_var="CT_${lang^^}_dict_ops"
+    print_row "$lang" "${!ct_var}" "$run_ms"
+done
+print_row "node"   "-" "$(best_of_3 node "$SUITE/dict_ops.js")"
+print_row "python" "-" "$(best_of_3 python3 "$SUITE/dict_ops.py")"
+
+# ── fstr_format ──────────────────────────────────────────────────────────────
+
+header "string interpolation  (500 K f-string builds)"
+
+for lang in c cpp go dux; do
+    run_ms=$(best_of_3 "$BINDIR/fstr_format_${lang}")
+    ct_var="CT_${lang^^}_fstr_format"
+    print_row "$lang" "${!ct_var}" "$run_ms"
+done
+print_row "node"   "-" "$(best_of_3 node "$SUITE/fstr_format.js")"
+print_row "python" "-" "$(best_of_3 python3 "$SUITE/fstr_format.py")"
 
 echo ""
 echo "=== Done ==="
