@@ -1,2 +1,3 @@
-# Compiled stage-2 bootstrap binary
+# Compiled bootstrap binaries (built by tests/bootstrap_test.sh and CI)
 dux_stage2
+dux_stage3

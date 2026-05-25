@@ -108,11 +108,49 @@ Usage: dux [options] [file]
 ```
 
 ```bash
-# Examples
-dux --compile -O3 examples/euler12.dux -o euler12 && ./euler12
-dux --emit-ir  examples/euler12.dux
-dux --check    examples/design.dux
+# Compile and run a program
+./build/dux --compile -O2 examples/euler12.dux -o euler12
+./euler12        # prints 842161320
+
+# Dump AST
+./build/dux --dump-ast examples/design.dux
+
+# Emit LLVM IR
+./build/dux --emit-ir examples/euler12.dux
+
+# Check for semantic errors only
+./build/dux --check examples/design.dux
+
+# Start an interactive REPL session
+./build/dux --repl
 ```
+
+### REPL
+
+Start an interactive session with `--repl`:
+
+```
+$ ./build/dux --repl
+Dux REPL -- type :help for commands, :q to quit
+dux> int square(int x) { return x * x; }
+OK
+dux> println(square(7))
+49
+dux> println("Hello!")
+Hello!
+dux> :q
+```
+
+Declarations (functions, classes, enums) are accumulated and remain available for subsequent statements. Statements are compiled and executed immediately.
+
+REPL commands:
+
+| Command | Description |
+|---------|-------------|
+| `:q` / `:quit` | Exit the REPL |
+| `:help` | Show help |
+| `:clear` | Reset accumulated declarations |
+| `:context` | Show accumulated declarations |
 
 ## Run tests
 
@@ -135,6 +173,11 @@ void main() {
     auto temp  = 98.6f        # real  (f suffix, 32-bit float)
 
     println(name)
+
+    # String interpolation (f-strings)
+    int x = 42
+    println(f"Hello {name}! x={x}")            # Hello Dux! x=42
+    println(f"sqrt(2) = {math.sqrt(2.0)}")     # sqrt(2) = 1.41421356...
 
     # Lambdas
     auto sq = fn(int n) -> int => n * n
@@ -174,8 +217,8 @@ More examples in [`examples/`](examples/), including the full language showcase 
 | `real` | 32-bit float |
 | `bool` | boolean (`true` / `false`) |
 | `str` | reference-counted string (hybrid inline/heap allocation) |
-| `list` | dynamic array |
-| `dict` | hash map |
+| `list` | reference-counted dynamic array (stores any type) |
+| `dict` | reference-counted hash map (string keys, any-type values) |
 | `ptr` | raw pointer (for C FFI / unsafe code) |
 | `object` | base type for heap-allocated class instances |
 | `void` | no value (function return) |
@@ -242,6 +285,40 @@ int counter() {
     return n
 }
 ```
+
+### Strings and string interpolation
+
+String literals are enclosed in double quotes.  Dux strings are reference-counted
+heap values; no explicit `free` is needed.
+
+```dux
+str greeting = "Hello, world!"
+str combined = greeting + " More text."
+```
+
+**f-strings** (string interpolation) embed arbitrary expressions directly inside
+a string literal using `f"...{expr}..."` syntax.  Any expression is valid between
+`{` and `}`, including arithmetic, function calls, and boolean logic:
+
+```dux
+str name = "Dux"
+int n    = 7
+
+println(f"Hello, {name}!")          # Hello, Dux!
+println(f"{n} squared = {n * n}")   # 7 squared = 49
+println(f"flag = {n > 0}")          # flag = true
+```
+
+The result of each `{expr}` is converted to a string automatically:
+
+| Expression type | Conversion |
+|---|---|
+| `str` | used as-is |
+| `int` / `long` | decimal representation |
+| `double` / `real` | decimal representation |
+| `bool` | `"true"` or `"false"` |
+
+Escape `{` with `\{` to include a literal brace in an f-string.
 
 ### Operators
 
@@ -331,6 +408,15 @@ for int i in 0..<3 {
 # range(n) - equivalent to 0..<n
 for int i in range(3) {
     println(i)
+}
+```
+
+#### for - iterating a list
+
+```dux
+list nums = [10, 20, 30]
+for int v in nums {
+    println(v)   # 10, 20, 30
 }
 ```
 
@@ -508,6 +594,90 @@ int apply(fn(int) -> int f, int x) {
 println(apply(sq, 6))   # 36
 ```
 
+### Lists
+
+`list` is a reference-counted dynamic array that can store any type — primitives,
+strings, or class instances.  No explicit memory management is needed; the list
+is freed automatically at scope exit (RAII).
+
+```dux
+# Create a list
+list nums = [10, 20, 30]
+
+# Read elements (typed retrieval)
+int a = nums[0]    # 10
+int b = nums[2]    # 30
+
+# Mutate elements
+nums[1] = 99
+
+# Length
+println(len(nums))   # 3
+
+# List of strings
+list names = ["Alice", "Bob", "Carol"]
+str first = names[0]   # Alice
+
+# List of class instances
+list pts = [new Point(1, 2), new Point(3, 4)]
+Point p = pts[0]
+
+# Iterate
+for int v in nums {
+    println(v)
+}
+
+# Concatenate two lists into a new one
+list a = [1, 2]
+list b = [3, 4]
+# list c = a + b   # returns a new list [1, 2, 3, 4]
+```
+
+**Ownership:** `list y = x` increments the reference count — both variables refer
+to the same list.  Each goes out of scope independently and decrements the count;
+the list is freed when the count reaches zero.
+
+```dux
+list x = ["hello", "world"]
+list y = x            # refcount → 2
+delete x              # refcount → 1; y still valid
+println(y[0])         # hello
+# y released by RAII at end of scope (refcount → 0, freed)
+```
+
+`delete list_var` releases the reference immediately and nulls the slot;
+subsequent RAII cleanup at scope exit is a safe no-op.
+
+### Dicts
+
+`dict` is a reference-counted hash map with string keys and any-type values.
+Like `list`, it is freed automatically at scope exit (RAII).
+
+```dux
+# Create a dict
+dict d = {"name": "Dux", "version": "0.1"}
+
+# Read a value (typed retrieval)
+str name = d["name"]     # Dux
+
+# Assign / add entries
+d["author"] = "team"
+
+# Check length
+println(len(d))   # 3
+
+# Dict with integer values
+dict scores = {"alice": 95, "bob": 87}
+int alice_score = scores["alice"]   # 95
+scores["bob"] = 90
+
+# Delete a key (runtime)
+# duxrt_dict_del is available via extern for advanced use
+```
+
+**Ownership semantics** are the same as `list`: assignment shares the reference,
+`delete` releases early, RAII frees at scope exit.
+
 ### Enums
 
 ```dux
@@ -638,10 +808,10 @@ class Circle {
 
     Circle(double r) { this._radius = r; }
 
-    double radius -> get { return this._radius; }
-    void   radius -> set { this._radius = value; }
+    double radius() -> get { return this._radius; }
+    void   radius(double value) -> set { this._radius = value; }
 
-    double area -> get {
+    double area() -> get {
         return 3.14159 * this._radius * this._radius
     }
 }
@@ -982,26 +1152,59 @@ println(result)   # hello, world
 
 ---
 
+## Memory and ownership
+
+Dux uses a combination of automatic reference counting and RAII for memory safety
+without a garbage collector.
+
+| Type | Allocation | Release |
+|---|---|---|
+| `int`, `long`, `double`, `real`, `bool` | stack / register | automatic (scope exit) |
+| `str` | heap, reference-counted | automatic (RAII) |
+| `list` | heap, reference-counted | automatic (RAII) |
+| `dict` | heap, reference-counted | automatic (RAII) |
+| class instances | heap (`new`) | RAII destructor or `delete` |
+
+`list` and `dict` values are reference-counted with atomic counters so they can be
+shared safely across threads.  Assigning a list to another variable increments the
+count; the list is freed when the count reaches zero (last variable goes out of
+scope or is `delete`d).
+
+`delete` is optional for `list` and `dict` — use it only for **early release**
+(e.g. freeing a large list before a long computation).  If `delete` is called,
+RAII at scope exit is a safe no-op (the slot is nulled, and the null check skips
+the release).
+
+See [`docs/memory_model.md`](docs/memory_model.md) for the full specification.
+
+---
+
 ## Performance
 
 Dux compiles to native code through LLVM and matches C performance on most workloads.
-At `-O2`, the compiler enables **LTO**: the runtime library is merged into the
+At `-O3`, the compiler enables **LTO**: the runtime library is merged into the
 program module as LLVM bitcode before optimisation, so the inliner can eliminate
 call overhead across the translation-unit boundary - the same advantage that
 C++ gets from header-only implementation.
 
-| | math loop | fib(35) | string build | alloc 1M |
-|--|:---------:|:-------:|:------------:|:--------:|
-| **C** (gcc -O2) | 2 ms | 21 ms | 3 ms | 3 ms |
-| **C++** (g++ -O2) | 2 ms | 21 ms | 3 ms | 3 ms |
-| **Go** | 39 ms | 56 ms | 3 ms | 3 ms |
-| **Dux** (-O2 + LTO) | **3 ms** | **31 ms** | **3 ms** | **2 ms** |
-| Node.js 22 | 92 ms | 134 ms | 37 ms | 44 ms |
-| Python 3.11 | 4 110 ms | 1 180 ms | 14 ms | 225 ms |
+Seven benchmarks across the core language features (clang -O3, best of 3 runs,
+4-core Intel Xeon @ 2.80 GHz, Linux 6.18 x86-64):
 
-*4-core Intel Xeon @ 2.80 GHz, Linux 6.18 (x86-64). Best of 3 runs.*
+| | math loop | fib(35) | string build | alloc 1M | list ops | dict ops | f-string |
+|--|:---------:|:-------:|:------------:|:--------:|:--------:|:--------:|:--------:|
+| **C** (clang -O3) | 1 ms | 30 ms | 1 ms | 1 ms | 1 ms | 21 ms | 24 ms |
+| **C++** | 2 ms | **29 ms** | 2 ms | 2 ms | 12 ms | 32 ms | **13 ms** |
+| **Go** | 36 ms | 51 ms | 2 ms | 2 ms | 19 ms | 32 ms | 50 ms |
+| **Dux** (-O3 + LTO) | **2 ms** | **33 ms** | **2 ms** | **2 ms** | **17 ms** | **43 ms** | **32 ms** |
+| Node.js 22 | 95 ms | 133 ms | 35 ms | 38 ms | 953 ms | 83 ms | 49 ms |
+| Python 3.11 | 3 911 ms | 1 142 ms | 11 ms | 208 ms | 2 157 ms | 53 ms | 88 ms |
 
-→ **[Full benchmark analysis with methodology and per-fix breakdown](benchmarks/README.md)**
+Dux is **at or within 2× of C on six of seven benchmarks** and **beats Go on five
+of seven**.  The list-ops result (17 ms) is now faster than Go (19 ms) thanks to
+typed `int32_t[]` list specialisation; f-strings (32 ms) beat both Go and Node.js
+via zero-alloc integer formatting.
+
+→ **[Full benchmark analysis with per-workload breakdown and optimisation notes](benchmarks/README.md)**
 
 ---
 
@@ -1017,8 +1220,11 @@ C++ gets from header-only implementation.
 | `-g` | Emit DWARF debug information |
 | `--dump-ast` | Print the parsed AST |
 
-See [`docs/spec.md`](docs/spec.md) for the full language specification and
-[`docs/stdlib/`](docs/stdlib/) for the standard library API reference.
+See [`docs/spec.md`](docs/spec.md) for the full language specification,
+[`docs/grammar.md`](docs/grammar.md) for the formal EBNF grammar,
+[`docs/stdlib/`](docs/stdlib/) for the standard library API reference, and
+[`docs/memory_model.md`](docs/memory_model.md) for the memory and ownership model.
+Contributors: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 

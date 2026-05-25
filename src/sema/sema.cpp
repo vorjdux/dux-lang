@@ -32,6 +32,8 @@ Sema::Sema(Driver& driver) : driver_(driver) {
     builtin("double",   TR::TID_DOUBLE, {{"x", TR::TID_OBJECT}});
     builtin("range",    TR::TID_LIST, {{"end", TR::TID_INT}});
     builtin("assert",   TR::TID_VOID, {{"cond", TR::TID_BOOL}});
+    /* Synthetic built-in used by f-string desugaring — converts any value to str */
+    builtin("__fstr_to_str", TR::TID_STR, {{"x", TR::TID_OBJECT}});
 
     // Built-in root class symbols (so classes can extend them without error)
     auto builtin_class = [&](const std::string& name, TypeId tid) {
@@ -52,6 +54,16 @@ bool Sema::run(const ast::Program& prog) {
     for (const auto& d : prog.decls) check_decl(*d);
     check_stmts(prog.stmts);
     return error_count_ == 0;
+}
+
+// ─── Re-check a set of new declarations ──────────────────────────────────────
+// Intended for checking concrete generic instantiations that were added to
+// the program after the initial run() completed.  We hoist first so that
+// mutually-referencing instantiated types register their symbols, then run
+// the full checking pass over each declaration.
+void Sema::check_decls(const ast::DeclList& decls) {
+    hoist_top(decls);
+    for (const auto& d : decls) check_decl(*d);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -391,7 +403,7 @@ void Sema::check_class(const ast::ClassDecl& c) {
             if (fd->init) {
                 TypeId init_t = check_expr(**fd->init);
                 TypeId decl_t = type_from_te(fd->type);
-                require_assignable(init_t, decl_t, fd->loc,
+                require_assignable(init_t, decl_t, (*fd->init)->loc,
                                    "field '" + fd->name + "' initialiser");
             }
         }
@@ -1078,14 +1090,14 @@ TypeId Sema::check_call(const ast::CallExpr& e) {
     if (sym->kind == SymKind::Function || sym->kind == SymKind::BuiltIn) {
         // Async functions must be called with 'await'
         if (sym->is_async && !in_await_) {
-            err(e.loc, "async function '" + sym->name + "' must be called with 'await'");
+            err(e.callee->loc, "async function '" + sym->name + "' must be called with 'await'");
         }
         if (!sym->params.empty() &&
             sym->params.size() != e.args.size()) {
             std::ostringstream os;
             os << "'" << sym->name << "' expects " << sym->params.size()
                << " argument(s), got " << e.args.size();
-            err(e.loc, os.str());
+            err(e.callee->loc, os.str());
         }
         // Check each argument type
         for (std::size_t i = 0; i < e.args.size(); ++i) {
@@ -1151,6 +1163,50 @@ TypeId Sema::check_member(const ast::MemberExpr& e) {
         if (sym) return sym->type;
     }
 
+    // Validate that the member exists on the class type.
+    // Only check when obj_t is a known user-defined class (TypeKind::Class),
+    // not TID_UNKNOWN, not a primitive, and not the root 'object' type.
+    if (obj_t != TR::TID_UNKNOWN && obj_t != TR::TID_OBJECT &&
+        obj_t >= 0 && types_.info(obj_t).kind == TypeKind::Class) {
+        // Helper: check if a ClassDecl has a field or method named 'member'.
+        auto class_has_member = [&](const ast::ClassDecl* cd, const std::string& member) -> bool {
+            for (const auto& m : cd->members) {
+                if (!m.decl) continue;
+                if (auto* f = dynamic_cast<const ast::FunctionDecl*>(m.decl.get())) {
+                    if (f->name == member) return true;
+                } else if (auto* fd = dynamic_cast<const ast::FieldDecl*>(m.decl.get())) {
+                    if (fd->name == member) return true;
+                }
+            }
+            return false;
+        };
+
+        // Walk the class hierarchy (current class + parent chain) looking for member.
+        // Use global_scope() to avoid picking up constructor/method symbols that
+        // shadow the class symbol inside the class's own scope.
+        bool found = false;
+        TypeId cur = obj_t;
+        while (cur != TR::TID_UNKNOWN && cur >= 0 && cur != TR::TID_OBJECT) {
+            const std::string& cls_name = types_.info(cur).name;
+            Symbol* cls_sym = scopes_.global_scope().lookup(cls_name);
+            if (!cls_sym || cls_sym->kind != SymKind::Class) break;  // unknown/external class
+            auto* cd = dynamic_cast<const ast::ClassDecl*>(cls_sym->decl);
+            if (!cd) break;  // built-in class symbol with no AST decl
+            if (class_has_member(cd, e.member)) {
+                found = true;
+                break;
+            }
+            TypeId parent = types_.info(cur).parent;
+            if (parent == cur) break;  // avoid infinite loop
+            cur = parent;
+        }
+
+        if (!found) {
+            const std::string& cls_name = types_.info(obj_t).name;
+            err(e.loc, "type '" + cls_name + "' has no member '" + e.member + "'");
+        }
+    }
+
     // Return unknown — type will be refined during codegen
     return TR::TID_UNKNOWN;
 }
@@ -1187,10 +1243,15 @@ TypeId Sema::check_index(const ast::IndexExpr& e) {
         if (!types_.is_integral(idx_t) && idx_t != TR::TID_UNKNOWN)
             err(e.index->loc,
                 "list index must be integral, got '" + types_.name_of(idx_t) + "'");
-        return TR::TID_OBJECT;
+        // Return TID_UNKNOWN so the element can be assigned to any declared type.
+        // The codegen uses box_to_ptr/unbox_from_ptr to pack/unpack primitives
+        // stored as void* in the list.  TID_OBJECT would cause a sema type error
+        // when the programmer writes  int x = list[i].
+        return TR::TID_UNKNOWN;
     }
     if (obj_t == TR::TID_DICT) {
-        return TR::TID_OBJECT;
+        // Same rationale: dict values are void*, assignable to any type.
+        return TR::TID_UNKNOWN;
     }
     if (obj_t == TR::TID_STR) {
         return TR::TID_STR;

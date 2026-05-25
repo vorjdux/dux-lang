@@ -278,6 +278,7 @@ void Codegen::build_class_layout(const ast::ClassDecl& c) {
                 MethodInfo mi;
                 mi.name        = f->name;
                 mi.vtable_slot = slot++;
+                mi.modifier    = f->modifier ? *f->modifier : "";
                 layout.methods.push_back(mi);
             }
         }
@@ -350,6 +351,10 @@ void Codegen::declare_functions(const ast::DeclList& decls,
 static std::string mangle_class_member(const std::string& cls,
                                        const ast::FunctionDecl& f) {
     if (f.is_dtor) return cls + "___dtor";
+    // Property accessors (get/set) get a dedicated mangled name to avoid
+    // collision when both a getter and setter share the same Dux name.
+    if (f.modifier && *f.modifier == "get") return cls + "__" + f.name + "___get";
+    if (f.modifier && *f.modifier == "set") return cls + "__" + f.name + "___set";
     return cls + "__" + f.name;
 }
 
@@ -397,8 +402,9 @@ void Codegen::declare_class_methods(const ast::ClassDecl& c) {
 
             // Record in layout (non-ctor/dtor instance methods only)
             if (!f->is_ctor && !f->is_dtor && layouts_.count(c.name)) {
+                std::string fmod = f->modifier ? *f->modifier : "";
                 for (auto& mi : layouts_[c.name].methods) {
-                    if (mi.name == f->name) { mi.fn = fn; break; }
+                    if (mi.name == f->name && mi.modifier == fmod) { mi.fn = fn; break; }
                 }
             }
         }
@@ -1272,6 +1278,18 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
         TypeId iter_tid = type_id_of(*s.iterable);
         bool is_list = (iter_tid == TR::TID_LIST || iter_tid == TR::TID_UNKNOWN);
 
+        // Check whether the iterable is a statically-typed i32 list variable.
+        // If so, the body will use a direct GEP+load instead of duxrt_list_get,
+        // bypassing the call overhead and enabling LLVM auto-vectorisation.
+        bool is_typed_i32 = false;
+        if (is_list) {
+            if (auto* id = dynamic_cast<const ast::IdentExpr*>(s.iterable.get())) {
+                auto it = typed_list_vars_.find(id->name);
+                if (it != typed_list_vars_.end() && it->second == 1 /*DUXLIST_ELEM_I32*/)
+                    is_typed_i32 = true;
+            }
+        }
+
         if (is_list) {
             // List iteration: evaluate iterable, get length, iterate with index
             Value* list_val = gen_expr(*s.iterable);
@@ -1307,11 +1325,35 @@ void Codegen::gen_for_in(const ast::ForInStmt& s) {
             Value* list_v = builder_->CreateLoad(ptr_type(), list_ptr_alloca, "list.v");
             Value* idx_body = builder_->CreateLoad(
                 llvm::Type::getInt64Ty(*ctx_), idx_alloca, "idx.body");
-            auto* get_fn = get_or_declare_rt("duxrt_list_get",
-                ptr_type(), {ptr_type(), llvm::Type::getInt64Ty(*ctx_)});
-            Value* elem = builder_->CreateCall(get_fn, {list_v, idx_body}, "elem");
-            if (var_t == ptr_type())
-                builder_->CreateStore(elem, var_alloca);
+
+            // Load element: typed i32 fast path or generic duxrt_list_get.
+            {
+                Value* elem_to_store;
+                if (is_typed_i32) {
+                    // Direct i32 typed-array access: ((int32_t*)l->data)[idx]
+                    // DuxList->data is at byte offset 24 within the struct.
+                    llvm::Type* i8_ty  = llvm::Type::getInt8Ty(*ctx_);
+                    llvm::Type* i32_ty = llvm::Type::getInt32Ty(*ctx_);
+                    Value* data_fld = builder_->CreateConstInBoundsGEP1_64(
+                        i8_ty, list_v, 24, "data.fld");
+                    Value* data_ptr = builder_->CreateLoad(ptr_type(), data_fld, "data.ptr");
+                    Value* elem_ptr = builder_->CreateInBoundsGEP(
+                        i32_ty, data_ptr, idx_body, "elem.ptr");
+                    Value* elem_i32 = builder_->CreateLoad(i32_ty, elem_ptr, "elem.i32");
+                    elem_to_store = (elem_i32->getType() != var_t)
+                        ? coerce_to_llvm_type(elem_i32, var_t) : elem_i32;
+                } else {
+                    // Generic path: call duxrt_list_get and unbox.
+                    auto* get_fn = get_or_declare_rt("duxrt_list_get",
+                        ptr_type(), {ptr_type(), llvm::Type::getInt64Ty(*ctx_)});
+                    Value* elem = builder_->CreateCall(get_fn, {list_v, idx_body}, "elem");
+                    // Unbox to the declared element type when needed
+                    // (e.g. int elements stored via box_to_ptr).
+                    elem_to_store = (elem->getType() != var_t)
+                        ? coerce_to_llvm_type(elem, var_t) : elem;
+                }
+                builder_->CreateStore(elem_to_store, var_alloca);
+            }
 
             loop_stack_.push_back({incr_bb, exit_bb, pending_label_});
             pending_label_.clear();
@@ -1474,7 +1516,14 @@ int Codegen::enum_max_payload_arity(const sema::TypeInfo& ti) const {
 
 llvm::Value* Codegen::box_to_ptr(llvm::Value* v) {
     if (v->getType()->isPointerTy()) return v;
+    // float (f32): bitcast bits to i32, zero-extend to i64, then IntToPtr
+    if (v->getType()->isFloatTy()) {
+        Value* i32  = builder_->CreateBitCast(v, llvm::Type::getInt32Ty(*ctx_));
+        Value* ext  = builder_->CreateZExt(i32, llvm::Type::getInt64Ty(*ctx_));
+        return builder_->CreateIntToPtr(ext, ptr_type());
+    }
     if (v->getType()->isIntegerTy()) {
+        // Zero-extend booleans/i8/i16/i32 to i64, then pack into pointer bits
         Value* ext = builder_->CreateZExt(v, llvm::Type::getInt64Ty(*ctx_));
         return builder_->CreateIntToPtr(ext, ptr_type());
     }
@@ -1488,6 +1537,12 @@ llvm::Value* Codegen::box_to_ptr(llvm::Value* v) {
 
 llvm::Value* Codegen::unbox_from_ptr(llvm::Value* v, llvm::Type* target) {
     if (target->isPointerTy()) return v;
+    // float (f32): PtrToInt → i64 → trunc to i32 → bitcast to f32
+    if (target->isFloatTy()) {
+        Value* i64 = builder_->CreatePtrToInt(v, llvm::Type::getInt64Ty(*ctx_));
+        Value* i32 = builder_->CreateTrunc(i64, llvm::Type::getInt32Ty(*ctx_));
+        return builder_->CreateBitCast(i32, target);
+    }
     if (target->isIntegerTy()) {
         Value* i64 = builder_->CreatePtrToInt(v, llvm::Type::getInt64Ty(*ctx_));
         return builder_->CreateTrunc(i64, target);
@@ -1608,8 +1663,12 @@ void Codegen::gen_match(const ast::MatchStmt& s) {
                                           match_ptr, "enum.tag");
     } else if (match_raw->getType()->isIntegerTy()) {
         match_val = match_raw;
-        if (!match_val->getType()->isIntegerTy(32))
+        auto* int_ty = llvm::cast<llvm::IntegerType>(match_val->getType());
+        if (int_ty->getBitWidth() > 32)
+            // Wider than i32 (e.g. i64): truncate down.
             match_val = builder_->CreateTrunc(match_val, llvm::Type::getInt32Ty(*ctx_));
+        // Narrower types (bool i1, i8, i16) are kept as-is; the switch and
+        // case constants both use match_val->getType() so they stay consistent.
     } else {
         // Float or other — coerce to i32 (fallback, not normally reached for enums)
         match_val = builder_->CreateFPToSI(match_raw, llvm::Type::getInt32Ty(*ctx_));
@@ -1844,7 +1903,7 @@ void Codegen::gen_try_catch(const ast::TryCatchStmt& s) {
     llvm::Function* end_catch_fn = get_or_declare_rt(
         "__cxa_end_catch", llvm::Type::getVoidTy(*ctx_), {});
     cleanup_scopes_.back().push_back(
-        {nullptr, "", nullptr, end_catch_fn});
+        {nullptr, "", {}, nullptr, end_catch_fn});
     gen_stmt(*s.catch_body);
     env_pop();  // env_pop fires emit_scope_cleanup which calls __cxa_end_catch
     if (!builder_->GetInsertBlock()->getTerminator())
@@ -1863,6 +1922,10 @@ void Codegen::gen_return(const ast::ReturnStmt& s) {
             val = coerce(val, val_tid, current_ret_type_);
             if (current_ret_type_ == TR::TID_STR)
                 val = maybe_retain_str(val);
+            else if (current_ret_type_ == TR::TID_LIST)
+                val = maybe_retain_list(val);
+            else if (current_ret_type_ == TR::TID_DICT)
+                val = maybe_retain_dict(val);
         }
         // Box result as void* for the future
         Value* boxed;
@@ -1894,11 +1957,15 @@ void Codegen::gen_return(const ast::ReturnStmt& s) {
         TypeId val_tid = type_id_of(**s.value);
         val = coerce(val, val_tid, current_ret_type_);
         // Retain the return value before releasing scopes so the caller gets
-        // a valid owned reference even when returning a local str variable.
+        // a valid owned reference even when returning a local refcounted variable.
         if (current_ret_type_ == TR::TID_STR)
             val = maybe_retain_str(val);
+        else if (current_ret_type_ == TR::TID_LIST)
+            val = maybe_retain_list(val);
+        else if (current_ret_type_ == TR::TID_DICT)
+            val = maybe_retain_dict(val);
     }
-    // Destroy class instances, run defers, and release str variables across all active scopes.
+    // Destroy class instances, run defers, and release refcounted variables across all active scopes.
     emit_all_scope_cleanups();
     emit_all_str_releases();
     if (val)
@@ -2005,10 +2072,12 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
         } else {
             // Normal (non-static) local variable
             Value* init_val = nullptr;
+            TypeId init_tid = TR::TID_UNKNOWN;
 
             if (init_ptr) {
+                last_list_elem_kind_ = 0;  // reset before gen_expr may call gen_list
                 init_val = gen_expr(*init_ptr);
-                TypeId init_tid = type_id_of(*init_ptr);
+                init_tid = type_id_of(*init_ptr);
                 if (var_tid == TR::TID_UNKNOWN) var_tid = init_tid;
                 init_val = coerce(init_val, init_tid, var_tid);
             }
@@ -2019,8 +2088,12 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
             if (init_val) {
                 if (var_tid == TR::TID_STR)
                     init_val = maybe_retain_str(init_val);
+                else if (var_tid == TR::TID_LIST)
+                    init_val = maybe_retain_list(init_val);
+                else if (var_tid == TR::TID_DICT)
+                    init_val = maybe_retain_dict(init_val);
                 if (init_val->getType() != t)
-                    init_val = coerce(init_val, decl_tid, var_tid);
+                    init_val = coerce_to_llvm_type(init_val, t);
                 builder_->CreateStore(init_val, alloca);
             } else {
                 builder_->CreateStore(llvm::Constant::getNullValue(t), alloca);
@@ -2036,8 +2109,25 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
                     fn_var_types_[name] = te;
                     // Register closure env for free() on scope exit
                     if (!cleanup_scopes_.empty())
-                        cleanup_scopes_.back().push_back({alloca, "__closure", nullptr});
+                        cleanup_scopes_.back().push_back({alloca, "__closure", {}, nullptr, nullptr});
                 }
+            }
+            // Propagate typed-list element kind so gen_for_in can use the fast path.
+            // last_list_elem_kind_ is set by gen_list() when every element is i32.
+            // Also propagate when RHS is an identifier pointing to a known typed list.
+            if (var_tid == TR::TID_LIST || init_tid == TR::TID_LIST) {
+                int kind = last_list_elem_kind_;
+                if (kind == 0 && init_ptr) {
+                    if (auto* id = dynamic_cast<const ast::IdentExpr*>(init_ptr.get())) {
+                        auto it = typed_list_vars_.find(id->name);
+                        if (it != typed_list_vars_.end())
+                            kind = it->second;
+                    }
+                }
+                if (kind != 0)
+                    typed_list_vars_[name] = kind;
+                else
+                    typed_list_vars_.erase(name);
             }
             // Track variable→class for member access resolution
             if (!s.type.name.empty() && layouts_.count(s.type.name))
@@ -2071,8 +2161,34 @@ void Codegen::gen_delete(const ast::DeleteStmt& s) {
     TypeId tid = type_id_of(*s.expr);
     if (tid == TR::TID_STR) {
         // Strings are refcounted — must release, not raw free.
-        Value* ptr = gen_expr(*s.expr);
-        emit_str_release(ptr);
+        // Also null the slot so that RAII scope cleanup is a no-op.
+        Value* slot = lvalue_of(*s.expr);
+        if (slot) {
+            Value* ptr = builder_->CreateLoad(ptr_type(), slot, "str.del");
+            emit_str_release(ptr);
+            builder_->CreateStore(
+                llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptr_type())),
+                slot);
+        } else {
+            Value* ptr = gen_expr(*s.expr);
+            emit_str_release(ptr);
+        }
+        return;
+    }
+
+    // Lists and dicts are refcounted — call release and null the slot.
+    if (tid == TR::TID_LIST || tid == TR::TID_DICT) {
+        const std::string rel_sym = (tid == TR::TID_LIST)
+            ? "duxrt_list_release" : "duxrt_dict_release";
+        Value* slot = lvalue_of(*s.expr);
+        if (slot) {
+            emit_rc_release(slot, rel_sym);
+        } else {
+            Value* ptr = gen_expr(*s.expr);
+            auto* rel_fn = get_or_declare_rt(rel_sym,
+                llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+            builder_->CreateCall(rel_fn, {ptr});
+        }
         return;
     }
 
@@ -2169,6 +2285,62 @@ Value* Codegen::gen_expr(const ast::Expr& e) {
 }
 
 Value* Codegen::gen_assign(const ast::AssignExpr& e) {
+    // Property setter dispatch: obj.prop = val calls the setter if one exists.
+    // We resolve the class name and check for a setter BEFORE evaluating the
+    // object expression, so static-field assignments (ClassName.field) are not
+    // incorrectly treated as instance-method dispatches.
+    if (auto* mem = dynamic_cast<const ast::MemberExpr*>(e.target.get())) {
+        std::string cls = resolve_class_name(*mem->object, type_id_of(*mem->object));
+        auto li = layouts_.find(cls);
+        if (li != layouts_.end()) {
+            for (const auto& mi : li->second.methods) {
+                if (mi.name == mem->member && mi.modifier == "set" && mi.fn) {
+                    Value* obj_v = gen_expr(*mem->object);
+                    Value* rval = gen_expr(*e.value);
+                    return emit_call(mi.fn, {obj_v, rval});
+                }
+            }
+        }
+    }
+
+    // List index assignment: list[i] = val  →  duxrt_list_set(list, i, box(val))
+    // Dict index assignment: dict["k"] = val →  duxrt_dict_set(dict, cstr(k), box(val))
+    // Must be handled before lvalue_of() because lvalue_of returns nullptr for
+    // collection index expressions (they have no simple alloca lvalue).
+    if (auto* idx_target = dynamic_cast<const ast::IndexExpr*>(e.target.get())) {
+        TypeId obj_tid = type_id_of(*idx_target->object);
+        if (obj_tid == TR::TID_LIST) {
+            Value* obj  = gen_expr(*idx_target->object);
+            Value* ki   = gen_expr(*idx_target->index);
+            Value* rhs  = gen_expr(*e.value);
+            Value* idx64 = builder_->CreateSExt(ki, llvm::Type::getInt64Ty(*ctx_));
+            auto* set_fn = get_or_declare_rt("duxrt_list_set",
+                llvm::Type::getVoidTy(*ctx_),
+                {ptr_type(), llvm::Type::getInt64Ty(*ctx_), ptr_type()});
+            builder_->CreateCall(set_fn, {obj, idx64, box_to_ptr(rhs)});
+            return rhs;
+        }
+        if (obj_tid == TR::TID_DICT) {
+            Value* obj  = gen_expr(*idx_target->object);
+            Value* key  = gen_expr(*idx_target->index);
+            Value* rhs  = gen_expr(*e.value);
+            TypeId k_tid = type_id_of(*idx_target->index);
+            Value* char_key;
+            if (k_tid == TR::TID_STR) {
+                auto* cstr_fn = get_or_declare_rt("duxrt_str_cstr",
+                    ptr_type(), {ptr_type()});
+                char_key = builder_->CreateCall(cstr_fn, {key});
+            } else {
+                char_key = box_to_ptr(key);
+            }
+            auto* set_fn = get_or_declare_rt("duxrt_dict_set",
+                llvm::Type::getVoidTy(*ctx_),
+                {ptr_type(), ptr_type(), ptr_type()});
+            builder_->CreateCall(set_fn, {obj, char_key, box_to_ptr(rhs)});
+            return rhs;
+        }
+    }
+
     // Get lvalue slot
     Value* slot = lvalue_of(*e.target);
     Value* rhs  = gen_expr(*e.value);
@@ -2185,7 +2357,7 @@ Value* Codegen::gen_assign(const ast::AssignExpr& e) {
 
     if (rhs) {
         if (e.op == "=") {
-            // For str: release old value, then retain new value before storing.
+            // For refcounted types: release old value, then retain new value before storing.
             if (rhs_tid == TR::TID_STR) {
                 auto tit = alloca_type_.find(slot);
                 if (tit != alloca_type_.end() && tit->second->isPointerTy()) {
@@ -2193,6 +2365,45 @@ Value* Codegen::gen_assign(const ast::AssignExpr& e) {
                     emit_str_release(old_val);
                 }
                 rhs = maybe_retain_str(rhs);
+            } else if (rhs_tid == TR::TID_LIST) {
+                auto tit = alloca_type_.find(slot);
+                if (tit != alloca_type_.end() && tit->second->isPointerTy()) {
+                    Value* old_val = builder_->CreateLoad(ptr_type(), slot, "list.old");
+                    auto* rel_fn = get_or_declare_rt("duxrt_list_release",
+                        llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+                    // Null-guard old value before releasing
+                    Value* null_v = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type()));
+                    Function* fn   = builder_->GetInsertBlock()->getParent();
+                    auto* rel_bb   = BasicBlock::Create(*ctx_, "list.asgn.rel", fn);
+                    auto* cont_bb  = BasicBlock::Create(*ctx_, "list.asgn.cont", fn);
+                    builder_->CreateCondBr(
+                        builder_->CreateICmpEQ(old_val, null_v), cont_bb, rel_bb);
+                    builder_->SetInsertPoint(rel_bb);
+                    builder_->CreateCall(rel_fn, {old_val});
+                    builder_->CreateBr(cont_bb);
+                    builder_->SetInsertPoint(cont_bb);
+                }
+                rhs = maybe_retain_list(rhs);
+            } else if (rhs_tid == TR::TID_DICT) {
+                auto tit = alloca_type_.find(slot);
+                if (tit != alloca_type_.end() && tit->second->isPointerTy()) {
+                    Value* old_val = builder_->CreateLoad(ptr_type(), slot, "dict.old");
+                    auto* rel_fn = get_or_declare_rt("duxrt_dict_release",
+                        llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+                    Value* null_v = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type()));
+                    Function* fn   = builder_->GetInsertBlock()->getParent();
+                    auto* rel_bb   = BasicBlock::Create(*ctx_, "dict.asgn.rel", fn);
+                    auto* cont_bb  = BasicBlock::Create(*ctx_, "dict.asgn.cont", fn);
+                    builder_->CreateCondBr(
+                        builder_->CreateICmpEQ(old_val, null_v), cont_bb, rel_bb);
+                    builder_->SetInsertPoint(rel_bb);
+                    builder_->CreateCall(rel_fn, {old_val});
+                    builder_->CreateBr(cont_bb);
+                    builder_->SetInsertPoint(cont_bb);
+                }
+                rhs = maybe_retain_dict(rhs);
             }
             builder_->CreateStore(rhs, slot);
         } else {
@@ -2469,6 +2680,74 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
             return rt_println(arg, t);
         }
 
+        // __fstr_to_str — synthetic builtin emitted by the f-string desugaring.
+        // Converts any value to a DuxStr* (str) by dispatching on its sema TypeId.
+        if (name == "__fstr_to_str") {
+            Value* arg = e.args.empty() ? str_literal("") : gen_expr(*e.args[0]);
+            TypeId t   = e.args.empty() ? TR::TID_STR    : type_id_of(*e.args[0]);
+            // Infer from LLVM type when sema type is unknown
+            if (t == TR::TID_UNKNOWN) {
+                if (arg->getType()->isIntegerTy()) t = TR::TID_INT;
+                else if (arg->getType()->isFloatingPointTy()) t = TR::TID_DOUBLE;
+                else t = TR::TID_STR;
+            }
+            if (t == TR::TID_STR) return arg;
+            if (t == TR::TID_BOOL) {
+                llvm::Type* i1 = llvm::Type::getInt1Ty(*ctx_);
+                Value* cond = (arg->getType() == i1)
+                    ? arg : builder_->CreateTrunc(arg, i1);
+                return builder_->CreateSelect(cond, str_literal("true"), str_literal("false"));
+            }
+            if (t == TR::TID_INT || t == TR::TID_LONG) {
+                // Zero-alloc path: build an immortal DuxStr on the stack.
+                // DuxStr layout (LP64): { i32 refcount, i32 len, ptr ext, char data[] }
+                // A concrete struct { i32, i32, ptr, [32 x i8] } matches perfectly:
+                //   - header  = 16 bytes (offsets match the C struct)
+                //   - 32 bytes of inline data covers the longest i64 representation
+                // refcount=-1 marks it immortal so duxrt_str_retain/release are no-ops.
+                llvm::Type* i8_ty  = llvm::Type::getInt8Ty(*ctx_);
+                llvm::Type* i32_ty = llvm::Type::getInt32Ty(*ctx_);
+                llvm::Type* i64_ty = llvm::Type::getInt64Ty(*ctx_);
+                llvm::StructType* stk_ty = llvm::StructType::get(*ctx_,
+                    {i32_ty, i32_ty, ptr_type(), llvm::ArrayType::get(i8_ty, 32)});
+
+                // Use make_alloca so the slot is hoisted to the function entry
+                // block — avoids stack growth when this expression appears inside
+                // a loop (each iteration reuses the same 48-byte stack slot).
+                Value* str_alloca = make_alloca(stk_ty, "fstr.stk");
+                // refcount = -1 (immortal — never freed)
+                builder_->CreateStore(
+                    llvm::ConstantInt::getSigned(i32_ty, -1),
+                    builder_->CreateStructGEP(stk_ty, str_alloca, 0));
+                // ext = NULL (use inline data[] below)
+                builder_->CreateStore(
+                    llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type())),
+                    builder_->CreateStructGEP(stk_ty, str_alloca, 2));
+                // Format the integer into data[] (field 3)
+                Value* data_fld = builder_->CreateStructGEP(stk_ty, str_alloca, 3);
+                auto* fmt_fn = get_or_declare_rt("duxrt_fmt_int", i32_ty,
+                    {i64_ty, ptr_type()});
+                Value* v64 = (arg->getType() == i64_ty)
+                    ? arg : builder_->CreateSExt(arg, i64_ty);
+                Value* len_val = builder_->CreateCall(fmt_fn, {v64, data_fld}, "fmt.len");
+                // Store the formatted length into field 1
+                builder_->CreateStore(len_val,
+                    builder_->CreateStructGEP(stk_ty, str_alloca, 1));
+                // Return pointer to the stack DuxStr (immortal ⟹ safe to alias)
+                return str_alloca;
+            }
+            if (t == TR::TID_DOUBLE || t == TR::TID_REAL) {
+                auto* fn = get_or_declare_rt("duxrt_str_from_double",
+                    ptr_type(), {llvm::Type::getDoubleTy(*ctx_)});
+                Value* vd = arg->getType() == llvm::Type::getDoubleTy(*ctx_)
+                    ? arg : builder_->CreateFPExt(arg, llvm::Type::getDoubleTy(*ctx_));
+                return builder_->CreateCall(fn, {vd});
+            }
+            // Fallback: already a pointer — treat as str
+            return arg;
+        }
+
         // assert built-in — handled as stmt but might appear as expr
         if (name == "assert") {
             if (!e.args.empty()) {
@@ -2500,6 +2779,12 @@ Value* Codegen::gen_call(const ast::CallExpr& e) {
             llvm::Type* i32 = llvm::Type::getInt32Ty(*ctx_);
             if (arg_tid == TR::TID_LIST) {
                 auto* fn = get_or_declare_rt("duxrt_list_len",
+                    llvm::Type::getInt64Ty(*ctx_), {ptr_type()});
+                Value* v = builder_->CreateCall(fn, {arg});
+                return builder_->CreateTrunc(v, i32);
+            }
+            if (arg_tid == TR::TID_DICT) {
+                auto* fn = get_or_declare_rt("duxrt_dict_len",
                     llvm::Type::getInt64Ty(*ctx_), {ptr_type()});
                 Value* v = builder_->CreateCall(fn, {arg});
                 return builder_->CreateTrunc(v, i32);
@@ -2711,6 +2996,12 @@ Value* Codegen::gen_member(const ast::MemberExpr& e) {
     auto layout_it = layouts_.find(cls_name);
     if (layout_it != layouts_.end()) {
         const ClassLayout& layout = layout_it->second;
+        // Property getter dispatch: obj.prop calls the getter method if one exists
+        for (const auto& mi : layout.methods) {
+            if (mi.name == e.member && mi.modifier == "get" && mi.fn) {
+                return emit_call(mi.fn, {obj});
+            }
+        }
         for (const auto& f : layout.fields) {
             if (f.name == e.member) {
                 Value* gep = builder_->CreateStructGEP(
@@ -2816,18 +3107,47 @@ Value* Codegen::gen_new(const ast::NewExpr& e) {
 }
 
 Value* Codegen::gen_list(const ast::ListExpr& e) {
+    // ── Typed i32 fast path ──────────────────────────────────────────────
+    // When every element is a statically-known int/bool, use a typed int32_t[]
+    // list.  This lets gen_for_in emit direct GEP loads (no boxing, SIMD-able).
+    bool all_i32 = !e.elements.empty();
+    for (const auto& elem : e.elements) {
+        TypeId tid = type_id_of(*elem);
+        if (tid != TR::TID_INT && tid != TR::TID_BOOL) { all_i32 = false; break; }
+    }
+
+    if (all_i32) {
+        auto* new_fn  = get_or_declare_rt("duxrt_list_new_i32", ptr_type(), {});
+        auto* push_fn = get_or_declare_rt("duxrt_list_push_i32",
+            llvm::Type::getVoidTy(*ctx_),
+            {ptr_type(), llvm::Type::getInt32Ty(*ctx_)});
+        Value* list = builder_->CreateCall(new_fn, {});
+        for (const auto& elem : e.elements) {
+            Value* v = gen_expr(*elem);
+            // Ensure i32 (bool/i1 get zero-extended to i32)
+            if (v->getType() != llvm::Type::getInt32Ty(*ctx_))
+                v = builder_->CreateZExtOrTrunc(v, llvm::Type::getInt32Ty(*ctx_));
+            builder_->CreateCall(push_fn, {list, v});
+        }
+        // Mark this anonymous result as typed — caller (gen_var_decl) will
+        // propagate to the variable via last_list_was_typed_ flag.
+        last_list_elem_kind_ = 1 /*DUXLIST_ELEM_I32*/;
+        return list;
+    }
+
+    // ── Generic void* path ───────────────────────────────────────────────
+    last_list_elem_kind_ = 0;
     auto* new_fn = get_or_declare_rt("duxrt_list_new", ptr_type(), {});
     Value* list  = builder_->CreateCall(new_fn, {});
     auto* push_fn = get_or_declare_rt("duxrt_list_push",
         llvm::Type::getVoidTy(*ctx_), {ptr_type(), ptr_type()});
     for (const auto& elem : e.elements) {
         Value* v = gen_expr(*elem);
-        // box primitive to ptr (simplified: store on heap via alloca then ptr)
-        if (!v->getType()->isPointerTy()) {
-            Value* box = make_alloca(v->getType(), "box");
-            builder_->CreateStore(v, box);
-            v = box;
-        }
+        // Pack primitives directly into the void* slot via box_to_ptr.
+        // This avoids stack-alloca boxing (which produced dangling pointers
+        // after the function returned).  Pointers (str, class, list, dict) are
+        // passed through unchanged.
+        v = box_to_ptr(v);
         builder_->CreateCall(push_fn, {list, v});
     }
     return list;
@@ -2842,20 +3162,18 @@ Value* Codegen::gen_dict(const ast::DictExpr& e) {
     for (const auto& [k, v] : e.pairs) {
         Value* kv = gen_expr(*k);
         Value* vv = gen_expr(*v);
-        // Dict keys are stored as char*; extract from DuxStr if needed.
+        // Dict keys must be char*.  Convert DuxStr* keys to cstr; leave other
+        // pointer keys unchanged.  Non-pointer key types are unsupported (dict
+        // always uses string keys) — pass through box_to_ptr which will at
+        // least avoid a dangling stack pointer.
         TypeId k_tid = type_id_of(*k);
         if (k_tid == TR::TID_STR)
             kv = builder_->CreateCall(cstr_fn, {kv});
-        else if (!kv->getType()->isPointerTy()) {
-            Value* box = make_alloca(kv->getType(), "kbox");
-            builder_->CreateStore(kv, box);
-            kv = box;
-        }
-        if (!vv->getType()->isPointerTy()) {
-            Value* box = make_alloca(vv->getType(), "vbox");
-            builder_->CreateStore(vv, box);
-            vv = box;
-        }
+        else
+            kv = box_to_ptr(kv);
+        // Values are stored as void*; use box_to_ptr so primitives are packed
+        // into the pointer word rather than stored on the stack.
+        vv = box_to_ptr(vv);
         builder_->CreateCall(set_fn, {dict, kv, vv});
     }
     return dict;
@@ -3449,6 +3767,12 @@ Value* Codegen::lvalue_of(const ast::Expr& e) {
         std::string cls_name = resolve_class_name(*mem->object, type_id_of(*mem->object));
         auto it = layouts_.find(cls_name);
         if (it != layouts_.end()) {
+            // If member is a property (has getter/setter), don't expose an lvalue for it
+            // (assignment is handled by gen_assign's setter dispatch)
+            for (const auto& mi : it->second.methods) {
+                if (mi.name == mem->member && !mi.modifier.empty())
+                    return nullptr;
+            }
             for (const auto& f : it->second.fields)
                 if (f.name == mem->member)
                     return builder_->CreateStructGEP(
@@ -3497,6 +3821,10 @@ Value* Codegen::coerce_to_llvm_type(Value* v, llvm::Type* pt) {
         return builder_->CreateSIToFP(v, pt);
     if (pt->isIntegerTy() && v->getType()->isFloatingPointTy())
         return builder_->CreateFPToSI(v, pt);
+    // Unbox void* → primitive: handles list[i] / dict["k"] used in typed context.
+    // box_to_ptr packed the value into pointer bits; unbox_from_ptr reverses that.
+    if (v->getType()->isPointerTy() && !pt->isPointerTy())
+        return unbox_from_ptr(v, pt);
     return v;
 }
 
@@ -3579,13 +3907,22 @@ void Codegen::env_define(const std::string& name, Value* alloca, TypeId tid) {
         str_scopes_.back().push_back(alloca);
         return;
     }
+    // Register list/dict allocas for RAII ref-count release at scope exit.
+    if (tid == TR::TID_LIST && !cleanup_scopes_.empty()) {
+        cleanup_scopes_.back().push_back({alloca, {}, "duxrt_list_release", nullptr, nullptr});
+        return;
+    }
+    if (tid == TR::TID_DICT && !cleanup_scopes_.empty()) {
+        cleanup_scopes_.back().push_back({alloca, {}, "duxrt_dict_release", nullptr, nullptr});
+        return;
+    }
     // Register class instances for RAII cleanup (dtor call if present, then free).
     // Uses layouts_ as the condition so trivial-dtor classes (no ___dtor symbol)
     // are still freed at scope exit via the free-only path in emit_dtor.
     if (tid > TR::TID_NULL && !cleanup_scopes_.empty()) {
         const std::string& cls_name = types_.name_of(tid);
         if (!cls_name.empty() && layouts_.count(cls_name))
-            cleanup_scopes_.back().push_back({alloca, cls_name, nullptr});
+            cleanup_scopes_.back().push_back({alloca, cls_name, {}, nullptr, nullptr});
     }
 }
 
@@ -3636,6 +3973,26 @@ void Codegen::emit_dtor(Value* alloca, const std::string& class_name) {
     builder_->SetInsertPoint(end_bb);
 }
 
+void Codegen::emit_rc_release(llvm::Value* slot, const std::string& release_sym) {
+    auto* bb = builder_->GetInsertBlock();
+    if (!bb || bb->getTerminator()) return;
+    Value* null_v = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(ptr_type()));
+    Value* ptr = builder_->CreateLoad(ptr_type(), slot, "rc.ptr");
+    Function* fn   = bb->getParent();
+    auto* call_bb  = BasicBlock::Create(*ctx_, "rc.rel.call", fn);
+    auto* end_bb   = BasicBlock::Create(*ctx_, "rc.rel.end",  fn);
+    builder_->CreateCondBr(
+        builder_->CreateICmpEQ(ptr, null_v, "rc.isnull"), end_bb, call_bb);
+    builder_->SetInsertPoint(call_bb);
+    auto* rel_fn = get_or_declare_rt(release_sym, llvm::Type::getVoidTy(*ctx_), {ptr_type()});
+    builder_->CreateCall(rel_fn, {ptr});
+    // Null the slot so a double-release (delete + RAII) is a no-op.
+    builder_->CreateStore(null_v, slot);
+    builder_->CreateBr(end_bb);
+    builder_->SetInsertPoint(end_bb);
+}
+
 void Codegen::emit_scope_cleanup(const ScopeCleanup& c) {
     auto* bb = builder_->GetInsertBlock();
     if (!bb || bb->getTerminator()) return;
@@ -3643,6 +4000,9 @@ void Codegen::emit_scope_cleanup(const ScopeCleanup& c) {
         emit_call(c.fn_to_call, {});
     } else if (c.defer_body) {
         gen_stmts(*c.defer_body);
+    } else if (!c.release_sym.empty()) {
+        // List / dict RAII: null-guarded reference-count release.
+        emit_rc_release(c.alloca, c.release_sym);
     } else {
         emit_dtor(c.alloca, c.class_name);
     }
@@ -3661,7 +4021,7 @@ void Codegen::emit_all_scope_cleanups() {
 void Codegen::gen_defer(const ast::DeferStmt& s) {
     if (cleanup_scopes_.empty()) return;
     // Register the defer block; it will be emitted in LIFO order at scope exit.
-    cleanup_scopes_.back().push_back({nullptr, {}, &s.body});
+    cleanup_scopes_.back().push_back({nullptr, {}, {}, &s.body, nullptr});
 }
 
 void Codegen::gen_throw(const ast::ThrowStmt& s) {
@@ -3798,6 +4158,21 @@ Value* Codegen::maybe_retain_str(Value* v) {
     // Consuming convention: call results (refcount=1) and immortal globals need no retain.
     if (llvm::isa<llvm::CallInst>(v) || llvm::isa<llvm::GlobalVariable>(v)) return v;
     return emit_str_retain(v);
+}
+
+Value* Codegen::maybe_retain_list(Value* v) {
+    if (!v) return v;
+    // Consuming convention: CallInst results already carry refcount=1; no retain needed.
+    if (llvm::isa<llvm::CallInst>(v)) return v;
+    auto* fn = get_or_declare_rt("duxrt_list_retain", ptr_type(), {ptr_type()});
+    return builder_->CreateCall(fn, {v}, "list.retain");
+}
+
+Value* Codegen::maybe_retain_dict(Value* v) {
+    if (!v) return v;
+    if (llvm::isa<llvm::CallInst>(v)) return v;
+    auto* fn = get_or_declare_rt("duxrt_dict_retain", ptr_type(), {ptr_type()});
+    return builder_->CreateCall(fn, {v}, "dict.retain");
 }
 
 void Codegen::emit_all_str_releases() {
