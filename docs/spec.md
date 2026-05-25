@@ -1,6 +1,6 @@
 # Dux Language Specification
 
-Version 0.1 — May 2026
+Version 0.1 - May 2026
 
 ---
 
@@ -321,9 +321,9 @@ class Point() {
 
 ### 8.1 Access Modifiers
 
-- `public:` — accessible from anywhere
-- `private:` — accessible only within the class
-- `protected:` — accessible within the class and subclasses
+- `public:` - accessible from anywhere
+- `private:` - accessible only within the class
+- `protected:` - accessible within the class and subclasses
 
 ### 8.2 Constructors and Destructors
 

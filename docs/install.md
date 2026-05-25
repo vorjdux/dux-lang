@@ -29,7 +29,7 @@ DUX_VERSION=0.1.0 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/m
 # Install to a custom directory (no sudo required)
 DUX_INSTALL_DIR=~/.local/bin curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
 
-# Dry run — see what would happen without making changes
+# Dry run - see what would happen without making changes
 sh install.sh --dry-run
 
 # Skip PATH modification instructions
@@ -149,7 +149,7 @@ Building from source requires a C++23-capable compiler, LLVM, Flex, Bison, and C
 
 > **LTO:** If `clang` and `llvm-link` are available, the build automatically
 > compiles the runtime to LLVM bitcode (`duxrt.bc`) and enables link-time
-> optimisation at `-O1` and above.  This is optional — without it the compiler
+> optimisation at `-O1` and above.  This is optional - without it the compiler
 > still works and only LTO is skipped.
 
 ### Ubuntu / Debian

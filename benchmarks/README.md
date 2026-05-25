@@ -1,4 +1,4 @@
-# Dux Language — Cross-Language Benchmark Comparison
+# Dux Language - Cross-Language Benchmark Comparison
 
 Comparison of **Dux** against C, C++, Go, Node.js (v22), and Python 3.11 across four
 fundamental workloads.  Numbers collected on a single 4-core Intel Xeon @ 2.80 GHz,
@@ -31,8 +31,8 @@ All compiled languages use the same optimisation level: **-O2**.
 | **C++** (g++ -O2) | 58 ms | **2 ms** | 1× |
 | **Dux** (-O2) | 51 ms | **3 ms** | **1.5×** |
 | **Go** | 1 341 ms | 39 ms | 19× |
-| **Node.js 22** | — | 92 ms | 46× |
-| **Python 3.11** | — | 4 110 ms | 2 055× |
+| **Node.js 22** | - | 92 ms | 46× |
+| **Python 3.11** | - | 4 110 ms | 2 055× |
 
 ### 2 · Recursive Fibonacci (35)
 
@@ -42,8 +42,8 @@ All compiled languages use the same optimisation level: **-O2**.
 | **C++** | 81 ms | **21 ms** | 1× |
 | **Dux** (-O2) | 50 ms | **31 ms** | **1.5×** |
 | **Go** | 146 ms | 56 ms | 2.7× |
-| **Node.js 22** | — | 134 ms | 6.4× |
-| **Python 3.11** | — | 1 180 ms | 56× |
+| **Node.js 22** | - | 134 ms | 6.4× |
+| **Python 3.11** | - | 1 180 ms | 56× |
 
 ### 3 · String Building  (50 K appends, single-alloc build)
 
@@ -53,8 +53,8 @@ All compiled languages use the same optimisation level: **-O2**.
 | **C++** | `std::string::reserve` | 247 ms | **3 ms** | 1× |
 | **Go** | `strings.Builder` | 398 ms | **3 ms** | 1× |
 | **Dux** | `DuxStrBuf` + LTO | 62 ms | **3 ms** | **1×** |
-| **Node.js 22** | `Array.fill + join` | — | 37 ms | 12× |
-| **Python 3.11** | `''.join(list)` | — | 14 ms | 4.7× |
+| **Node.js 22** | `Array.fill + join` | - | 37 ms | 12× |
+| **Python 3.11** | `''.join(list)` | - | 14 ms | 4.7× |
 
 ### 4 · Heap Alloc / Free  (1 M object cycles)
 
@@ -64,8 +64,8 @@ All compiled languages use the same optimisation level: **-O2**.
 | **C++** | 55 ms | **3 ms** | 1× |
 | **Go** | 144 ms | **3 ms** | 1× |
 | **Dux** (-O2) | 48 ms | **2 ms** | **<1×** |
-| **Node.js 22** | — | 44 ms | 15× |
-| **Python 3.11** | — | 225 ms | 75× |
+| **Node.js 22** | - | 44 ms | 15× |
+| **Python 3.11** | - | 225 ms | 75× |
 
 ---
 
@@ -73,18 +73,18 @@ All compiled languages use the same optimisation level: **-O2**.
 
 Four fixes brought Dux from far behind C to equal or faster on every benchmark.
 
-### Fix A — Optimisation level parity
+### Fix A - Optimisation level parity
 
 The first run compiled C and C++ with `-O2` but Dux with `-O0` (the implicit default).
-At `-O2`, LLVM auto-vectorises the math loop into a single SIMD instruction — the same
+At `-O2`, LLVM auto-vectorises the math loop into a single SIMD instruction - the same
 pass that gives C its 2 ms result.  Adding `-O2` to the Dux compile command dropped
 the math loop from **125 ms → 3 ms** (42×).
 
 The fibonacci result also collapsed: **53 ms → 31 ms**, now within 1.5× of C.
 
-### Fix B — Empty destructor elimination
+### Fix B - Empty destructor elimination
 
-The alloc benchmark uses `~Node() {}` — an empty destructor body.  The old codegen
+The alloc benchmark uses `~Node() {}` - an empty destructor body.  The old codegen
 generated a real `Node___dtor` function (a no-op that just returned) and called it on
 every `delete`.  1 000 000 empty-function calls is measurable overhead.
 
@@ -93,12 +93,12 @@ entirely.  `emit_dtor` detects the missing symbol and emits a direct `free()` wi
 the call overhead.  The RAII registration condition was also updated from "has a dtor
 symbol" to "has a class layout" so trivial-dtor objects are still freed at scope exit.
 
-Result: alloc went from **15 ms → 2 ms** — faster than C.
+Result: alloc went from **15 ms → 2 ms** - faster than C.
 
-### Fix C — O(n²) string building → O(n) DuxStrBuf
+### Fix C - O(n²) string building → O(n) DuxStrBuf
 
 The original `string_build.dux` used `s = s + "x"` in a loop.  Each iteration
-allocates a new string of length _n+1_ and copies all previous characters — O(n²)
+allocates a new string of length _n+1_ and copies all previous characters - O(n²)
 in total.
 
 The runtime now provides `DuxStrBuf`: a pre-allocated growing `char*` buffer backed
@@ -106,11 +106,11 @@ by `realloc`-doubling.  Each append is a bounds check + `memcpy` into a contiguo
 buffer with no per-element heap allocation.  A single `duxrt_str_new()` materialises
 the result at the end.
 
-This dropped string build from the O(n²) baseline to **31 ms** — but LLVM could not
+This dropped string build from the O(n²) baseline to **31 ms** - but LLVM could not
 inline the runtime calls because `duxrt_strbuf_append_str` lives in a separate
 translation unit.
 
-### Fix D — Link-Time Optimisation (LTO)
+### Fix D - Link-Time Optimisation (LTO)
 
 The root problem was a translation-unit boundary: LLVM sees `duxrt_strbuf_append_str`
 as an opaque `extern` symbol and cannot inline, vectorise, or constant-fold through
@@ -122,7 +122,7 @@ into the hot loop.
 1. At build time, CMake compiles the pure-C runtime files (`alloc.c`, `io.c`, `str.c`,
    `list.c`, `dict.c`, `range.c`, `math_rt.c`) to LLVM bitcode with
    `clang -c -emit-llvm -O0`, then links them into a single `duxrt.bc` with
-   `llvm-link`.  `exceptions.cpp` (C++ EH ABI) is excluded — it stays opaque.
+   `llvm-link`.  `exceptions.cpp` (C++ EH ABI) is excluded - it stays opaque.
 
 2. In `Codegen::run()`, at any opt level > 0:
    - Load `duxrt.bc` via `llvm::parseBitcodeFile`
@@ -174,7 +174,7 @@ noise on math loop) and within 1.5× on fibonacci.
 
 Dux compile times are **comparable to gcc** across all files.  The LTO step (loading
 and merging `duxrt.bc`) adds ≈15 ms to the string_build compile relative to the
-previous non-LTO run — comparable to the overhead of adding a header-only library
+previous non-LTO run - comparable to the overhead of adding a header-only library
 in C++.
 
 ---
