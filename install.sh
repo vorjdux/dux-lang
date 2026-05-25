@@ -3,13 +3,13 @@
 # Usage: curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
 #
 # Environment variables:
-#   DUX_VERSION      — version to install (default: latest)
-#   DUX_INSTALL_DIR  — installation directory (default: /usr/local/bin or ~/.local/bin)
+#   DUX_VERSION      - version to install (default: latest)
+#   DUX_INSTALL_DIR  - installation directory (default: /usr/local/bin or ~/.local/bin)
 #
 # Flags:
-#   --dry-run        — print what would be done, but don't install
-#   --help           — print this help message
-#   --no-modify-path — skip the PATH update hint
+#   --dry-run        - print what would be done, but don't install
+#   --help           - print this help message
+#   --no-modify-path - skip the PATH update hint
 #
 # POSIX sh compatible (works with bash, dash, ash, etc.)
 
@@ -316,7 +316,7 @@ _check_path() {
 
     case ":${PATH}:" in
         *":${INSTALL_DIR}:"*)
-            # Already in PATH — nothing to say
+            # Already in PATH - nothing to say
             ;;
         *)
             warn "${INSTALL_DIR} is not in your PATH."

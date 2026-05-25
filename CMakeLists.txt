@@ -118,7 +118,7 @@ set(DUXRT_BC_PATH "")   # default: LTO disabled
 if(LLVM_CLANG_EXE AND LLVM_LINK_EXE)
     message(STATUS "LTO enabled: ${LLVM_CLANG_EXE}  ${LLVM_LINK_EXE}")
 
-    # Pure C runtime sources — exceptions.cpp excluded (C++ EH ABI stays opaque).
+    # Pure C runtime sources - exceptions.cpp excluded (C++ EH ABI stays opaque).
     set(DUXRT_C_SRCS
         src/runtime/alloc.c
         src/runtime/io.c
@@ -220,7 +220,7 @@ endif()
 
 target_link_libraries(dux PRIVATE ${LLVM_LIBS})
 
-# Warnings — suppress LLVM header noise
+# Warnings - suppress LLVM header noise
 target_compile_options(dux PRIVATE
     -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-function
     $<$<CONFIG:Debug>:   -g3 -O0>

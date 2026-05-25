@@ -36,5 +36,5 @@ import geometry.shapes
 import myapp.models.user
 ```
 
-This feature is on the roadmap — the syntax is parsed and validated today,
+This feature is on the roadmap - the syntax is parsed and validated today,
 and the multi-file compilation pass will resolve these paths at link time.

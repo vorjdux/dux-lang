@@ -1,6 +1,6 @@
 # Dux Lang
 
-> A statically-typed compiled language — Python elegance, C performance, native code.
+> A statically-typed compiled language - Python elegance, C performance, native code.
 
 [![CI](https://github.com/vorjdux/dux-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/vorjdux/dux-lang/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -14,7 +14,7 @@ classes, closures, async/await, and a reference-counted runtime.
 
 ## Install
 
-### Linux / macOS — one-liner
+### Linux / macOS - one-liner
 
 ```bash
 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
@@ -140,7 +140,7 @@ void main() {
     auto sq = fn(int n) -> int => n * n
     println(sq(7))   # 49
 
-    # Closure — captures outer variable by value
+    # Closure - captures outer variable by value
     int base = 10
     auto addBase = fn(int n) -> int => n + base
     println(addBase(5))  # 15
@@ -157,7 +157,7 @@ More examples in [`examples/`](examples/), including the full language showcase 
 
 ## Language features
 
-> **Automatic semicolon insertion:** Dux uses a Go-style rule — the lexer inserts
+> **Automatic semicolon insertion:** Dux uses a Go-style rule - the lexer inserts
 > a semicolon at a newline whenever the preceding token can end a statement
 > (identifier, literal, `)`, `]`, `}`, `true`, `false`, etc.).  This means
 > a closing `}` should generally be on its own line, and when you need a
@@ -232,10 +232,10 @@ int  x = 10
 str  s = "hello"
 bool flag = false
 
-# Constant — value fixed at compile time, no mutation allowed
+# Constant - value fixed at compile time, no mutation allowed
 const int MAX = 100
 
-# Static local — retains value between calls
+# Static local - retains value between calls
 int counter() {
     static int n = 0
     n += 1
@@ -315,7 +315,7 @@ do {
 println(x)   # 3
 ```
 
-#### for — range forms
+#### for - range forms
 
 ```dux
 # Inclusive range  (1, 2, 3, 4, 5)
@@ -328,13 +328,13 @@ for int i in 0..<3 {
     println(i)
 }
 
-# range(n) — equivalent to 0..<n
+# range(n) - equivalent to 0..<n
 for int i in range(3) {
     println(i)
 }
 ```
 
-#### for — C-style
+#### for - C-style
 
 ```dux
 # for init, cond, step
@@ -473,7 +473,7 @@ void greet(str name) {
     println("Hello, " + name + "!")
 }
 
-# Generic function — monomorphised per call site
+# Generic function - monomorphised per call site
 int identity<T>(T x) {
     return x
 }
@@ -488,20 +488,20 @@ void main() {
 ### Closures and lambdas
 
 ```dux
-# Arrow style — return type inside
+# Arrow style - return type inside
 auto sq = fn(int n) -> int => n * n
 
-# Block body — multi-statement
+# Block body - multi-statement
 auto greet = fn(str name) -> void {
     println("hello, " + name)
 }
 
-# Closure — captures variables from the enclosing scope by value
+# Closure - captures variables from the enclosing scope by value
 int base = 10
 auto addBase = fn(int x) -> int => x + base
 println(addBase(5))   # 15
 
-# Higher-order function — fn type as parameter
+# Higher-order function - fn type as parameter
 int apply(fn(int) -> int f, int x) {
     return f(x)
 }
@@ -542,7 +542,7 @@ class Animal {
     }
 }
 
-# Single inheritance — class Child(Parent)
+# Single inheritance - class Child(Parent)
 class Dog(Animal) {
     Dog(str n) : Animal(n) {
     }
@@ -560,7 +560,7 @@ void main() {
 ```
 
 Destructors (`~ClassName()`) are called automatically at scope exit (RAII).
-Empty destructors are elided at compile time — no overhead for trivial types.
+Empty destructors are elided at compile time - no overhead for trivial types.
 
 ```dux
 class Handle {
@@ -649,7 +649,7 @@ class Circle {
 
 ### Generics
 
-Parametric classes and functions via monomorphisation — each instantiation is a
+Parametric classes and functions via monomorphisation - each instantiation is a
 separate native type with zero virtual-dispatch overhead:
 
 ```dux
@@ -735,7 +735,7 @@ int parse(str s) {
 }
 
 void main() {
-    # Catch-all — matches any thrown value
+    # Catch-all - matches any thrown value
     try {
         int v = parse("")
     } catch ... {
@@ -795,10 +795,10 @@ assert(x > 0)             # aborts with message if x ≤ 0
 import math
 println(math.sqrt(2.0))
 
-# Import specific symbols — available without prefix
+# Import specific symbols - available without prefix
 import { factorial, fibonacci } from "./algorithms"
 
-# Full file import — names available under module prefix
+# Full file import - names available under module prefix
 import "./utils"
 utils.helper()
 
@@ -966,7 +966,7 @@ str  host = sys.hostname()
 
 #### `string_builder`
 
-Efficient mutable string accumulation backed by a pre-allocated contiguous buffer —
+Efficient mutable string accumulation backed by a pre-allocated contiguous buffer -
 O(1) amortised append, single allocation at build time:
 
 ```dux
@@ -987,7 +987,7 @@ println(result)   # hello, world
 Dux compiles to native code through LLVM and matches C performance on most workloads.
 At `-O2`, the compiler enables **LTO**: the runtime library is merged into the
 program module as LLVM bitcode before optimisation, so the inliner can eliminate
-call overhead across the translation-unit boundary — the same advantage that
+call overhead across the translation-unit boundary - the same advantage that
 C++ gets from header-only implementation.
 
 | | math loop | fib(35) | string build | alloc 1M |
@@ -1025,14 +1025,14 @@ See [`docs/spec.md`](docs/spec.md) for the full language specification and
 ## Bootstrap test suite (dogfood demos)
 
 The [`bootstrap/`](bootstrap/) directory contains two Dux programs written in Dux
-itself.  They are **test programs**, not infrastructure — both `dux_stage2` and
+itself.  They are **test programs**, not infrastructure - both `dux_stage2` and
 `dux_stage3` are test suites that exercise the language and verify the compiler's
 output, nothing more.
 
 ```
 bootstrap/
-  dux_stage2.dux   — a Dux-written lexer + re-printer for Dux source (~2 400 lines)
-  dux_stage3.dux   — a round-trip test suite that validates stage2 output
+  dux_stage2.dux   - a Dux-written lexer + re-printer for Dux source (~2 400 lines)
+  dux_stage3.dux   - a round-trip test suite that validates stage2 output
 ```
 
 **The real implementations live in `src/`:**
@@ -1046,7 +1046,7 @@ bootstrap/
 | Code generation | `src/codegen/codegen.cpp` (LLVM IR) |
 
 `dux_stage2` does not replace any of those.  It is a standalone Dux program that
-re-implements a minimal hand-written lexer and a recursive-descent re-printer —
+re-implements a minimal hand-written lexer and a recursive-descent re-printer -
 written purely to demonstrate that Dux can express non-trivial programs.  It has
 no codegen, no semantic analysis, and no optimiser.
 
@@ -1067,7 +1067,7 @@ pre-compiled by running the main compiler manually:
 
 ```bash
 ./bootstrap/dux_stage3
-# dux stage3 — round-trip test suite
+# dux stage3 - round-trip test suite
 # =====================================
 # [PASS] hello_world
 # [PASS] string_match
@@ -1078,8 +1078,8 @@ pre-compiled by running the main compiler manually:
 
 **Why it matters:**
 
-Writing a ~2 400-line program in Dux — one that uses classes, generics, closures,
-match statements, string operations, process I/O, and a full hand-written lexer —
+Writing a ~2 400-line program in Dux - one that uses classes, generics, closures,
+match statements, string operations, process I/O, and a full hand-written lexer -
 and having that program compile and produce correct output is the strongest
 evidence that the language is consistent and usable.  It is a real dogfood test,
 not a toy demo.
@@ -1088,4 +1088,4 @@ not a toy demo.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT - see [LICENSE](LICENSE)
