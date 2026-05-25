@@ -75,3 +75,39 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  build-fedora:
+    name: Fedora 40
+    runs-on: ubuntu-24.04
+    container: fedora:40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dnf install -y cmake flex bison gcc-c++ \
+            llvm18-devel clang18 zstd-devel rpm-build
+
+      - name: Configure (Debug)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=g++
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Configure (Release)
+        run: |
+          cmake -B build-rel \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=g++
+
+      - name: Build Release
+        run: cmake --build build-rel -j$(nproc)
+
+      - name: Test Release
+        run: ctest --test-dir build-rel --output-on-failure

@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+
+# Debian rules file for dux-lang using debhelper + cmake build system.
+# debhelper-compat level 13 is declared in debian/control (Build-Depends).
+
+# Export DEB_BUILD_MAINT_OPTIONS for reproducible builds
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# Pass the Debian multi-arch library path and set Release build type
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_CXX_COMPILER=g++-13 \
+		-DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm \
+		-DCMAKE_INSTALL_LIBDIR=lib/$(DEB_HOST_MULTIARCH)
+
+override_dh_auto_build:
+	dh_auto_build -- -j$(shell nproc)
+
+override_dh_auto_test:
+	dh_auto_test -- ARGS="--output-on-failure"
+
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
