@@ -119,7 +119,7 @@ set(DUXRT_BC_PATH "")   # default: LTO disabled
 if(LLVM_CLANG_EXE AND LLVM_LINK_EXE)
     message(STATUS "LTO enabled: ${LLVM_CLANG_EXE}  ${LLVM_LINK_EXE}")
 
-    # Pure C runtime sources — exceptions.cpp excluded (C++ EH ABI stays opaque).
+    # Pure C runtime sources - exceptions.cpp excluded (C++ EH ABI stays opaque).
     set(DUXRT_C_SRCS
         src/runtime/alloc.c
         src/runtime/io.c
@@ -206,6 +206,7 @@ target_include_directories(dux PRIVATE
 # Bake duxrt paths and stdlib dir into the compiler
 target_compile_definitions(dux PRIVATE
     DUX_VERSION="${PROJECT_VERSION}"
+    DUX_TARGET_TRIPLE="${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}"
     ${LLVM_DEFINITIONS}
     DUXRT_LIB_PATH="${DUXRT_LIB_PATH}"
     DUXRT_BC_PATH="${DUXRT_BC_PATH}"
@@ -221,7 +222,7 @@ endif()
 
 target_link_libraries(dux PRIVATE ${LLVM_LIBS})
 
-# Warnings — suppress LLVM header noise
+# Warnings - suppress LLVM header noise
 target_compile_options(dux PRIVATE
     -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-function
     $<$<CONFIG:Debug>:   -g3 -O0>
@@ -244,25 +245,70 @@ install(DIRECTORY stdlib/
         DESTINATION ${CMAKE_INSTALL_DATADIR}/dux/stdlib
         FILES_MATCHING PATTERN "*.dux")
 
-# ─── Packaging (CPack) (#38) ──────────────────────────────────────────────────
+# ─── Packaging (CPack) ────────────────────────────────────────────────────────
 set(CPACK_PACKAGE_NAME        "dux-lang")
 set(CPACK_PACKAGE_VERSION     "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The Dux programming language compiler")
+set(CPACK_PACKAGE_DESCRIPTION
+"Dux is a statically-typed compiled language that targets native code via LLVM.
+ It offers clean Python-like syntax, full type inference, classes with
+ inheritance, closures, async/await, f-strings, and a reference-counted runtime.
+ At -O3, Dux compiles with LTO and matches C performance on most workloads.")
 set(CPACK_PACKAGE_VENDOR      "Dux Lang")
 set(CPACK_PACKAGE_CONTACT     "vorj.dux@gmail.com")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/vorjdux/dux-lang")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README  "${CMAKE_SOURCE_DIR}/README.md")
 
-# Source strip prefix so installed paths are relative
-set(CPACK_STRIP_FILES         TRUE)
+# Strip debug symbols from installed binaries
+set(CPACK_STRIP_FILES TRUE)
 
-# Debian package
-set(CPACK_DEBIAN_PACKAGE_SECTION    "devel")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS    "libc6 (>= 2.17), libstdc++6 (>= 9)")
-set(CPACK_DEBIAN_FILE_NAME          "DEB-DEFAULT")
+# ── Tarball (.tar.gz) ────────────────────────────────────────────────────────
+# Produces: dux-<version>-<system>-<arch>.tar.gz
+set(CPACK_ARCHIVE_FILE_NAME
+    "dux-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+string(TOLOWER "${CPACK_ARCHIVE_FILE_NAME}" CPACK_ARCHIVE_FILE_NAME)
 
-# Generators: .deb and .tar.gz
-set(CPACK_GENERATOR             "TGZ;DEB")
+# ── Debian package (.deb) ─────────────────────────────────────────────────────
+set(CPACK_DEBIAN_PACKAGE_SECTION  "devel")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS  "libc6 (>= 2.17), libstdc++6 (>= 9)")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "clang-18")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Dux Lang <vorj.dux@gmail.com>")
+# Naming: dux-lang_0.1.0_amd64.deb
+set(CPACK_DEBIAN_FILE_NAME        "DEB-DEFAULT")
+
+# ── RPM package (.rpm) ────────────────────────────────────────────────────────
+set(CPACK_RPM_PACKAGE_LICENSE     "MIT")
+set(CPACK_RPM_PACKAGE_GROUP       "Development/Languages")
+set(CPACK_RPM_PACKAGE_URL         "https://github.com/vorjdux/dux-lang")
+set(CPACK_RPM_PACKAGE_REQUIRES    "glibc >= 2.17")
+set(CPACK_RPM_PACKAGE_RECOMMENDS  "clang18")
+set(CPACK_RPM_PACKAGE_DESCRIPTION
+"Dux is a statically-typed compiled language targeting native code via LLVM.
+Clean Python-like syntax, classes, closures, async/await, LTO, -O3 performance.")
+# Naming: dux-lang-0.1.0-1.x86_64.rpm
+set(CPACK_RPM_FILE_NAME           "RPM-DEFAULT")
+
+# Generators: TGZ for all platforms; DEB on Debian/Ubuntu; RPM on Fedora/RHEL
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Detect package manager preference via presence of dpkg/rpm
+    find_program(DPKG_CMD dpkg)
+    find_program(RPM_CMD  rpm)
+    if(DPKG_CMD)
+        set(CPACK_GENERATOR "TGZ;DEB")
+    elseif(RPM_CMD)
+        set(CPACK_GENERATOR "TGZ;RPM")
+    else()
+        set(CPACK_GENERATOR "TGZ")
+    endif()
+else()
+    set(CPACK_GENERATOR "TGZ")
+endif()
+
 set(CPACK_SOURCE_GENERATOR      "TGZ")
-set(CPACK_SOURCE_IGNORE_FILES   "/\\.git/;/build/;/\\.cache/")
+set(CPACK_SOURCE_IGNORE_FILES
+    "/\\.git/;/build.*/;/\\.cache/;/callgrind/;/core\\..*/;/vgcore\\..*")
 
 include(CPack)
 

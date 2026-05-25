@@ -1,4 +1,4 @@
-# Dux Language — Cross-Language Benchmark Comparison
+# Dux Language - Cross-Language Benchmark Comparison
 
 Comparison of **Dux** against C, C++, Go, Node.js (v22), and Python 3.11 across seven
 workloads.  Numbers collected on a single 4-core Intel Xeon @ 2.80 GHz,
@@ -23,7 +23,7 @@ All compiled languages use the same optimisation level: **-O3**.
 | 7 | **string interpolation** | 500 K f-string builds (`f"item={i}"`) |
 
 Benchmarks 5–7 exercise typed list specialisation, dict hash caching, and
-zero-alloc f-string integer formatting — three runtime optimisations landed
+zero-alloc f-string integer formatting - three runtime optimisations landed
 alongside this benchmark run.
 
 ---
@@ -95,7 +95,7 @@ with no runtime call overhead.
 **Dux is now faster than Go** on this benchmark (17 ms vs 19 ms), up from 8.9×
 *slower* than Go before the typed-list optimisation (152 ms vs 19 ms).  The
 remaining 17× gap vs C is the cost of the heap-allocated list header and one
-pointer indirection to reach the `int32_t[]` data — avoidable only with stack
+pointer indirection to reach the `int32_t[]` data - avoidable only with stack
 allocation.
 
 > **Previous result:** 152 ms (8.9× speedup from typed list specialisation)
@@ -111,11 +111,11 @@ cached hash before `strcmp` to skip full string comparison on non-matching probe
 | Language | Strategy | Run time | vs C |
 |----------|---------|:--------:|:----:|
 | **C** (open-addr, djb2) | hand-rolled | **21 ms** | 1× |
-| **Dux** (FNV-1a + hash cache) | — | **43 ms** | **2×** |
-| **C++** (unordered_map) | — | 32 ms | 1.5× |
-| **Go** (map[string]int) | — | 32 ms | 1.5× |
-| **Node.js 22** (Map) | — | 83 ms | 4× |
-| **Python 3.11** (dict) | — | 53 ms | 2.5× |
+| **Dux** (FNV-1a + hash cache) | - | **43 ms** | **2×** |
+| **C++** (unordered_map) | - | 32 ms | 1.5× |
+| **Go** (map[string]int) | - | 32 ms | 1.5× |
+| **Node.js 22** (Map) | - | 83 ms | 4× |
+| **Python 3.11** (dict) | - | 53 ms | 2.5× |
 
 Dux dict performance is within 2× of hand-crafted C and on par with Python's
 built-in dict, despite having to reference-count all string keys.  The hash
@@ -136,15 +136,15 @@ halving allocations per f-string iteration.
 |----------|---------|:--------:|:------:|
 | **C++** (`string + to_string`) | SSO | **13 ms** | 0.54× |
 | **C** (stack `snprintf`) | stack buf | **24 ms** | 1× |
-| **Dux** (stack DuxStr + concat) | — | **32 ms** | **1.4×** |
-| **Go** (`fmt.Sprintf`) | — | 50 ms | 2.1× |
-| **Node.js 22** (template literal) | — | 49 ms | 2.0× |
-| **Python 3.11** (f-string) | — | 88 ms | 3.7× |
+| **Dux** (stack DuxStr + concat) | - | **32 ms** | **1.4×** |
+| **Go** (`fmt.Sprintf`) | - | 50 ms | 2.1× |
+| **Node.js 22** (template literal) | - | 49 ms | 2.0× |
+| **Python 3.11** (f-string) | - | 88 ms | 3.7× |
 
 † C baseline uses a **stack** buffer (`snprintf`), which avoids allocation.
   C++ benefits from SSO (Small String Optimisation) within `std::string`.
 
-Dux f-strings improved from 2.2× to 1.4× of C — now **faster than Go and
+Dux f-strings improved from 2.2× to 1.4× of C - now **faster than Go and
 Node.js** thanks to the zero-alloc integer-to-string conversion path.
 
 > **Previous result:** 55 ms (1.7× speedup from zero-alloc integer formatting)
@@ -164,7 +164,7 @@ codegen emits `duxrt_list_new_i32` + `duxrt_list_push_i32` and stores actual
 `int32_t` values in a typed `int32_t[]` array instead of boxed `void*[]`.
 
 The hot loop in `gen_for_in` detects typed i32 variables via `typed_list_vars_`
-and emits a direct GEP+load — three LLVM instructions instead of a runtime call:
+and emits a direct GEP+load - three LLVM instructions instead of a runtime call:
 
 ```llvm
 ; Before (generic): call ptr @duxrt_list_get(ptr %list, i64 %idx)
@@ -183,7 +183,7 @@ and emits a direct GEP+load — three LLVM instructions instead of a runtime cal
 ```c
 typedef struct DuxDictEntry {
     char*    key;
-    uint64_t hash;  /* cached — compared before strcmp */
+    uint64_t hash;  /* cached - compared before strcmp */
     void*    val;
 } DuxDictEntry;
 ```
@@ -203,7 +203,7 @@ region via `duxrt_fmt_int`, and passes the stack pointer directly to
 `duxrt_str_concat`. Only the concat result is heap-allocated.
 
 The alloca is hoisted to the function entry block (`make_alloca`) so the same
-48-byte slot is reused across all loop iterations — zero stack growth.
+48-byte slot is reused across all loop iterations - zero stack growth.
 
 **Result: fstr_format 55 ms → 32 ms (1.7× speedup).**
 
@@ -222,7 +222,7 @@ The alloca is hoisted to the function entry block (`make_alloca`) so the same
 
 Dux is **at or within 2× of C** on six of seven benchmarks and **beats Go on
 five of seven**.  The list_ops 17× C gap is entirely the heap pointer indirection
-for the list header — the typed `int32_t[]` data access is otherwise as direct as
+for the list header - the typed `int32_t[]` data access is otherwise as direct as
 a C array.
 
 ---

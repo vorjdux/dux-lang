@@ -39,7 +39,7 @@ add_runtime_test(lifetime)
 # ── Optional: valgrind variants ───────────────────────────────────────────
 find_program(VALGRIND_EXECUTABLE valgrind)
 if(VALGRIND_EXECUTABLE)
-    message(STATUS "Valgrind found: ${VALGRIND_EXECUTABLE} — adding valgrind CTest variants")
+    message(STATUS "Valgrind found: ${VALGRIND_EXECUTABLE} - adding valgrind CTest variants")
 
     set(VALGRIND_FLAGS
         --leak-check=full
@@ -60,5 +60,5 @@ if(VALGRIND_EXECUTABLE)
         )
     endforeach()
 else()
-    message(STATUS "Valgrind not found — skipping valgrind CTest variants")
+    message(STATUS "Valgrind not found - skipping valgrind CTest variants")
 endif()

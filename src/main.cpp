@@ -195,7 +195,8 @@ int main(int argc, char** argv) {
     auto opts = parse_args(std::span(argv, static_cast<std::size_t>(argc)));
 
     if (opts.version) {
-        std::cout << "dux " DUX_VERSION "\n";
+        std::cout << "dux " DUX_VERSION
+                  << " (" DUX_TARGET_TRIPLE ")\n";
         return EXIT_SUCCESS;
     }
 

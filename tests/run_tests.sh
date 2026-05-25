@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quick test runner — builds if needed, then runs ctest with verbose output.
+# Quick test runner - builds if needed, then runs ctest with verbose output.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
