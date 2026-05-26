@@ -182,13 +182,15 @@ void Repl::run() {
 
         if (line.empty()) continue;
 
-        // Add non-empty lines to history (dedup consecutive identical entries)
+        // Add non-empty lines to history (dedup consecutive identical entries).
+        // Use a local tracker instead of history_list()/HIST_ENTRY to avoid
+        // depending on history API symbols not always present in libedit.
 #ifdef DUX_RL
-        HIST_ENTRY** hlist = history_list();
-        bool dup = (hlist && history_length > 0 &&
-                    std::string(hlist[history_length - 1]->line) == line);
-        if (!dup)
+        static std::string last_history_line;
+        if (line != last_history_line) {
             add_history(line.c_str());
+            last_history_line = line;
+        }
 #endif
 
         // ─── REPL commands ──────────────────────────────────────────────────
