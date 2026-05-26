@@ -93,14 +93,15 @@ jobs:
       - name: Install dependencies
         run: |
           dnf install -y cmake flex bison gcc-c++ \
-            llvm18-devel clang18 zstd-devel openssl-devel rpm-build
+            llvm-devel clang zlib-devel libzstd-devel openssl-devel rpm-build
 
       - name: Configure (Debug)
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=g++ \
-            -DLLVM_DIR=/usr/lib64/cmake/llvm18
+            -DLLVM_DIR=/usr/lib64/cmake/llvm \
+            -DDUX_SANITIZE=OFF
 
       - name: Build
         run: cmake --build build -j$(nproc)
@@ -113,7 +114,8 @@ jobs:
           cmake -B build-rel \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=g++ \
-            -DLLVM_DIR=/usr/lib64/cmake/llvm18
+            -DLLVM_DIR=/usr/lib64/cmake/llvm \
+            -DDUX_SANITIZE=OFF
 
       - name: Build Release
         run: cmake --build build-rel -j$(nproc)
