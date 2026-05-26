@@ -81,10 +81,22 @@ add_library(duxrt STATIC
 
 target_include_directories(duxrt PUBLIC src/runtime)
 
+# ─── Optional -march=native ───────────────────────────────────────────────────
+# Off by default so CI (especially Apple Silicon) is not affected by
+# native-only instructions that may mismatch the JIT-compiled user programs or
+# cause miscompilation on certain microarchitectures.  Enable locally for
+# maximum performance: cmake -DDUX_MARCH_NATIVE=ON ...
+option(DUX_MARCH_NATIVE "Compile with -march=native in Release builds" OFF)
+if(DUX_MARCH_NATIVE)
+    set(DUX_MARCH_FLAG "-march=native")
+else()
+    set(DUX_MARCH_FLAG "")
+endif()
+
 target_compile_options(duxrt PRIVATE
     -Wall -Wextra -Wpedantic
     $<$<CONFIG:Debug>:   -g3 -O0>
-    $<$<CONFIG:Release>: -O3 -DNDEBUG -march=native>
+    $<$<CONFIG:Release>: -O3 -DNDEBUG ${DUX_MARCH_FLAG}>
 )
 # duxrt must NOT be instrumented with sanitizers: user programs link against
 # it and are not compiled with sanitizer runtimes.
@@ -92,7 +104,13 @@ target_compile_options(duxrt PRIVATE
 # OpenSSL for net.tls
 find_package(OpenSSL REQUIRED)
 
-target_link_libraries(duxrt PUBLIC m stdc++ pthread OpenSSL::SSL OpenSSL::Crypto)  # math + C++ EH ABI + pthreads + TLS
+# C++ EH runtime: libc++ on macOS/Apple Clang, libstdc++ on Linux/GCC.
+if(APPLE)
+    set(DUX_CXX_RT "c++")
+else()
+    set(DUX_CXX_RT "stdc++")
+endif()
+target_link_libraries(duxrt PUBLIC m ${DUX_CXX_RT} pthread OpenSSL::SSL OpenSSL::Crypto)
 
 # Record absolute path so the compiler driver can find it at runtime
 set(DUXRT_LIB_PATH "$<TARGET_FILE:duxrt>")
@@ -229,7 +247,7 @@ target_link_libraries(dux PRIVATE ${LLVM_LIBS})
 target_compile_options(dux PRIVATE
     -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-function
     $<$<CONFIG:Debug>:   -g3 -O0>
-    $<$<CONFIG:Release>: -O3 -DNDEBUG -march=native>
+    $<$<CONFIG:Release>: -O3 -DNDEBUG ${DUX_MARCH_FLAG}>
 )
 
 # Sanitisers in debug builds (disable with -DDUX_SANITIZE=OFF)
