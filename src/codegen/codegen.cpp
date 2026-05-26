@@ -2012,7 +2012,11 @@ void Codegen::gen_var_decl(const ast::VarDeclStmt& s) {
                 *mod_, t, /*isConstant=*/s.is_const,
                 llvm::GlobalValue::InternalLinkage,
                 init_val, gname);
-            gv->setThreadLocal(true);
+            // Use LocalExec TLS model: variables in the main executable are always
+            // known at static link time, so local-exec is both correct and most
+            // efficient.  GeneralDynamic (the default) relies on __tls_get_addr
+            // and behaves inconsistently across distributions (e.g. Fedora 40 GCC).
+            gv->setThreadLocalMode(llvm::GlobalValue::LocalExecTLSModel);
             alloca_type_[gv] = t;
             env_define(name, gv, var_tid);
             continue;
