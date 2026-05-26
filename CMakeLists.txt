@@ -27,28 +27,40 @@ find_package(BISON 3.8  REQUIRED)
 # ── zstd ──────────────────────────────────────────────────────────────────────
 # LLVM 18+ may be compiled with zstd support.  When it is, LLVMExports.cmake
 # lists "zstd::libzstd_shared" as a link dependency of LLVMSupport.  CMake
-# must see that imported target BEFORE find_package(LLVM) or it errors out.
+# must see that imported target BEFORE find_package(LLVM) runs or it errors.
 #
-# Problem: Ubuntu ships "libzstd1" (runtime .so.1) and "libzstd-dev" (the
-# unversioned dev symlink).  find_library(... zstd) only finds the unversioned
-# "libzstd.so" which is provided by the -dev package.  Without -dev installed,
-# find_library returns NOTFOUND even though the library IS on the system.
+# Complication: Ubuntu ships two packages:
+#   libzstd1     — runtime only: libzstd.so.1  (always present)
+#   libzstd-dev  — dev headers + unversioned symlink: libzstd.so
+# find_library(NAMES zstd) searches for "libzstd.so" which only exists with
+# the -dev package.  Passing versioned names like "libzstd.so.1" to
+# find_library does NOT work — find_library applies its own lib/suffix rules
+# and never matches versioned filenames.
 #
-# Fix: try cmake's zstd config first, then broaden find_library to accept the
-# versioned soname (.so.1) as well.
+# Strategy (in priority order):
+#   1. find_package(zstd CONFIG) — works when libzstd-dev is installed
+#   2. find_library(NAMES zstd)  — unversioned .so (also needs -dev)
+#   3. find_file(libzstd.so.1)   — exact versioned soname; present even
+#      without -dev on Debian/Ubuntu/Fedora (runtime package only)
 if(NOT TARGET zstd::libzstd_shared)
     find_package(zstd QUIET CONFIG)
 endif()
 if(NOT TARGET zstd::libzstd_shared)
-    find_library(ZSTD_LIBRARY
-        NAMES zstd                       # libzstd.so  (needs libzstd-dev)
-              libzstd.so.1 libzstd.so    # versioned soname (libzstd1 runtime)
-        PATHS /usr/lib
-              /usr/lib/x86_64-linux-gnu
-              /usr/lib/aarch64-linux-gnu
-              /usr/lib64
-              /usr/local/lib
-    )
+    find_library(ZSTD_LIBRARY NAMES zstd)
+    if(NOT ZSTD_LIBRARY)
+        # Exact-filename search for the versioned soname that ships with the
+        # runtime-only package (libzstd1 on Ubuntu, libzstd on Fedora).
+        find_file(ZSTD_LIBRARY
+            NAMES libzstd.so.1 libzstd.so
+            PATHS /usr/lib/x86_64-linux-gnu
+                  /usr/lib/aarch64-linux-gnu
+                  /usr/lib/arm-linux-gnueabihf
+                  /usr/lib64
+                  /usr/lib
+                  /usr/local/lib
+            NO_DEFAULT_PATH
+        )
+    endif()
     if(ZSTD_LIBRARY)
         add_library(zstd::libzstd_shared SHARED IMPORTED GLOBAL)
         set_target_properties(zstd::libzstd_shared PROPERTIES
@@ -56,8 +68,8 @@ if(NOT TARGET zstd::libzstd_shared)
         message(STATUS "zstd: using ${ZSTD_LIBRARY}")
     else()
         message(WARNING
-            "zstd not found. If linking fails with 'cannot find -lzstd', "
-            "install libzstd-dev (Debian/Ubuntu) or libzstd-devel (Fedora/RHEL).")
+            "zstd not found. If linking fails install: "
+            "libzstd-dev (Debian/Ubuntu) or libzstd-devel (Fedora/RHEL).")
     endif()
 endif()
 
