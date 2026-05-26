@@ -89,6 +89,20 @@ bool Codegen::run(const ast::Program& prog, const std::string& module_name) {
     // Pass 3: declare all top-level functions (forward declare)
     declare_functions(prog.decls);
 
+    // Pass 3.5: pre-declare thread_local module-scope globals so that function
+    // bodies compiled in Pass 4 can look them up in the env and emit direct
+    // references to the GlobalVariables.  Without this pass the globals land
+    // in the env *after* gen_decl has already compiled function bodies, causing
+    // every reference inside a function to silently fall back to a fresh local
+    // alloca — the GlobalVariables are created but orphaned (declared in the
+    // module yet never accessed from generated code).
+    for (const auto& sp : prog.stmts) {
+        if (auto* v = dynamic_cast<const ast::VarDeclStmt*>(sp.get())) {
+            if (v->is_thread_local)
+                gen_var_decl(*v);
+        }
+    }
+
     // Pass 4: generate bodies
     for (const auto& d : prog.decls) gen_decl(*d);
     gen_stmts(prog.stmts);
@@ -1064,15 +1078,12 @@ Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
 
 void Codegen::gen_stmts(const ast::StmtList& stmts) {
     for (const auto& sp : stmts) {
-        // thread_local var decls create module-level GlobalVariables and never
-        // touch the IR insert block.  They must be emitted regardless of whether
-        // the current block already has a terminator (e.g. when prog.stmts is
-        // processed after gen_decl has built and terminated all function bodies).
+        // thread_local module-scope globals are pre-declared in Pass 3.5
+        // (before gen_decl), so function bodies can reference them directly.
+        // Skip re-declaration here to avoid creating duplicate GlobalVariables.
         if (auto* v = dynamic_cast<const ast::VarDeclStmt*>(sp.get())) {
-            if (v->is_thread_local) {
-                gen_var_decl(*v);
+            if (v->is_thread_local)
                 continue;
-            }
         }
         if (!builder_->GetInsertBlock()->getTerminator())
             gen_stmt(*sp);
