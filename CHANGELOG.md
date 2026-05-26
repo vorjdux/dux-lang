@@ -42,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Compiler warnings — zero-warning build across GCC 13, Clang 18, and Apple
   Clang:** Eliminated all `-Wall -Wextra -Wpedantic` warnings in source,
   generated parser/lexer, and grammar files.
+- **REPL — arrow keys printed as escape sequences instead of moving the
+  cursor:** The REPL now uses GNU readline (or libedit on macOS) for line
+  input, giving full arrow-key navigation, Ctrl+A/E/K/U editing, and
+  persistent `~/.dux_history` across sessions. Falls back to plain
+  `std::getline` when neither library is found at build time.
 
 ---
 

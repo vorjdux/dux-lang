@@ -292,6 +292,31 @@ endif()
 
 target_link_libraries(dux PRIVATE ${LLVM_LIBS})
 
+# ── Readline / libedit: arrow-key editing and history for the REPL ───────────
+# Optional: the REPL falls back to plain std::getline if neither is found.
+# Priority: GNU readline > libedit (macOS system lib / libedit-dev on Linux).
+find_library(READLINE_LIB NAMES readline)
+find_path(READLINE_INC   NAMES readline/readline.h)
+if(READLINE_LIB AND READLINE_INC)
+    message(STATUS "REPL editing: readline (${READLINE_LIB})")
+    target_include_directories(dux PRIVATE ${READLINE_INC})
+    target_link_libraries(dux PRIVATE ${READLINE_LIB})
+    target_compile_definitions(dux PRIVATE DUX_HAVE_READLINE=1)
+else()
+    # macOS ships libedit with readline-compat symbols in <editline/readline.h>
+    # Ubuntu/Debian: libedit-dev provides the same header
+    find_library(LIBEDIT_LIB NAMES edit)
+    find_path(LIBEDIT_INC   NAMES editline/readline.h)
+    if(LIBEDIT_LIB AND LIBEDIT_INC)
+        message(STATUS "REPL editing: libedit (${LIBEDIT_LIB})")
+        target_include_directories(dux PRIVATE ${LIBEDIT_INC})
+        target_link_libraries(dux PRIVATE ${LIBEDIT_LIB})
+        target_compile_definitions(dux PRIVATE DUX_HAVE_LIBEDIT=1)
+    else()
+        message(STATUS "REPL editing: none (install libreadline-dev for arrow-key support)")
+    endif()
+endif()
+
 # Warnings - suppress LLVM header noise
 target_compile_options(dux PRIVATE
     -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-function
