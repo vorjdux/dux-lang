@@ -177,7 +177,6 @@ BISON_TARGET(DuxParser
     src/parser/dux.y
     ${GEN_DIR}/parser.cpp
     DEFINES_FILE ${GEN_DIR}/parser.hpp
-    COMPILE_FLAGS "-Wcounterexamples"
 )
 
 ADD_FLEX_BISON_DEPENDENCY(DuxLexer DuxParser)
@@ -200,6 +199,10 @@ add_executable(dux
 target_include_directories(dux PRIVATE
     src
     ${GEN_DIR}
+)
+# Mark LLVM headers as system headers so third-party deprecation warnings
+# (e.g. std::aligned_storage_t in C++23 mode) are not surfaced.
+target_include_directories(dux SYSTEM PRIVATE
     ${LLVM_INCLUDE_DIRS}
 )
 

@@ -642,12 +642,11 @@ void Sema::check_match(const ast::MatchStmt& s) {
      * all permitted as enum holders because Dux stores simple enum values as
      * i32 and payload enums as object/ptr.                                   */
     if (expr_t != TR::TID_UNKNOWN) {
-        bool has_enum_arm = false, has_int_arm = false, has_bool_arm = false;
+        bool has_enum_arm = false, has_bool_arm = false;
         for (const auto& arm : s.arms) {
             switch (arm.pattern.kind) {
-            case ast::MatchPattern::Kind::EnumVariant: has_enum_arm  = true; break;
-            case ast::MatchPattern::Kind::IntLit:      has_int_arm   = true; break;
-            case ast::MatchPattern::Kind::BoolLit:     has_bool_arm  = true; break;
+            case ast::MatchPattern::Kind::EnumVariant: has_enum_arm = true; break;
+            case ast::MatchPattern::Kind::BoolLit:     has_bool_arm = true; break;
             default: break;
             }
         }

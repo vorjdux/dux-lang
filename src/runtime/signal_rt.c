@@ -45,7 +45,7 @@ static void sig_trampoline(int sig) {
 
 void duxrt_signal_register(int32_t signum, void* fn) {
     if (signum <= 0 || signum >= 64) return;
-    g_sig_handlers[signum] = (dux_sig_fn_t)fn;
+    g_sig_handlers[signum] = __extension__ (dux_sig_fn_t)fn;
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = sig_trampoline;

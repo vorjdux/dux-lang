@@ -45,7 +45,7 @@ void* duxrt_thread_spawn(void* fn, void* arg) {
     t->joined = 0;
     ThreadArgs* ta = (ThreadArgs*)malloc(sizeof(ThreadArgs));
     if (!ta) { free(t); return NULL; }
-    ta->fn  = (void (*)(void*))fn;
+    ta->fn  = __extension__ (void (*)(void*))fn;
     ta->arg = arg;
     if (pthread_create(&t->tid, NULL, thread_runner, ta) != 0) {
         free(ta); free(t); return NULL;
@@ -197,7 +197,7 @@ void duxrt_once_call(void* handle, void* fn) {
     if (!o || !fn) return;
     pthread_mutex_lock(&o->mu);
     if (!o->done) {
-        o->fn = (void (*)(void))fn;
+        o->fn = __extension__ (void (*)(void))fn;
         o->fn();
         o->done = 1;
     }
@@ -278,7 +278,7 @@ void duxrt_pool_submit(void* pool, void* fn_ptr, void* arg) {
     if (!p || !fn_ptr) return;
     DuxPoolTask* t = (DuxPoolTask*)malloc(sizeof(DuxPoolTask));
     if (!t) return;
-    t->fn   = (void (*)(void*))fn_ptr;
+    t->fn   = __extension__ (void (*)(void*))fn_ptr;
     t->arg  = arg;
     t->next = NULL;
     pthread_mutex_lock(&p->mu);

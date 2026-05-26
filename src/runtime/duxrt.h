@@ -70,7 +70,10 @@ typedef struct DuxStr {
     int32_t  len;    /* int32_t: no padding after refcount → header = 16 bytes */
     char*    ext;    /* NULL  → data inline in FAM below (short strings)
                         non-NULL → separate heap buffer    (long strings)  */
-    char     data[]; /* inline storage — only valid when ext == NULL */
+    /* Flexible array member.  C99 feature; GCC/Clang also support it in C++
+     * as an extension.  __extension__ suppresses -Wpedantic in C++ TUs that
+     * include this header (e.g. exceptions.cpp). */
+    __extension__ char data[];
 } DuxStr;
 
 /* Allocate a new DuxStr (refcount=1) copying len bytes from data. */
