@@ -29,34 +29,34 @@ Download from the [latest release](https://github.com/vorjdux/dux-lang/releases/
 
 | Platform | Package |
 |----------|---------|
-| Ubuntu 22.04 / 24.04 | `dux-lang_0.1.2_amd64.deb` |
-| Debian Bookworm | `dux-0.1.2-linux-x86_64-debian.tar.gz` |
-| Fedora / RHEL | `dux-lang-0.1.2-1.x86_64.rpm` |
-| macOS Apple Silicon | `dux-0.1.2-macos-arm64.tar.gz` |
-| macOS Intel | `dux-0.1.2-macos-x86_64.tar.gz` |
-| Generic Linux x86_64 | `dux-0.1.2-linux-x86_64.tar.gz` |
+| Ubuntu 22.04 / 24.04 | `dux-lang_0.1.3_amd64.deb` |
+| Debian Bookworm | `dux-0.1.3-linux-x86_64-debian.tar.gz` |
+| Fedora / RHEL | `dux-lang-0.1.3-1.x86_64.rpm` |
+| macOS Apple Silicon | `dux-0.1.3-macos-arm64.tar.gz` |
+| macOS Intel | `dux-0.1.3-macos-x86_64.tar.gz` |
+| Generic Linux x86_64 | `dux-0.1.3-linux-x86_64.tar.gz` |
 
 **Ubuntu / Debian:**
 ```bash
-wget https://github.com/vorjdux/dux-lang/releases/download/v0.1.2/dux-lang_0.1.2_amd64.deb
-sudo dpkg -i dux-lang_0.1.2_amd64.deb
+wget https://github.com/vorjdux/dux-lang/releases/download/v0.1.3/dux-lang_0.1.3_amd64.deb
+sudo dpkg -i dux-lang_0.1.3_amd64.deb
 ```
 
 **Fedora / RHEL:**
 ```bash
-sudo dnf localinstall dux-lang-0.1.2-1.x86_64.rpm
+sudo dnf localinstall dux-lang-0.1.3-1.x86_64.rpm
 ```
 
 **macOS / Generic Linux (tarball):**
 ```bash
-tar -xzf dux-0.1.2-linux-x86_64.tar.gz
+tar -xzf dux-0.1.3-linux-x86_64.tar.gz
 sudo mv dux /usr/local/bin/
 ```
 
 ### Verify
 
 ```bash
-dux --version   # dux 0.1.2 (x86_64-Linux)
+dux --version   # dux 0.1.3 (x86_64-Linux)
 dux --help
 ```
 

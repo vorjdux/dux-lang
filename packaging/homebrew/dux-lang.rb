@@ -1,17 +1,17 @@
 class DuxLang < Formula
   desc "The Dux programming language compiler"
   homepage "https://github.com/vorjdux/dux-lang"
-  version "0.1.2"
+  version "0.1.3"
   license "MIT"
 
   on_arm do
-    url "https://github.com/vorjdux/dux-lang/releases/download/v0.1.2/dux-0.1.2-macos-arm64.tar.gz"
+    url "https://github.com/vorjdux/dux-lang/releases/download/v0.1.3/dux-0.1.3-macos-arm64.tar.gz"
     # Update sha256 after publishing the release:
     # sha256 "<SHA256_OF_MACOS_ARM64_TARBALL>"
   end
 
   on_intel do
-    url "https://github.com/vorjdux/dux-lang/releases/download/v0.1.2/dux-0.1.2-macos-x86_64.tar.gz"
+    url "https://github.com/vorjdux/dux-lang/releases/download/v0.1.3/dux-0.1.3-macos-x86_64.tar.gz"
     # Update sha256 after publishing the release:
     # sha256 "<SHA256_OF_MACOS_X86_64_TARBALL>"
   end
