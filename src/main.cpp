@@ -226,7 +226,7 @@ int main(int argc, char** argv) {
 
     if (opts.help) {
         usage(argv[0]);
-        return EXIT_FAILURE;
+        return EXIT_SUCCESS;
     }
 
     if (opts.repl) {
