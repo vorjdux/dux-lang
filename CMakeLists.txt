@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(dux-lang
-    VERSION     0.1.0
+    VERSION     0.1.2
     DESCRIPTION "The Dux programming language compiler"
     LANGUAGES   C CXX
 )
@@ -273,7 +273,7 @@ set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS  "libc6 (>= 2.17), libstdc++6 (>= 9)")
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "clang-18")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Dux Lang <vorj.dux@gmail.com>")
-# Naming: dux-lang_0.1.0_amd64.deb
+# Naming: dux-lang_0.1.2_amd64.deb
 set(CPACK_DEBIAN_FILE_NAME        "DEB-DEFAULT")
 
 # ── RPM package (.rpm) ────────────────────────────────────────────────────────
@@ -285,7 +285,7 @@ set(CPACK_RPM_PACKAGE_RECOMMENDS  "clang18")
 set(CPACK_RPM_PACKAGE_DESCRIPTION
 "Dux is a statically-typed compiled language targeting native code via LLVM.
 Clean Python-like syntax, classes, closures, async/await, LTO, -O3 performance.")
-# Naming: dux-lang-0.1.0-1.x86_64.rpm
+# Naming: dux-lang-0.1.2-1.x86_64.rpm
 set(CPACK_RPM_FILE_NAME           "RPM-DEFAULT")
 
 # Generators: TGZ for all platforms; DEB on Debian/Ubuntu; RPM on Fedora/RHEL
