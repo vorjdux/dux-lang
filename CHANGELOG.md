@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-05-26
+
+### Fixed
+
+- **Codegen — `thread_local` globals orphaned in LLVM IR:** Global variables
+  declared with `thread_local` were created _after_ function bodies were
+  compiled, so every reference inside a function silently fell back to a fresh
+  local `alloca`; the `GlobalVariable` nodes existed in the IR but were never
+  used. Fixed by adding a pre-pass (Pass 3.5) that declares all
+  `thread_local` module-scope globals before function bodies are compiled.
+- **Socket — platform-specific `SOL_SOCKET`/`SO_REUSEADDR` constants:**
+  The test was calling `set_opt(1, 2, 1)` with Linux-specific numeric constants
+  (`SOL_SOCKET=1`, `SO_REUSEADDR=2`); on macOS these are `0xffff`/`4`, causing
+  the call to fail silently. Added `duxrt_sock_set_reuseaddr` /
+  `duxrt_sock_set_reuseport` runtime helpers that use `<sys/socket.h>` platform
+  constants, exposed as `set_reuseaddr()` / `set_reuseport()` on `Socket`.
+- **macOS build — missing `<signal.h>` in `process_rt.c`:** `kill()` requires
+  `<signal.h>` on macOS; it is not pulled in transitively by `<sys/types.h>`.
+- **macOS build — Clang rejects `__extension__` for flexible-array-member
+  warning:** Replaced `__extension__ char data[]` with a `#pragma clang
+  diagnostic` block in `duxrt.h` so Apple Clang accepts the FAM without
+  `-Wc99-extensions`.
+- **macOS linker — `-lstdc++` removed in macOS 10.15:** The linker invocation
+  in `main.cpp` and `CMakeLists.txt` now uses `-lc++` on Apple platforms and
+  `-lstdc++` on Linux.
+- **macOS Release build — `-march=native` miscompilation on Apple Silicon:**
+  `-march=native` is now opt-in (`-DDUX_MARCH_NATIVE=ON`); it defaults to OFF
+  so that CI and distributed binaries are not compiled for a specific M-chip
+  micro-architecture.
+- **macOS linker — OpenSSL library resolution ambiguity:** When Homebrew's
+  `clang-18` is `cc`, bare `-lssl -lcrypto` flags may resolve to the wrong
+  LibreSSL stubs. The exact `OPENSSL_SSL_LIBRARY` / `OPENSSL_CRYPTO_LIBRARY`
+  paths found by CMake are now baked into the `dux` binary at build time and
+  used when linking user programs.
+- **Compiler warnings — zero-warning build across GCC 13, Clang 18, and Apple
+  Clang:** Eliminated all `-Wall -Wextra -Wpedantic` warnings in source,
+  generated parser/lexer, and grammar files.
+
+---
+
 ## [0.1.2] - 2026-05-26
 
 ### Fixed
@@ -204,5 +244,6 @@ Initial public release of the Dux programming language compiler.
   - Heap alloc/free (1 M cycles): 2 ms - **faster than C**
   - Beats Go on 5 of 7 tracked workloads; within 2× of C on 6 of 7.
 
+[0.1.3]: https://github.com/vorjdux/dux-lang/releases/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/vorjdux/dux-lang/releases/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/vorjdux/dux-lang/releases/tag/v0.1.0

@@ -1,5 +1,5 @@
 Name:           dux-lang
-Version:        0.1.2
+Version:        0.1.3
 Release:        1%{?dist}
 Summary:        The Dux programming language compiler
 
@@ -50,6 +50,13 @@ standard library covering I/O, networking, threading, and data structures.
 %{_datadir}/dux/stdlib/
 
 %changelog
+* Mon May 26 2026 Dux Lang <vorj.dux@gmail.com> - 0.1.3-1
+- Fix thread_local globals orphaned in codegen (pre-declare before function bodies)
+- Fix socket portability: add set_reuseaddr/set_reuseport with platform constants
+- Fix macOS build: missing signal.h, FAM Clang warning, -lc++ vs -lstdc++
+- Fix macOS Release: -march=native now opt-in; bake OpenSSL paths at cmake time
+- Eliminate all compiler warnings across GCC 13, Clang 18, and Apple Clang
+
 * Tue May 26 2026 Dux Lang <vorj.dux@gmail.com> - 0.1.2-1
 - Fix CI on all four platforms (macOS, Ubuntu GCC/Clang, Fedora)
 - Resolve merge conflicts with master; bump spec to version 0.2

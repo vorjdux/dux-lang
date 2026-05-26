@@ -15,7 +15,7 @@ After installation, verify it worked:
 
 ```bash
 dux --version
-# dux 0.1.2 (x86_64-linux)
+# dux 0.1.3 (x86_64-linux)
 ```
 
 ### Installer options
@@ -24,7 +24,7 @@ You can control the installer with environment variables and flags:
 
 ```bash
 # Install a specific version
-DUX_VERSION=0.1.2 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
+DUX_VERSION=0.1.3 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
 
 # Install to a custom directory (no sudo required)
 DUX_INSTALL_DIR=~/.local/bin curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
@@ -46,8 +46,8 @@ Download the `.deb` package from the
 [GitHub Releases page](https://github.com/vorjdux/dux-lang/releases/latest):
 
 ```bash
-wget https://github.com/vorjdux/dux-lang/releases/download/v0.1.2/dux-lang_0.1.2_amd64.deb
-sudo dpkg -i dux-lang_0.1.2_amd64.deb
+wget https://github.com/vorjdux/dux-lang/releases/download/v0.1.3/dux-lang_0.1.3_amd64.deb
+sudo dpkg -i dux-lang_0.1.3_amd64.deb
 ```
 
 If `dpkg` reports missing dependencies, resolve them with:
@@ -69,10 +69,10 @@ Download the `.rpm` package from the
 
 ```bash
 # Fedora (dnf)
-sudo dnf localinstall dux-lang-0.1.2-1.x86_64.rpm
+sudo dnf localinstall dux-lang-0.1.3-1.x86_64.rpm
 
 # RHEL / CentOS (rpm)
-sudo rpm -i dux-lang-0.1.2-1.x86_64.rpm
+sudo rpm -i dux-lang-0.1.3-1.x86_64.rpm
 ```
 
 To remove:
@@ -110,21 +110,21 @@ extract it, and move the binary to a directory on your `PATH`.
 
 | Platform | Archive |
 |----------|---------|
-| Linux x86_64 | `dux-0.1.2-linux-x86_64.tar.gz` |
-| Linux ARM64 (aarch64) | `dux-0.1.2-linux-aarch64.tar.gz` |
-| macOS Apple Silicon (ARM64) | `dux-0.1.2-macos-aarch64.tar.gz` |
-| macOS Intel (x86_64) | `dux-0.1.2-macos-x86_64.tar.gz` |
+| Linux x86_64 | `dux-0.1.3-linux-x86_64.tar.gz` |
+| Linux ARM64 (aarch64) | `dux-0.1.3-linux-aarch64.tar.gz` |
+| macOS Apple Silicon (ARM64) | `dux-0.1.3-macos-aarch64.tar.gz` |
+| macOS Intel (x86_64) | `dux-0.1.3-macos-x86_64.tar.gz` |
 
 ```bash
 # Example: Linux x86_64
-wget https://github.com/vorjdux/dux-lang/releases/download/v0.1.2/dux-0.1.2-linux-x86_64.tar.gz
+wget https://github.com/vorjdux/dux-lang/releases/download/v0.1.3/dux-0.1.3-linux-x86_64.tar.gz
 
 # Verify checksum
-wget https://github.com/vorjdux/dux-lang/releases/download/v0.1.2/SHA256SUMS
+wget https://github.com/vorjdux/dux-lang/releases/download/v0.1.3/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 
 # Extract and install
-tar -xzf dux-0.1.2-linux-x86_64.tar.gz
+tar -xzf dux-0.1.3-linux-x86_64.tar.gz
 sudo mv dux /usr/local/bin/
 sudo chmod +x /usr/local/bin/dux
 ```
@@ -278,7 +278,7 @@ dux --version
 Expected output (version and platform may differ):
 
 ```
-dux 0.1.2 (x86_64-linux)
+dux 0.1.3 (x86_64-linux)
 ```
 
 ```bash
