@@ -1064,6 +1064,16 @@ Value* Codegen::try_stdlib_call(const ast::CallExpr& e) {
 
 void Codegen::gen_stmts(const ast::StmtList& stmts) {
     for (const auto& sp : stmts) {
+        // thread_local var decls create module-level GlobalVariables and never
+        // touch the IR insert block.  They must be emitted regardless of whether
+        // the current block already has a terminator (e.g. when prog.stmts is
+        // processed after gen_decl has built and terminated all function bodies).
+        if (auto* v = dynamic_cast<const ast::VarDeclStmt*>(sp.get())) {
+            if (v->is_thread_local) {
+                gen_var_decl(*v);
+                continue;
+            }
+        }
         if (!builder_->GetInsertBlock()->getTerminator())
             gen_stmt(*sp);
     }
