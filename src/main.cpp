@@ -117,15 +117,29 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
     }
     if (pid == 0) {
         // child process: exec cc directly (no shell involved)
+        //
+        // C++ runtime library selection:
+        //   macOS  — Apple Clang ships libc++, not libstdc++.  macOS 10.15+
+        //            removed libstdc++ entirely; -lstdc++ would fail at link time.
+        //   Linux  — GCC / Clang both ship libstdc++ by default; use that.
+        //
+        // -lpthread:  no-op on macOS (pthreads are part of libSystem) but harmless.
+        // -lssl/-lcrypto: macOS ships system LibreSSL at /usr/lib; Linux needs
+        //   the distro-provided OpenSSL.  Both expose the same -lssl/-lcrypto names.
+#ifdef __APPLE__
+        const char* cxx_rt = "-lc++";      // Apple Clang / libc++
+#else
+        const char* cxx_rt = "-lstdc++";   // GCC / Clang on Linux / libstdc++
+#endif
         const char* argv[] = {
             "cc",
             obj_path.c_str(),
             DUXRT_LIB_PATH,
             "-lm",
-            "-lstdc++",  // C++ EH ABI (__gxx_personality_v0, __cxa_*)
-            "-lpthread", // POSIX threads (thread.pool, thread.chan, etc.)
-            "-lssl",     // OpenSSL TLS (net.tls)
-            "-lcrypto",  // OpenSSL crypto (net.tls)
+            cxx_rt,
+            "-lpthread",
+            "-lssl",
+            "-lcrypto",
             "-o", out_path.c_str(),
             nullptr
         };
