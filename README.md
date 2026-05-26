@@ -17,7 +17,7 @@ classes, closures, async/await, and a reference-counted runtime.
 ### Linux / macOS - one-liner
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
+curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
 ```
 
 Detects your OS and architecture, downloads the right pre-built binary, and installs

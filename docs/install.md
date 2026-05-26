@@ -8,7 +8,7 @@ pre-built binary, verifies its SHA-256 checksum, and installs `dux` to
 `/usr/local/bin` (or `~/.local/bin` if you prefer a user-level install).
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
+curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
 ```
 
 After installation, verify it worked:
@@ -24,10 +24,10 @@ You can control the installer with environment variables and flags:
 
 ```bash
 # Install a specific version
-DUX_VERSION=0.1.2 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
+DUX_VERSION=0.1.2 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
 
 # Install to a custom directory (no sudo required)
-DUX_INSTALL_DIR=~/.local/bin curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
+DUX_INSTALL_DIR=~/.local/bin curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
 
 # Dry run - see what would happen without making changes
 sh install.sh --dry-run
