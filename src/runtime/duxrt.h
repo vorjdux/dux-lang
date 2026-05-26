@@ -71,9 +71,18 @@ typedef struct DuxStr {
     char*    ext;    /* NULL  → data inline in FAM below (short strings)
                         non-NULL → separate heap buffer    (long strings)  */
     /* Flexible array member.  C99 feature; GCC/Clang also support it in C++
-     * as an extension.  __extension__ suppresses -Wpedantic in C++ TUs that
-     * include this header (e.g. exceptions.cpp). */
+     * as an extension.
+     *   GCC C++ mode:          __extension__ suppresses -Wpedantic
+     *   Apple Clang C++ mode:  needs #pragma to suppress -Wc99-extensions
+     * Both pragmas are no-ops on compilers that don't know them. */
+#if defined(__clang__)
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wc99-extensions"
+    char data[];
+#  pragma clang diagnostic pop
+#else
     __extension__ char data[];
+#endif
 } DuxStr;
 
 /* Allocate a new DuxStr (refcount=1) copying len bytes from data. */
