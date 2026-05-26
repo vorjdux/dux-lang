@@ -229,8 +229,9 @@ target_compile_options(dux PRIVATE
     $<$<CONFIG:Release>: -O3 -DNDEBUG -march=native>
 )
 
-# Sanitisers in debug builds
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+# Sanitisers in debug builds (disable with -DDUX_SANITIZE=OFF)
+option(DUX_SANITIZE "Enable ASan+UBSan in Debug builds" ON)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND DUX_SANITIZE)
     target_compile_options(dux PRIVATE -fsanitize=address,undefined)
     target_link_options(dux   PRIVATE -fsanitize=address,undefined)
 endif()

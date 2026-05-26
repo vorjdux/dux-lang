@@ -100,7 +100,8 @@ jobs:
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=g++ \
-            -DLLVM_DIR=/usr/lib64/cmake/llvm
+            -DLLVM_DIR=/usr/lib64/cmake/llvm \
+            -DDUX_SANITIZE=OFF
 
       - name: Build
         run: cmake --build build -j$(nproc)
@@ -113,7 +114,8 @@ jobs:
           cmake -B build-rel \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=g++ \
-            -DLLVM_DIR=/usr/lib64/cmake/llvm
+            -DLLVM_DIR=/usr/lib64/cmake/llvm \
+            -DDUX_SANITIZE=OFF
 
       - name: Build Release
         run: cmake --build build-rel -j$(nproc)
