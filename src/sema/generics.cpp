@@ -417,7 +417,8 @@ static void fix_expr(Expr* e,
     }
     if (auto* n = dynamic_cast<CallExpr*>(e)) {
         fix_expr(n->callee.get(), done, pending);
-        for (auto& a : n->args) fix_expr(a.get(), done, pending); return;
+        for (auto& a : n->args) fix_expr(a.get(), done, pending);
+        return;
     }
     if (auto* n = dynamic_cast<MemberExpr*>(e)) {
         fix_expr(n->object.get(), done, pending); return;
@@ -427,7 +428,8 @@ static void fix_expr(Expr* e,
         fix_expr(n->index.get(),  done, pending); return;
     }
     if (auto* n = dynamic_cast<ListExpr*>(e)) {
-        for (auto& el : n->elements) fix_expr(el.get(), done, pending); return;
+        for (auto& el : n->elements) fix_expr(el.get(), done, pending);
+        return;
     }
     if (auto* n = dynamic_cast<DictExpr*>(e)) {
         for (auto& p : n->pairs) {
@@ -498,7 +500,8 @@ static void fix_stmt(Stmt* st,
         fix_stmt(n->catch_body.get(), done, pending); return;
     }
     if (auto* n = dynamic_cast<ReturnStmt*>(st)) {
-        if (n->value) fix_expr(n->value->get(), done, pending); return;
+        if (n->value) fix_expr(n->value->get(), done, pending);
+        return;
     }
     if (auto* n = dynamic_cast<AssertStmt*>(st)) {
         fix_expr(n->cond.get(), done, pending); return;

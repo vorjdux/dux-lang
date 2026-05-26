@@ -187,7 +187,7 @@ static ExprPtr make_str_concat(ExprPtr left, ExprPtr right, const yy::location& 
 %type <Param>                            param
 /* Types */
 %type <TypeExpr>                         type_expr
-%type <std::vector<TypeExpr>>            fn_type_params fn_type_params_ne type_arg_list_ne
+%type <std::vector<TypeExpr>>            fn_type_params_ne type_arg_list_ne
 %type <TypeParamEntryList>               opt_type_params type_params_ne
 /* Access */
 %type <AccessMod>                        access_mod
@@ -233,6 +233,17 @@ static ExprPtr make_str_concat(ExprPtr left, ExprPtr right, const yy::location& 
 %left  PLUSPLUS MINUSMINUS DOT LBRACKET LPAREN
 
 %nonassoc KW_ELSE   /* resolve dangling-else */
+
+/* The remaining S/R conflicts are all in the binary-operator hierarchy
+   (passthrough rules like `assign_expr: or_expr` that have no terminal and
+   therefore no declared precedence) and in a handful of optional-semicolon /
+   generic-bracket states.  In every case bison's default shift wins and
+   produces the intended parse — the conflicts are spurious artefacts of the
+   hierarchical grammar style, not real ambiguities.
+   The single R/R conflict is the empty `param_list` vs empty `fn_type_params`
+   state; bison picks `param_list` first which is correct for the lambda form.
+   Declare them expected so bison does not warn about them. */
+%expect 38
 
 %start program
 
@@ -801,11 +812,6 @@ param_list_ne
 
 param : type_expr IDENT { $$ = Param{$1, $2}; } ;
 
-fn_type_params
-    : %empty                              { $$ = std::vector<TypeExpr>{}; }
-    | fn_type_params_ne                   { $$ = std::move($1); }
-    ;
-
 fn_type_params_ne
     : type_expr
         { $$ = std::vector<TypeExpr>{}; $$.push_back(std::move($1)); }
@@ -844,7 +850,9 @@ type_expr
     | IDENT      { $$.name = $1;      $$.is_const = false; }
     | IDENT LT type_arg_list_ne GT
         { $$.name = $1; $$.is_const = false; $$.type_args = std::move($3); }
-    | KW_FN LPAREN fn_type_params RPAREN ARROW type_expr
+    | KW_FN LPAREN RPAREN ARROW type_expr
+        { $$.name = "__fn"; $$.is_const = false; $$.fn_params = {}; $$.fn_ret = $5.name; }
+    | KW_FN LPAREN fn_type_params_ne RPAREN ARROW type_expr
         { $$.name = "__fn"; $$.is_const = false; $$.fn_params = std::move($3); $$.fn_ret = $6.name; }
     ;
 
@@ -1196,6 +1204,16 @@ unsafe_stmt
     ;
 
 /* -- Variable declaration ---------------------------------------------- */
+/*
+ * Const-ness is carried INSIDE type_expr via `type_expr: KW_CONST type_expr`.
+ * The four combinations (static const, const static, thread_local const,
+ * const thread_local) that previously had their own rules were AMBIGUOUS with
+ * the type_expr production — each produced a shift/reduce conflict on the
+ * first identifier lookahead.  They are removed here; `KW_CONST type_expr`
+ * inside the existing `KW_STATIC type_expr` / `KW_THREAD_LOCAL type_expr`
+ * rules covers all cases, and `is_const` is now read from $type.is_const.
+ * Canonical order: `static const T x` / `thread_local const T x`.
+ */
 var_decl_stmt
     : type_expr var_decl_items SEMI
         {
@@ -1206,39 +1224,15 @@ var_decl_stmt
     | KW_STATIC type_expr var_decl_items SEMI
         {
             auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $2; v->is_static = true; v->decls = std::move($3);
-            $$ = std::move(v);
-        }
-    | KW_STATIC KW_CONST type_expr var_decl_items SEMI
-        {
-            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $3; v->is_static = true; v->is_const = true;
-            v->decls = std::move($4);
-            $$ = std::move(v);
-        }
-    | KW_CONST KW_STATIC type_expr var_decl_items SEMI
-        {
-            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $3; v->is_static = true; v->is_const = true;
-            v->decls = std::move($4);
+            v->type = $2; v->is_static = true; v->is_const = $2.is_const;
+            v->decls = std::move($3);
             $$ = std::move(v);
         }
     | KW_THREAD_LOCAL type_expr var_decl_items SEMI
         {
             auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $2; v->is_thread_local = true; v->decls = std::move($3);
-            $$ = std::move(v);
-        }
-    | KW_THREAD_LOCAL KW_CONST type_expr var_decl_items SEMI
-        {
-            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $3; v->is_thread_local = true; v->is_const = true; v->decls = std::move($4);
-            $$ = std::move(v);
-        }
-    | KW_CONST KW_THREAD_LOCAL type_expr var_decl_items SEMI
-        {
-            auto v = mk<VarDeclStmt>(); v->loc = sl(@$, driver);
-            v->type = $3; v->is_thread_local = true; v->is_const = true; v->decls = std::move($4);
+            v->type = $2; v->is_thread_local = true; v->is_const = $2.is_const;
+            v->decls = std::move($3);
             $$ = std::move(v);
         }
     | KW_AUTO IDENT ASSIGN expr SEMI

@@ -7,8 +7,8 @@ int main() {
         print("tcp4 ok")
     }
 
-    # Test socket option setting (SO_REUSEADDR)
-    int r = s.set_opt(1, 2, 1)
+    # Test socket option setting (SO_REUSEADDR via portable helper)
+    int r = s.set_reuseaddr(1)
     if r == 0 {
         print("set_opt ok")
     }

@@ -77,7 +77,7 @@ void* duxrt_pool_new(int32_t n) {
 void duxrt_pool_submit(void* pool, void* fn_ptr, void* arg) {
     DuxPool* p = (DuxPool*)pool;
     Task* t = malloc(sizeof(Task));
-    t->fn   = (void*(*)(void*))fn_ptr;
+    t->fn   = __extension__ (void*(*)(void*))fn_ptr;
     t->arg  = arg;
     t->next = NULL;
     pthread_mutex_lock(&p->mu);

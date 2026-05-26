@@ -70,7 +70,19 @@ typedef struct DuxStr {
     int32_t  len;    /* int32_t: no padding after refcount → header = 16 bytes */
     char*    ext;    /* NULL  → data inline in FAM below (short strings)
                         non-NULL → separate heap buffer    (long strings)  */
-    char     data[]; /* inline storage — only valid when ext == NULL */
+    /* Flexible array member.  C99 feature; GCC/Clang also support it in C++
+     * as an extension.
+     *   GCC C++ mode:          __extension__ suppresses -Wpedantic
+     *   Apple Clang C++ mode:  needs #pragma to suppress -Wc99-extensions
+     * Both pragmas are no-ops on compilers that don't know them. */
+#if defined(__clang__)
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wc99-extensions"
+    char data[];
+#  pragma clang diagnostic pop
+#else
+    __extension__ char data[];
+#endif
 } DuxStr;
 
 /* Allocate a new DuxStr (refcount=1) copying len bytes from data. */

@@ -296,7 +296,7 @@ void* duxrt_http_request(DuxStr* method, DuxStr* url_str,
         hints.ai_family   = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
         if (getaddrinfo(u.host, portbuf, &hints, &res) != 0 || !res) {
-            snprintf(g_http_err, sizeof(g_http_err), "DNS lookup failed: %s", u.host);
+            snprintf(g_http_err, sizeof(g_http_err), "DNS lookup failed: %.230s", u.host);
             free(req);
             return NULL;
         }

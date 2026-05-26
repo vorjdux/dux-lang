@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>   /* kill() — POSIX; required on macOS (not pulled in by sys/types.h) */
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>

@@ -117,15 +117,33 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
     }
     if (pid == 0) {
         // child process: exec cc directly (no shell involved)
+        //
+        // C++ runtime library selection:
+        //   macOS  — Apple Clang ships libc++, not libstdc++.  macOS 10.15+
+        //            removed libstdc++ entirely; -lstdc++ would fail at link time.
+        //   Linux  — GCC / Clang both ship libstdc++ by default; use that.
+        //
+        // -lpthread:  no-op on macOS (pthreads are part of libSystem) but harmless.
+        //
+        // DUXRT_OPENSSL_SSL / _CRYPTO: full absolute paths baked in at cmake build
+        // time (the same libraries duxrt.a was compiled against).  Using the full
+        // path avoids the macOS failure mode where Homebrew LLVM's cc is on PATH
+        // but cannot locate the system LibreSSL TBD stubs, while the Homebrew
+        // OpenSSL 3 dylib is always resolvable by its absolute path.
+#ifdef __APPLE__
+        const char* cxx_rt = "-lc++";      // Apple Clang / libc++
+#else
+        const char* cxx_rt = "-lstdc++";   // GCC / Clang on Linux / libstdc++
+#endif
         const char* argv[] = {
             "cc",
             obj_path.c_str(),
             DUXRT_LIB_PATH,
             "-lm",
-            "-lstdc++",  // C++ EH ABI (__gxx_personality_v0, __cxa_*)
-            "-lpthread", // POSIX threads (thread.pool, thread.chan, etc.)
-            "-lssl",     // OpenSSL TLS (net.tls)
-            "-lcrypto",  // OpenSSL crypto (net.tls)
+            cxx_rt,
+            "-lpthread",
+            DUXRT_OPENSSL_SSL,     // full path — same OpenSSL duxrt was built with
+            DUXRT_OPENSSL_CRYPTO,  // full path — same OpenSSL duxrt was built with
             "-o", out_path.c_str(),
             nullptr
         };

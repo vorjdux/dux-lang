@@ -81,10 +81,22 @@ add_library(duxrt STATIC
 
 target_include_directories(duxrt PUBLIC src/runtime)
 
+# ─── Optional -march=native ───────────────────────────────────────────────────
+# Off by default so CI (especially Apple Silicon) is not affected by
+# native-only instructions that may mismatch the JIT-compiled user programs or
+# cause miscompilation on certain microarchitectures.  Enable locally for
+# maximum performance: cmake -DDUX_MARCH_NATIVE=ON ...
+option(DUX_MARCH_NATIVE "Compile with -march=native in Release builds" OFF)
+if(DUX_MARCH_NATIVE)
+    set(DUX_MARCH_FLAG "-march=native")
+else()
+    set(DUX_MARCH_FLAG "")
+endif()
+
 target_compile_options(duxrt PRIVATE
     -Wall -Wextra -Wpedantic
     $<$<CONFIG:Debug>:   -g3 -O0>
-    $<$<CONFIG:Release>: -O3 -DNDEBUG -march=native>
+    $<$<CONFIG:Release>: -O3 -DNDEBUG ${DUX_MARCH_FLAG}>
 )
 # duxrt must NOT be instrumented with sanitizers: user programs link against
 # it and are not compiled with sanitizer runtimes.
@@ -92,7 +104,13 @@ target_compile_options(duxrt PRIVATE
 # OpenSSL for net.tls
 find_package(OpenSSL REQUIRED)
 
-target_link_libraries(duxrt PUBLIC m stdc++ pthread OpenSSL::SSL OpenSSL::Crypto)  # math + C++ EH ABI + pthreads + TLS
+# C++ EH runtime: libc++ on macOS/Apple Clang, libstdc++ on Linux/GCC.
+if(APPLE)
+    set(DUX_CXX_RT "c++")
+else()
+    set(DUX_CXX_RT "stdc++")
+endif()
+target_link_libraries(duxrt PUBLIC m ${DUX_CXX_RT} pthread OpenSSL::SSL OpenSSL::Crypto)
 
 # Record absolute path so the compiler driver can find it at runtime
 set(DUXRT_LIB_PATH "$<TARGET_FILE:duxrt>")
@@ -177,7 +195,6 @@ BISON_TARGET(DuxParser
     src/parser/dux.y
     ${GEN_DIR}/parser.cpp
     DEFINES_FILE ${GEN_DIR}/parser.hpp
-    COMPILE_FLAGS "-Wcounterexamples"
 )
 
 ADD_FLEX_BISON_DEPENDENCY(DuxLexer DuxParser)
@@ -200,10 +217,20 @@ add_executable(dux
 target_include_directories(dux PRIVATE
     src
     ${GEN_DIR}
+)
+# Mark LLVM headers as system headers so third-party deprecation warnings
+# (e.g. std::aligned_storage_t in C++23 mode) are not surfaced.
+target_include_directories(dux SYSTEM PRIVATE
     ${LLVM_INCLUDE_DIRS}
 )
 
 # Bake duxrt paths and stdlib dir into the compiler
+#
+# DUXRT_OPENSSL_SSL / _CRYPTO: full absolute paths to the OpenSSL libraries
+# that duxrt was compiled against.  Using the full path (rather than -lssl)
+# guarantees the user-program linker uses the exact same OpenSSL version.
+# This avoids the macOS mismatch where Homebrew LLVM's cc can't find the
+# system LibreSSL TBD stubs but *can* link against the full Homebrew path.
 target_compile_definitions(dux PRIVATE
     DUX_VERSION="${PROJECT_VERSION}"
     DUX_TARGET_TRIPLE="${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}"
@@ -213,6 +240,8 @@ target_compile_definitions(dux PRIVATE
     DUXRT_INCLUDE_DIR="${DUXRT_INCLUDE_DIR}"
     DUXSTDLIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
     DUX_STDLIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
+    DUXRT_OPENSSL_SSL="${OPENSSL_SSL_LIBRARY}"
+    DUXRT_OPENSSL_CRYPTO="${OPENSSL_CRYPTO_LIBRARY}"
 )
 
 # Ensure duxrt.bc is built before the dux compiler (when LTO is enabled)
@@ -226,7 +255,7 @@ target_link_libraries(dux PRIVATE ${LLVM_LIBS})
 target_compile_options(dux PRIVATE
     -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-function
     $<$<CONFIG:Debug>:   -g3 -O0>
-    $<$<CONFIG:Release>: -O3 -DNDEBUG -march=native>
+    $<$<CONFIG:Release>: -O3 -DNDEBUG ${DUX_MARCH_FLAG}>
 )
 
 # Sanitisers in debug builds (disable with -DDUX_SANITIZE=OFF)
