@@ -370,9 +370,15 @@ set(CPACK_RESOURCE_FILE_README  "${CMAKE_SOURCE_DIR}/README.md")
 set(CPACK_STRIP_FILES TRUE)
 
 # ── Tarball (.tar.gz) ────────────────────────────────────────────────────────
-# Produces: dux-<version>-<system>-<arch>.tar.gz
+# Produces: dux-<version>-linux-x86_64.tar.gz  /  dux-<version>-macos-arm64.tar.gz
+# Use "macos" instead of "darwin" for friendlier file names.
+if(APPLE)
+    set(_dux_platform "macos")
+else()
+    string(TOLOWER "${CMAKE_SYSTEM_NAME}" _dux_platform)
+endif()
 set(CPACK_ARCHIVE_FILE_NAME
-    "dux-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+    "dux-${PROJECT_VERSION}-${_dux_platform}-${CMAKE_SYSTEM_PROCESSOR}")
 string(TOLOWER "${CPACK_ARCHIVE_FILE_NAME}" CPACK_ARCHIVE_FILE_NAME)
 
 # ── Debian package (.deb) ─────────────────────────────────────────────────────
