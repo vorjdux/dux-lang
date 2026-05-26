@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
 
+# ── Single source of version truth ────────────────────────────────────────────
+# Edit the VERSION file to change the version; CMake picks it up automatically.
+# Use scripts/bump-version.py to update all other references in one shot.
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" _dux_ver)
+string(STRIP "${_dux_ver}" _dux_ver)
+
 project(dux-lang
-    VERSION     0.1.3
+    VERSION     ${_dux_ver}
     DESCRIPTION "The Dux programming language compiler"
     LANGUAGES   C CXX
 )
@@ -375,7 +381,7 @@ set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS  "libc6 (>= 2.17), libstdc++6 (>= 9)")
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "clang-18")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Dux Lang <vorj.dux@gmail.com>")
-# Naming: dux-lang_0.1.3_amd64.deb
+# Naming: dux-lang_${PROJECT_VERSION}_amd64.deb
 set(CPACK_DEBIAN_FILE_NAME        "DEB-DEFAULT")
 
 # ── RPM package (.rpm) ────────────────────────────────────────────────────────
@@ -387,7 +393,7 @@ set(CPACK_RPM_PACKAGE_RECOMMENDS  "clang18")
 set(CPACK_RPM_PACKAGE_DESCRIPTION
 "Dux is a statically-typed compiled language targeting native code via LLVM.
 Clean Python-like syntax, classes, closures, async/await, LTO, -O3 performance.")
-# Naming: dux-lang-0.1.3-1.x86_64.rpm
+# Naming: dux-lang-${PROJECT_VERSION}-1.x86_64.rpm
 set(CPACK_RPM_FILE_NAME           "RPM-DEFAULT")
 
 # Generators: TGZ for all platforms; DEB on Debian/Ubuntu; RPM on Fedora/RHEL
