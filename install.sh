@@ -17,7 +17,7 @@ set -e
 
 REPO="vorjdux/dux-lang"
 BINARY_NAME="dux"
-DEFAULT_VERSION="0.1.0"
+DEFAULT_VERSION="0.1.2"
 
 # ─── Colour output ────────────────────────────────────────────────────────────
 
@@ -100,7 +100,7 @@ EXAMPLES:
     curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
 
     # Install specific version
-    DUX_VERSION=0.1.0 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
+    DUX_VERSION=0.1.2 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
 
     # Dry run
     sh install.sh --dry-run

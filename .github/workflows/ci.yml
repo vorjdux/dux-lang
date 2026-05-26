@@ -27,13 +27,16 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y cmake flex bison ${{ matrix.packages }}
+          sudo apt-get install -y cmake flex bison \
+            llvm-18-dev libssl-dev libzstd-dev \
+            ${{ matrix.packages }}
 
       - name: Configure (Debug)
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
 
       - name: Build
         run: cmake --build build -j$(nproc)
@@ -45,7 +48,8 @@ jobs:
         run: |
           cmake -B build-rel \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
 
       - name: Build Release
         run: cmake --build build-rel -j$(nproc)
@@ -62,7 +66,10 @@ jobs:
       - name: Install dependencies
         run: |
           brew install cmake flex bison llvm@18
+          brew link --overwrite llvm@18
           echo "$(brew --prefix llvm@18)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix flex)/bin"    >> $GITHUB_PATH
+          echo "$(brew --prefix bison)/bin"   >> $GITHUB_PATH
 
       - name: Configure
         run: |
@@ -86,13 +93,14 @@ jobs:
       - name: Install dependencies
         run: |
           dnf install -y cmake flex bison gcc-c++ \
-            llvm18-devel clang18 zstd-devel rpm-build
+            llvm18-devel clang18 zstd-devel openssl-devel rpm-build
 
       - name: Configure (Debug)
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_CXX_COMPILER=g++
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DLLVM_DIR=/usr/lib64/cmake/llvm18
 
       - name: Build
         run: cmake --build build -j$(nproc)
@@ -104,7 +112,8 @@ jobs:
         run: |
           cmake -B build-rel \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=g++
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DLLVM_DIR=/usr/lib64/cmake/llvm18
 
       - name: Build Release
         run: cmake --build build-rel -j$(nproc)

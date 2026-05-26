@@ -1,5 +1,5 @@
 Name:           dux-lang
-Version:        0.1.0
+Version:        0.1.2
 Release:        1%{?dist}
 Summary:        The Dux programming language compiler
 
@@ -50,5 +50,10 @@ standard library covering I/O, networking, threading, and data structures.
 %{_datadir}/dux/stdlib/
 
 %changelog
+* Tue May 26 2026 Dux Lang <vorj.dux@gmail.com> - 0.1.2-1
+- Fix CI on all four platforms (macOS, Ubuntu GCC/Clang, Fedora)
+- Resolve merge conflicts with master; bump spec to version 0.2
+- Replace em dashes with plain hyphens in documentation
+
 * Mon May 26 2025 Dux Lang <vorj.dux@gmail.com> - 0.1.0-1
 - Initial release of the Dux programming language compiler

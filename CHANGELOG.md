@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-05-26
+
+### Fixed
+
+- **CI (macOS Apple Silicon):** `llvm@18` was not linked because `llvm@15` was
+  already installed; added `brew link --overwrite llvm@18` and added `flex`/`bison`
+  bin dirs to `$GITHUB_PATH` so `find_package(FLEX/BISON 3.8)` finds the Homebrew
+  versions instead of the ancient macOS system tools.
+- **CI (Ubuntu GCC 13 / Clang 18):** Added `llvm-18-dev`, `libssl-dev`, and
+  `libzstd-dev` to the apt package list and passed an explicit
+  `-DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm` to cmake so LLVM 18 is always
+  selected regardless of runner defaults.
+- **CI (Fedora 40):** Added `openssl-devel` (required by `find_package(OpenSSL)`)
+  and passed `-DLLVM_DIR=/usr/lib64/cmake/llvm18` so cmake finds the versioned LLVM
+  18 cmake config files installed by `llvm18-devel`.
+- **Merge conflicts** between `release/v0.1.0` and `master` resolved in
+  `README.md`, `benchmarks/README.md`, and `docs/spec.md`; spec version bumped
+  to 0.2.
+
+### Changed
+
+- Benchmark documentation updated to include all seven tracked workloads with
+  results from the typed-list, dict hash-cache, and zero-alloc f-string
+  optimisations landed in the perf branch.
+- Em dashes replaced with plain hyphens throughout documentation, scripts, and
+  configuration files.
+
+---
+
 ## [0.1.0] - 2025-05-25
 
 Initial public release of the Dux programming language compiler.
@@ -175,4 +204,5 @@ Initial public release of the Dux programming language compiler.
   - Heap alloc/free (1 M cycles): 2 ms - **faster than C**
   - Beats Go on 5 of 7 tracked workloads; within 2× of C on 6 of 7.
 
+[0.1.2]: https://github.com/vorjdux/dux-lang/releases/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/vorjdux/dux-lang/releases/tag/v0.1.0
