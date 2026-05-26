@@ -72,7 +72,13 @@ void usage(std::string_view prog) {
         "  --version       Print version and exit\n"
         "  -h, --help      Show this message\n"
         "\n"
-        "If no file is given, reads from stdin.\n";
+        "Examples:\n"
+        "  " << prog << " hello.dux --compile      Compile to executable\n"
+        "  " << prog << " hello.dux --check         Type-check only\n"
+        "  " << prog << " hello.dux --emit-ir       Print LLVM IR\n"
+        "  " << prog << " --repl                    Interactive REPL\n"
+        "\n"
+        "Reads from stdin when no file is given (non-interactive only).\n";
 }
 
 Options parse_args(std::span<char*> args) {
@@ -227,6 +233,15 @@ int main(int argc, char** argv) {
         dux::Repl repl(argv[0]);
         repl.run();
         return EXIT_SUCCESS;
+    }
+
+    // If no input file was given and stdin is an interactive terminal, the user
+    // almost certainly forgot to pass a file or flag — show help instead of
+    // silently blocking waiting for input.  Piped / redirected stdin still works
+    // (e.g. `echo 'print("hi")' | dux` or `dux < script.dux`).
+    if (opts.input.empty() && isatty(STDIN_FILENO)) {
+        usage(argv[0]);
+        return EXIT_FAILURE;
     }
 
     Driver driver;
