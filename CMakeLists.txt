@@ -420,7 +420,7 @@ endif()
 
 set(CPACK_SOURCE_GENERATOR      "TGZ")
 set(CPACK_SOURCE_IGNORE_FILES
-    "/\\.git/;/build.*/;/\\.cache/;/callgrind/;/core\\..*/;/vgcore\\..*")
+    "/\\\\.git/;/build.*/;/\\\\.cache/;/callgrind/;/core\\\\..*/;/vgcore\\\\..*")
 
 include(CPack)
 
