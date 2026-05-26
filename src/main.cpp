@@ -20,7 +20,7 @@
 #define DUX_VERSION "0.1.0-dev"
 #endif
 
-// Paths baked in at build time by CMake
+// Paths and build metadata baked in at build time by CMake
 #ifndef DUXRT_LIB_PATH
 #define DUXRT_LIB_PATH ""
 #endif
@@ -32,6 +32,18 @@
 #endif
 #ifndef DUXSTDLIB_DIR
 #define DUXSTDLIB_DIR ""
+#endif
+#ifndef DUX_BUILD_TYPE
+#define DUX_BUILD_TYPE "unknown"
+#endif
+#ifndef DUX_LLVM_VERSION
+#define DUX_LLVM_VERSION "unknown"
+#endif
+#ifndef DUX_COMPILER_ID
+#define DUX_COMPILER_ID "unknown"
+#endif
+#ifndef DUX_COMPILER_VERSION
+#define DUX_COMPILER_VERSION ""
 #endif
 
 namespace {
@@ -52,6 +64,14 @@ struct Options {
     bool         help{false};
     bool         version{false};
 };
+
+void print_build_info() {
+    std::cout <<
+        "dux " DUX_VERSION " (" DUX_TARGET_TRIPLE ")\n"
+        "  Build   : " DUX_BUILD_TYPE "\n"
+        "  LLVM    : " DUX_LLVM_VERSION "\n"
+        "  Compiler: " DUX_COMPILER_ID " " DUX_COMPILER_VERSION "\n";
+}
 
 void usage(std::string_view prog) {
     std::cerr <<
@@ -219,8 +239,7 @@ int main(int argc, char** argv) {
     auto opts = parse_args(std::span(argv, static_cast<std::size_t>(argc)));
 
     if (opts.version) {
-        std::cout << "dux " DUX_VERSION
-                  << " (" DUX_TARGET_TRIPLE ")\n";
+        print_build_info();
         return EXIT_SUCCESS;
     }
 
@@ -240,6 +259,8 @@ int main(int argc, char** argv) {
     // silently blocking waiting for input.  Piped / redirected stdin still works
     // (e.g. `echo 'print("hi")' | dux` or `dux < script.dux`).
     if (opts.input.empty() && isatty(STDIN_FILENO)) {
+        print_build_info();
+        std::cout << "\n";
         usage(argv[0]);
         return EXIT_FAILURE;
     }
