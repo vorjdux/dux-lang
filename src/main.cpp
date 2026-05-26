@@ -124,8 +124,12 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
         //   Linux  — GCC / Clang both ship libstdc++ by default; use that.
         //
         // -lpthread:  no-op on macOS (pthreads are part of libSystem) but harmless.
-        // -lssl/-lcrypto: macOS ships system LibreSSL at /usr/lib; Linux needs
-        //   the distro-provided OpenSSL.  Both expose the same -lssl/-lcrypto names.
+        //
+        // DUXRT_OPENSSL_SSL / _CRYPTO: full absolute paths baked in at cmake build
+        // time (the same libraries duxrt.a was compiled against).  Using the full
+        // path avoids the macOS failure mode where Homebrew LLVM's cc is on PATH
+        // but cannot locate the system LibreSSL TBD stubs, while the Homebrew
+        // OpenSSL 3 dylib is always resolvable by its absolute path.
 #ifdef __APPLE__
         const char* cxx_rt = "-lc++";      // Apple Clang / libc++
 #else
@@ -138,8 +142,8 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
             "-lm",
             cxx_rt,
             "-lpthread",
-            "-lssl",
-            "-lcrypto",
+            DUXRT_OPENSSL_SSL,     // full path — same OpenSSL duxrt was built with
+            DUXRT_OPENSSL_CRYPTO,  // full path — same OpenSSL duxrt was built with
             "-o", out_path.c_str(),
             nullptr
         };

@@ -225,6 +225,12 @@ target_include_directories(dux SYSTEM PRIVATE
 )
 
 # Bake duxrt paths and stdlib dir into the compiler
+#
+# DUXRT_OPENSSL_SSL / _CRYPTO: full absolute paths to the OpenSSL libraries
+# that duxrt was compiled against.  Using the full path (rather than -lssl)
+# guarantees the user-program linker uses the exact same OpenSSL version.
+# This avoids the macOS mismatch where Homebrew LLVM's cc can't find the
+# system LibreSSL TBD stubs but *can* link against the full Homebrew path.
 target_compile_definitions(dux PRIVATE
     DUX_VERSION="${PROJECT_VERSION}"
     DUX_TARGET_TRIPLE="${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}"
@@ -234,6 +240,8 @@ target_compile_definitions(dux PRIVATE
     DUXRT_INCLUDE_DIR="${DUXRT_INCLUDE_DIR}"
     DUXSTDLIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
     DUX_STDLIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
+    DUXRT_OPENSSL_SSL="${OPENSSL_SSL_LIBRARY}"
+    DUXRT_OPENSSL_CRYPTO="${OPENSSL_CRYPTO_LIBRARY}"
 )
 
 # Ensure duxrt.bc is built before the dux compiler (when LTO is enabled)
