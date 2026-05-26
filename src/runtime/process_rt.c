@@ -124,8 +124,11 @@ void* duxrt_proc_spawn(DuxList* argv_list, int32_t cap_out, int32_t cap_err) {
 
     int out_pipe[2] = {-1, -1};
     int err_pipe[2] = {-1, -1};
-    if (cap_out) pipe(out_pipe);
-    if (cap_err) pipe(err_pipe);
+    if (cap_out && pipe(out_pipe) < 0) { free(argv); free(p); return NULL; }
+    if (cap_err && pipe(err_pipe) < 0) {
+        if (cap_out) { close(out_pipe[0]); close(out_pipe[1]); }
+        free(argv); free(p); return NULL;
+    }
 
     pid_t pid = fork();
     if (pid < 0) {

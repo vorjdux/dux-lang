@@ -24,12 +24,41 @@ endif()
 find_package(FLEX  2.6  REQUIRED)
 find_package(BISON 3.8  REQUIRED)
 
-# Satisfy LLVM's dependency on zstd (needed when LLVM is built with zstd support)
-find_library(ZSTD_LIBRARY zstd)
-if(ZSTD_LIBRARY AND NOT TARGET zstd::libzstd_shared)
-    add_library(zstd::libzstd_shared SHARED IMPORTED)
-    set_target_properties(zstd::libzstd_shared PROPERTIES
-        IMPORTED_LOCATION "${ZSTD_LIBRARY}")
+# ── zstd ──────────────────────────────────────────────────────────────────────
+# LLVM 18+ may be compiled with zstd support.  When it is, LLVMExports.cmake
+# lists "zstd::libzstd_shared" as a link dependency of LLVMSupport.  CMake
+# must see that imported target BEFORE find_package(LLVM) or it errors out.
+#
+# Problem: Ubuntu ships "libzstd1" (runtime .so.1) and "libzstd-dev" (the
+# unversioned dev symlink).  find_library(... zstd) only finds the unversioned
+# "libzstd.so" which is provided by the -dev package.  Without -dev installed,
+# find_library returns NOTFOUND even though the library IS on the system.
+#
+# Fix: try cmake's zstd config first, then broaden find_library to accept the
+# versioned soname (.so.1) as well.
+if(NOT TARGET zstd::libzstd_shared)
+    find_package(zstd QUIET CONFIG)
+endif()
+if(NOT TARGET zstd::libzstd_shared)
+    find_library(ZSTD_LIBRARY
+        NAMES zstd                       # libzstd.so  (needs libzstd-dev)
+              libzstd.so.1 libzstd.so    # versioned soname (libzstd1 runtime)
+        PATHS /usr/lib
+              /usr/lib/x86_64-linux-gnu
+              /usr/lib/aarch64-linux-gnu
+              /usr/lib64
+              /usr/local/lib
+    )
+    if(ZSTD_LIBRARY)
+        add_library(zstd::libzstd_shared SHARED IMPORTED GLOBAL)
+        set_target_properties(zstd::libzstd_shared PROPERTIES
+            IMPORTED_LOCATION "${ZSTD_LIBRARY}")
+        message(STATUS "zstd: using ${ZSTD_LIBRARY}")
+    else()
+        message(WARNING
+            "zstd not found. If linking fails with 'cannot find -lzstd', "
+            "install libzstd-dev (Debian/Ubuntu) or libzstd-devel (Fedora/RHEL).")
+    endif()
 endif()
 
 # LLVM ≥ 17 required (opaque-pointer IR by default)
