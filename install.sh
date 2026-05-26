@@ -1,6 +1,6 @@
 #!/bin/sh
 # Dux Language Installer
-# Usage: curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
+# Usage: curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
 #
 # Environment variables:
 #   DUX_VERSION      - version to install (default: latest)
@@ -82,7 +82,7 @@ _print_help() {
 Dux Language Installer
 
 USAGE:
-    curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
+    curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
     sh install.sh [OPTIONS]
 
 OPTIONS:
@@ -97,10 +97,10 @@ ENVIRONMENT:
 
 EXAMPLES:
     # Install latest release
-    curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
+    curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
 
     # Install specific version
-    DUX_VERSION=0.1.2 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/main/install.sh | sh
+    DUX_VERSION=0.1.2 curl -sSf https://raw.githubusercontent.com/vorjdux/dux-lang/master/install.sh | sh
 
     # Dry run
     sh install.sh --dry-run
