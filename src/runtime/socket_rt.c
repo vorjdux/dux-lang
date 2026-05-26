@@ -253,6 +253,34 @@ int32_t duxrt_sock_setsockopt_int(void* s, int32_t level, int32_t optname, int32
     return 0;
 }
 
+/* Portable SO_REUSEADDR / SO_REUSEPORT helpers.
+ * The raw constants differ across platforms (Linux: SOL_SOCKET=1 SO_REUSEADDR=2;
+ * macOS: SOL_SOCKET=0xffff SO_REUSEADDR=4).  These wrappers use the correct
+ * platform constants from <sys/socket.h> so callers don't need to hard-code
+ * OS-specific values. */
+int32_t duxrt_sock_set_reuseaddr(void* s, int32_t val) {
+    if (!s) return -1;
+    DuxSocket* sock = (DuxSocket*)s;
+    int v = (int)val;
+    int r = setsockopt(sock->fd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v));
+    if (r < 0) { sock_save_errno(); return -1; }
+    return 0;
+}
+
+int32_t duxrt_sock_set_reuseport(void* s, int32_t val) {
+#ifdef SO_REUSEPORT
+    if (!s) return -1;
+    DuxSocket* sock = (DuxSocket*)s;
+    int v = (int)val;
+    int r = setsockopt(sock->fd, SOL_SOCKET, SO_REUSEPORT, &v, sizeof(v));
+    if (r < 0) { sock_save_errno(); return -1; }
+    return 0;
+#else
+    (void)s; (void)val;
+    return -1;  /* SO_REUSEPORT not available on this platform */
+#endif
+}
+
 int32_t duxrt_sock_getsockopt_int(void* s, int32_t level, int32_t optname) {
     if (!s) return -1;
     DuxSocket* sock = (DuxSocket*)s;

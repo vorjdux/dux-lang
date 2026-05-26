@@ -14,6 +14,8 @@ namespace socket {
     extern "C" str  duxrt_sock_last_sender() ;
     extern "C" int  duxrt_sock_setsockopt_int(ptr s, int level, int optname, int val) ;
     extern "C" int  duxrt_sock_getsockopt_int(ptr s, int level, int optname) ;
+    extern "C" int  duxrt_sock_set_reuseaddr(ptr s, int val) ;
+    extern "C" int  duxrt_sock_set_reuseport(ptr s, int val) ;
     extern "C" int  duxrt_sock_shutdown(ptr s, int how) ;
     extern "C" int  duxrt_sock_set_nonblocking(ptr s, int enable) ;
     extern "C" int  duxrt_sock_set_timeout_ms(ptr s, int direction, long ms) ;
@@ -179,6 +181,25 @@ class Socket {
         int r = 0
         unsafe {
             r = duxrt_sock_getsockopt_int(this._handle, level, optname)
+        }
+        return r
+    }
+
+    # Set SO_REUSEADDR using platform-correct constants (no need to hard-code
+    # OS-specific values: Linux SOL_SOCKET=1/SO_REUSEADDR=2 vs macOS 0xffff/4)
+    int set_reuseaddr(int val) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_set_reuseaddr(this._handle, val)
+        }
+        return r
+    }
+
+    # Set SO_REUSEPORT using platform-correct constants; returns -1 if not supported
+    int set_reuseport(int val) {
+        int r = 0
+        unsafe {
+            r = duxrt_sock_set_reuseport(this._handle, val)
         }
         return r
     }
