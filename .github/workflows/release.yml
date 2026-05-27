@@ -165,16 +165,24 @@ jobs:
           print(f"Release notes ({ver}):\n{body[:300]}...")
           PYEOF
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
           VER="$(cat VERSION)"
-          # --prerelease if tag contains a hyphen, e.g. v0.2.0-beta.1
           PRERELEASE=""
           [[ "$TAG" == *-* ]] && PRERELEASE="--prerelease"
-          gh release create "$TAG" dist/* \
-            --title "dux ${VER}" \
-            --notes-file release_notes.md \
-            $PRERELEASE
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — uploading/updating assets."
+            gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" \
+              --title "dux ${VER}" \
+              --notes-file release_notes.md
+          else
+            gh release create "$TAG" dist/* \
+              --title "dux ${VER}" \
+              --notes-file release_notes.md \
+              $PRERELEASE
+          fi
