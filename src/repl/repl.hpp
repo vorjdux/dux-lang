@@ -6,7 +6,8 @@ namespace dux {
 
 class Repl {
     std::string              dux_binary_;    // path to this binary (argv[0])
-    std::vector<std::string> context_decls_; // accumulated declarations
+    std::vector<std::string> context_decls_; // accumulated top-level declarations
+    std::vector<std::string> context_stmts_; // accumulated statements (replayed in main)
     std::string              temp_dir_;
 
 public:

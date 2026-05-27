@@ -87,11 +87,20 @@ bool Repl::is_decl(const std::string& line) const {
 
 std::string Repl::build_source(const std::string& stmt) const {
     std::string src;
+    // Top-level declarations (functions, classes, …)
     for (const auto& d : context_decls_) {
         src += d;
         src += "\n";
     }
-    src += "void main() {\n    ";
+    src += "void main() {\n";
+    // Replay all previously accepted statements so variables remain in scope.
+    for (const auto& s : context_stmts_) {
+        src += "    ";
+        src += s;
+        src += "\n";
+    }
+    // New statement goes last.
+    src += "    ";
     src += stmt;
     src += "\n}\n";
     return src;
@@ -209,7 +218,11 @@ void Repl::run() {
                 "  Define functions/classes first, then call them.\n"
                 "  Declarations (class, fn, void/int/str/... name(...) {...}) are\n"
                 "  accumulated and available to all subsequent statements.\n"
-                "  Statements are compiled and run immediately.\n"
+                "  Statements are accumulated too: variables declared on one\n"
+                "  line are in scope on every following line.\n"
+                "  Note: accumulated statements are replayed on each new line,\n"
+                "  so side-effectful calls (print, file I/O) will run again.\n"
+                "  Use :clear to reset all accumulated state.\n"
 #ifdef DUX_RL
                 "  Up/Down arrows navigate command history.\n"
                 "  Left/Right arrows and Ctrl+A/E/K/U edit the current line.\n"
@@ -220,16 +233,23 @@ void Repl::run() {
 
         if (line == ":clear") {
             context_decls_.clear();
+            context_stmts_.clear();
             std::cout << "Context cleared.\n";
             continue;
         }
 
         if (line == ":context") {
-            if (context_decls_.empty()) {
+            if (context_decls_.empty() && context_stmts_.empty()) {
                 std::cout << "(empty)\n";
             } else {
                 for (const auto& d : context_decls_)
                     std::cout << d << "\n";
+                if (!context_stmts_.empty()) {
+                    std::cout << "void main() {\n";
+                    for (const auto& s : context_stmts_)
+                        std::cout << "    " << s << "\n";
+                    std::cout << "    ...\n}\n";
+                }
             }
             continue;
         }
@@ -275,7 +295,12 @@ void Repl::run() {
             }
         } else {
             std::string src = build_source(line);
-            compile_and_run(src);
+            int rc = compile_and_run(src);
+            // Accumulate on success so variables remain in scope for
+            // subsequent statements.  On failure nothing is added, keeping
+            // the context clean.
+            if (rc == 0)
+                context_stmts_.push_back(line);
         }
     }
 
