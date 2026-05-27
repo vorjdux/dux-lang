@@ -88,19 +88,10 @@ jobs:
           name: fedora-rpm
           path: build/dux-lang-*.rpm
 
-  # ── macOS arm64 + x86_64 — TGZ ─────────────────────────────────────────────
+  # ── macOS arm64 — TGZ ────────────────────────────────────────────────────────
   build-macos:
-    name: macOS ${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: arm64
-            runner: macos-14
-          - arch: x86_64
-            runner: macos-13
-
+    name: macOS arm64
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
@@ -125,13 +116,13 @@ jobs:
         run: ctest --test-dir build --output-on-failure --verbose -j1
 
       - name: Package
-        # CPack produces: dux-<ver>-macos-arm64.tar.gz (or x86_64)
+        # CPack produces: dux-<ver>-macos-arm64.tar.gz
         run: cmake --build build --target package
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}
+          name: macos-arm64
           path: build/dux-*.tar.gz
 
   # ── Publish GitHub Release ────────────────────────────────────────────────────
