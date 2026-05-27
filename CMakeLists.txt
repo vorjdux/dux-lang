@@ -370,16 +370,24 @@ set(CPACK_RESOURCE_FILE_README  "${CMAKE_SOURCE_DIR}/README.md")
 set(CPACK_STRIP_FILES TRUE)
 
 # ── Tarball (.tar.gz) ────────────────────────────────────────────────────────
-# Produces: dux-<version>-linux-x86_64.tar.gz  /  dux-<version>-macos-arm64.tar.gz
+# Produces: dux-<version>-linux-x86_64.tar.gz  /  dux-<version>-macos-aarch64.tar.gz
 # Use "macos" instead of "darwin" for friendlier file names.
+# Normalize "arm64" → "aarch64" to match install.sh arch detection.
 if(APPLE)
     set(_dux_platform "macos")
 else()
     string(TOLOWER "${CMAKE_SYSTEM_NAME}" _dux_platform)
 endif()
-set(CPACK_ARCHIVE_FILE_NAME
-    "dux-${PROJECT_VERSION}-${_dux_platform}-${CMAKE_SYSTEM_PROCESSOR}")
-string(TOLOWER "${CPACK_ARCHIVE_FILE_NAME}" CPACK_ARCHIVE_FILE_NAME)
+# Normalize arm64 → aarch64 to match install.sh _detect_arch() mapping
+string(REPLACE "arm64" "aarch64" _dux_arch "${CMAKE_SYSTEM_PROCESSOR}")
+string(TOLOWER "${_dux_arch}" _dux_arch)
+set(_dux_pkg_name "dux-${PROJECT_VERSION}-${_dux_platform}-${_dux_arch}")
+# CPACK_PACKAGE_FILE_NAME controls the TGZ output name; CPACK_ARCHIVE_FILE_NAME
+# is an alias honoured in some CMake versions — set both for maximum compatibility.
+# DEB uses CPACK_DEBIAN_FILE_NAME=DEB-DEFAULT and RPM uses RPM-DEFAULT, so they
+# are not affected by CPACK_PACKAGE_FILE_NAME.
+set(CPACK_ARCHIVE_FILE_NAME "${_dux_pkg_name}")
+set(CPACK_PACKAGE_FILE_NAME "${_dux_pkg_name}")
 
 # ── Debian package (.deb) ─────────────────────────────────────────────────────
 set(CPACK_DEBIAN_PACKAGE_SECTION  "devel")
