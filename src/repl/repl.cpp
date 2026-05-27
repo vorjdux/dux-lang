@@ -10,7 +10,30 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
+// Line-editing back-end (optional; falls back to std::getline when absent).
+//   DUX_HAVE_READLINE : GNU readline  (readline/readline.h)
+//   DUX_HAVE_LIBEDIT  : libedit with readline-compat API (editline/readline.h)
+#if defined(DUX_HAVE_READLINE)
+#  include <readline/readline.h>
+#  include <readline/history.h>
+#  define DUX_RL 1
+#elif defined(DUX_HAVE_LIBEDIT)
+#  include <editline/readline.h>
+#  define DUX_RL 1
+#endif
+
 namespace dux {
+
+// ── history file path ─────────────────────────────────────────────────────────
+#ifdef DUX_RL
+static std::string history_path() {
+    const char* home = getenv("HOME");
+    if (!home || home[0] == '\0') return "";
+    return std::string(home) + "/.dux_history";
+}
+#endif
+
+// ── constructor / destructor ──────────────────────────────────────────────────
 
 Repl::Repl(const std::string& dux_binary) : dux_binary_(dux_binary) {
     temp_dir_ = "/tmp/dux_repl_" + std::to_string(static_cast<long>(getpid()));
@@ -18,10 +41,11 @@ Repl::Repl(const std::string& dux_binary) : dux_binary_(dux_binary) {
 }
 
 Repl::~Repl() {
-    // Clean up temp directory
     std::error_code ec;
     std::filesystem::remove_all(temp_dir_, ec);
 }
+
+// ── internal helpers ──────────────────────────────────────────────────────────
 
 void Repl::print_banner() const {
     std::cout << "Dux REPL -- type :help for commands, :q to quit\n";
@@ -30,7 +54,6 @@ void Repl::print_banner() const {
 bool Repl::is_decl(const std::string& line) const {
     if (line.empty()) return false;
 
-    // Helper: does line start with keyword kw followed by space or '<'?
     auto starts_with_kw = [&](const std::string& kw) -> bool {
         if (line.size() <= kw.size()) return false;
         if (line.substr(0, kw.size()) != kw) return false;
@@ -38,7 +61,6 @@ bool Repl::is_decl(const std::string& line) const {
         return next == ' ' || next == '<' || next == '\t';
     };
 
-    // Pure declaration keywords
     if (starts_with_kw("class"))     return true;
     if (starts_with_kw("enum"))      return true;
     if (starts_with_kw("interface")) return true;
@@ -46,8 +68,6 @@ bool Repl::is_decl(const std::string& line) const {
     if (starts_with_kw("namespace")) return true;
     if (starts_with_kw("extern"))    return true;
 
-    // Function declarations: type IDENT '(' ... ')' '{' ...
-    // Heuristic: line contains both '(' and '{' and starts with a type keyword
     bool has_paren = line.find('(') != std::string::npos;
     bool has_brace = line.find('{') != std::string::npos;
     if (has_paren && has_brace) {
@@ -84,7 +104,6 @@ int Repl::compile_and_run(const std::string& source) {
     std::string src_path = temp_dir_ + "/repl_" + std::to_string(seq) + ".dux";
     std::string bin_path = temp_dir_ + "/repl_" + std::to_string(seq);
 
-    // Write source file
     {
         std::ofstream f(src_path);
         if (!f) {
@@ -94,7 +113,6 @@ int Repl::compile_and_run(const std::string& source) {
         f << source;
     }
 
-    // Compile: invoke ourselves with --compile, suppress compiler stderr unless error
     std::string compile_cmd = dux_binary_ + " --compile " + src_path
                               + " -o " + bin_path + " 2>&1";
     FILE* pipe = popen(compile_cmd.c_str(), "r");
@@ -109,11 +127,9 @@ int Repl::compile_and_run(const std::string& source) {
     int compile_rc = pclose(pipe);
 
     if (compile_rc != 0) {
-        // Print compiler errors, stripping the temp path prefix for clarity
         std::istringstream iss(compiler_out);
         std::string err_line;
         while (std::getline(iss, err_line)) {
-            // Replace temp path with "<input>" for cleaner output
             auto pos = err_line.find(src_path);
             if (pos != std::string::npos)
                 err_line.replace(pos, src_path.size(), "<input>");
@@ -122,33 +138,64 @@ int Repl::compile_and_run(const std::string& source) {
         return 1;
     }
 
-    // Run the compiled binary
     int run_rc = system(bin_path.c_str());
     return WIFEXITED(run_rc) ? WEXITSTATUS(run_rc) : 1;
 }
 
+// ── main loop ─────────────────────────────────────────────────────────────────
+
 void Repl::run() {
     print_banner();
-    std::string line;
+
+#ifdef DUX_RL
+    // Load history from previous sessions
+    std::string hist = history_path();
+    if (!hist.empty())
+        read_history(hist.c_str());
+#endif
 
     while (true) {
-        std::cout << "dux> " << std::flush;
-        if (!std::getline(std::cin, line)) {
+        std::string line;
+
+        // ── read one line ────────────────────────────────────────────────────
+#ifdef DUX_RL
+        char* raw = readline("dux> ");
+        if (!raw) {
             // EOF (Ctrl-D)
             std::cout << "\n";
             break;
         }
+        line = raw;
+        free(raw);
+#else
+        std::cout << "dux> " << std::flush;
+        if (!std::getline(std::cin, line)) {
+            std::cout << "\n";
+            break;
+        }
+#endif
 
         // Strip trailing whitespace
-        while (!line.empty() && (line.back() == ' ' || line.back() == '\t' || line.back() == '\r'))
+        while (!line.empty() &&
+               (line.back() == ' ' || line.back() == '\t' || line.back() == '\r'))
             line.pop_back();
 
         if (line.empty()) continue;
 
-        // ─── REPL commands ──────────────────────────────────────────────────
-        if (line == ":q" || line == ":quit" || line == "exit" || line == "quit") {
-            break;
+        // Add non-empty lines to history (dedup consecutive identical entries).
+        // Use a local tracker instead of history_list()/HIST_ENTRY to avoid
+        // depending on history API symbols not always present in libedit.
+#ifdef DUX_RL
+        static std::string last_history_line;
+        if (line != last_history_line) {
+            add_history(line.c_str());
+            last_history_line = line;
         }
+#endif
+
+        // ─── REPL commands ──────────────────────────────────────────────────
+        if (line == ":q" || line == ":quit" || line == "exit" || line == "quit")
+            break;
 
         if (line == ":help") {
             std::cout <<
@@ -162,7 +209,12 @@ void Repl::run() {
                 "  Define functions/classes first, then call them.\n"
                 "  Declarations (class, fn, void/int/str/... name(...) {...}) are\n"
                 "  accumulated and available to all subsequent statements.\n"
-                "  Statements are compiled and run immediately.\n";
+                "  Statements are compiled and run immediately.\n"
+#ifdef DUX_RL
+                "  Up/Down arrows navigate command history.\n"
+                "  Left/Right arrows and Ctrl+A/E/K/U edit the current line.\n"
+#endif
+                ;
             continue;
         }
 
@@ -184,7 +236,6 @@ void Repl::run() {
 
         // ─── Classify and handle input ──────────────────────────────────────
         if (is_decl(line)) {
-            // Add to context; verify by compiling with a dummy main
             std::string test_src;
             for (const auto& d : context_decls_) {
                 test_src += d;
@@ -193,7 +244,6 @@ void Repl::run() {
             test_src += line;
             test_src += "\nvoid main() {}\n";
 
-            // Write and compile the test source
             static int verify_seq = 0;
             ++verify_seq;
             std::string vsrc = temp_dir_ + "/decl_" + std::to_string(verify_seq) + ".dux";
@@ -211,7 +261,6 @@ void Repl::run() {
             int vrc = pclose(vpipe);
 
             if (vrc != 0) {
-                // Show errors, clean up temp path
                 std::istringstream iss(vout);
                 std::string err_line;
                 while (std::getline(iss, err_line)) {
@@ -225,11 +274,18 @@ void Repl::run() {
                 std::cout << "OK\n";
             }
         } else {
-            // Statement: wrap in main with context and run
             std::string src = build_source(line);
             compile_and_run(src);
         }
     }
+
+#ifdef DUX_RL
+    // Persist history (keep last 500 lines)
+    if (!hist.empty()) {
+        stifle_history(500);
+        write_history(hist.c_str());
+    }
+#endif
 }
 
 } // namespace dux

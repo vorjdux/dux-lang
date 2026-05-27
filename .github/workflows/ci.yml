@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y cmake flex bison \
-            llvm-18-dev libssl-dev libzstd-dev \
+            llvm-18-dev libssl-dev libzstd-dev libreadline-dev \
             ${{ matrix.packages }}
 
       - name: Configure (Debug)
@@ -93,7 +93,7 @@ jobs:
       - name: Install dependencies
         run: |
           dnf install -y cmake flex bison gcc-c++ \
-            llvm-devel clang zlib-devel libzstd-devel openssl-devel rpm-build
+            llvm-devel clang zlib-devel libzstd-devel openssl-devel readline-devel rpm-build
 
       - name: Configure (Debug)
         run: |

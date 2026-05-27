@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
 
+# ── Single source of version truth ────────────────────────────────────────────
+# Edit the VERSION file to change the version; CMake picks it up automatically.
+# Use scripts/bump-version.py to update all other references in one shot.
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" _dux_ver)
+string(STRIP "${_dux_ver}" _dux_ver)
+
 project(dux-lang
-    VERSION     0.1.3
+    VERSION     ${_dux_ver}
     DESCRIPTION "The Dux programming language compiler"
     LANGUAGES   C CXX
 )
@@ -275,6 +281,10 @@ target_include_directories(dux SYSTEM PRIVATE
 target_compile_definitions(dux PRIVATE
     DUX_VERSION="${PROJECT_VERSION}"
     DUX_TARGET_TRIPLE="${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}"
+    DUX_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+    DUX_LLVM_VERSION="${LLVM_PACKAGE_VERSION}"
+    DUX_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+    DUX_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
     ${LLVM_DEFINITIONS}
     DUXRT_LIB_PATH="${DUXRT_LIB_PATH}"
     DUXRT_BC_PATH="${DUXRT_BC_PATH}"
@@ -291,6 +301,31 @@ if(TARGET duxrt_bc)
 endif()
 
 target_link_libraries(dux PRIVATE ${LLVM_LIBS})
+
+# ── Readline / libedit: arrow-key editing and history for the REPL ───────────
+# Optional: the REPL falls back to plain std::getline if neither is found.
+# Priority: GNU readline > libedit (macOS system lib / libedit-dev on Linux).
+find_library(READLINE_LIB NAMES readline)
+find_path(READLINE_INC   NAMES readline/readline.h)
+if(READLINE_LIB AND READLINE_INC)
+    message(STATUS "REPL editing: readline (${READLINE_LIB})")
+    target_include_directories(dux PRIVATE ${READLINE_INC})
+    target_link_libraries(dux PRIVATE ${READLINE_LIB})
+    target_compile_definitions(dux PRIVATE DUX_HAVE_READLINE=1)
+else()
+    # macOS ships libedit with readline-compat symbols in <editline/readline.h>
+    # Ubuntu/Debian: libedit-dev provides the same header
+    find_library(LIBEDIT_LIB NAMES edit)
+    find_path(LIBEDIT_INC   NAMES editline/readline.h)
+    if(LIBEDIT_LIB AND LIBEDIT_INC)
+        message(STATUS "REPL editing: libedit (${LIBEDIT_LIB})")
+        target_include_directories(dux PRIVATE ${LIBEDIT_INC})
+        target_link_libraries(dux PRIVATE ${LIBEDIT_LIB})
+        target_compile_definitions(dux PRIVATE DUX_HAVE_LIBEDIT=1)
+    else()
+        message(STATUS "REPL editing: none (install libreadline-dev for arrow-key support)")
+    endif()
+endif()
 
 # Warnings - suppress LLVM header noise
 target_compile_options(dux PRIVATE
@@ -335,9 +370,15 @@ set(CPACK_RESOURCE_FILE_README  "${CMAKE_SOURCE_DIR}/README.md")
 set(CPACK_STRIP_FILES TRUE)
 
 # ── Tarball (.tar.gz) ────────────────────────────────────────────────────────
-# Produces: dux-<version>-<system>-<arch>.tar.gz
+# Produces: dux-<version>-linux-x86_64.tar.gz  /  dux-<version>-macos-arm64.tar.gz
+# Use "macos" instead of "darwin" for friendlier file names.
+if(APPLE)
+    set(_dux_platform "macos")
+else()
+    string(TOLOWER "${CMAKE_SYSTEM_NAME}" _dux_platform)
+endif()
 set(CPACK_ARCHIVE_FILE_NAME
-    "dux-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+    "dux-${PROJECT_VERSION}-${_dux_platform}-${CMAKE_SYSTEM_PROCESSOR}")
 string(TOLOWER "${CPACK_ARCHIVE_FILE_NAME}" CPACK_ARCHIVE_FILE_NAME)
 
 # ── Debian package (.deb) ─────────────────────────────────────────────────────
@@ -346,7 +387,7 @@ set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS  "libc6 (>= 2.17), libstdc++6 (>= 9)")
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "clang-18")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Dux Lang <vorj.dux@gmail.com>")
-# Naming: dux-lang_0.1.3_amd64.deb
+# Naming: dux-lang_${PROJECT_VERSION}_amd64.deb
 set(CPACK_DEBIAN_FILE_NAME        "DEB-DEFAULT")
 
 # ── RPM package (.rpm) ────────────────────────────────────────────────────────
@@ -358,7 +399,7 @@ set(CPACK_RPM_PACKAGE_RECOMMENDS  "clang18")
 set(CPACK_RPM_PACKAGE_DESCRIPTION
 "Dux is a statically-typed compiled language targeting native code via LLVM.
 Clean Python-like syntax, classes, closures, async/await, LTO, -O3 performance.")
-# Naming: dux-lang-0.1.3-1.x86_64.rpm
+# Naming: dux-lang-${PROJECT_VERSION}-1.x86_64.rpm
 set(CPACK_RPM_FILE_NAME           "RPM-DEFAULT")
 
 # Generators: TGZ for all platforms; DEB on Debian/Ubuntu; RPM on Fedora/RHEL
@@ -379,7 +420,7 @@ endif()
 
 set(CPACK_SOURCE_GENERATOR      "TGZ")
 set(CPACK_SOURCE_IGNORE_FILES
-    "/\\.git/;/build.*/;/\\.cache/;/callgrind/;/core\\..*/;/vgcore\\..*")
+    "/\\\\.git/;/build.*/;/\\\\.cache/;/callgrind/;/core\\\\..*/;/vgcore\\\\..*")
 
 include(CPack)
 
