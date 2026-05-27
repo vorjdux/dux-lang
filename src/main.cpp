@@ -8,6 +8,9 @@
 #include <unordered_set>
 #include <sys/wait.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#  include <mach-o/dyld.h>   // _NSGetExecutablePath
+#endif
 
 #include "ast/printer.hpp"
 #include "driver/driver.hpp"
@@ -47,6 +50,60 @@
 #endif
 
 namespace {
+
+// ── Runtime resource path resolution ──────────────────────────────────────────
+// Installed layout:
+//   <prefix>/bin/dux               ← this binary
+//   <prefix>/lib/libduxrt.a        ← runtime static library
+//   <prefix>/share/dux/stdlib/     ← standard library .dux sources
+//
+// Compile-time paths (DUXRT_LIB_PATH, DUXSTDLIB_DIR) are the fallback for
+// developer / CI builds where the install layout does not apply.
+
+static std::filesystem::path exe_real_path() {
+    std::error_code ec;
+#ifdef __linux__
+    auto p = std::filesystem::canonical("/proc/self/exe", ec);
+    if (!ec) return p;
+#elif defined(__APPLE__)
+    uint32_t sz = 0;
+    _NSGetExecutablePath(nullptr, &sz);
+    std::string buf(sz, '\0');
+    if (_NSGetExecutablePath(buf.data(), &sz) == 0) {
+        auto p = std::filesystem::canonical(buf, ec);
+        if (!ec) return p;
+    }
+#endif
+    return {};
+}
+
+// <prefix>/bin/dux → <prefix>   (returns empty on failure)
+static std::filesystem::path install_prefix() {
+    auto exe = exe_real_path();
+    if (exe.empty()) return {};
+    return exe.parent_path().parent_path();
+}
+
+// libduxrt.a: prefer <prefix>/lib; fall back to compile-time DUXRT_LIB_PATH.
+static std::string resolve_duxrt_lib() {
+    auto prefix = install_prefix();
+    if (!prefix.empty()) {
+        auto c = prefix / "lib" / "libduxrt.a";
+        if (std::filesystem::exists(c)) return c.string();
+    }
+    return DUXRT_LIB_PATH;
+}
+
+// stdlib .dux sources: prefer <prefix>/share/dux/stdlib; fall back to
+// compile-time DUXSTDLIB_DIR.
+static std::string resolve_stdlib_dir() {
+    auto prefix = install_prefix();
+    if (!prefix.empty()) {
+        auto c = prefix / "share" / "dux" / "stdlib";
+        if (std::filesystem::exists(c)) return c.string();
+    }
+    return DUXSTDLIB_DIR;
+}
 
 struct Options {
     std::string  input;
@@ -135,7 +192,10 @@ Options parse_args(std::span<char*> args) {
 }
 
 // Invoke system linker to link object file into executable.
-bool link_executable(const std::string& obj_path, const std::string& out_path) {
+// duxrt_lib: runtime-resolved path to libduxrt.a (may differ from compile-time
+// DUXRT_LIB_PATH when the binary is installed on another machine).
+bool link_executable(const std::string& obj_path, const std::string& out_path,
+                     const std::string& duxrt_lib) {
     pid_t pid = fork();
     if (pid < 0) {
         std::perror("dux: fork");
@@ -151,25 +211,32 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
         //
         // -lpthread:  no-op on macOS (pthreads are part of libSystem) but harmless.
         //
-        // DUXRT_OPENSSL_SSL / _CRYPTO: full absolute paths baked in at cmake build
-        // time (the same libraries duxrt.a was compiled against).  Using the full
-        // path avoids the macOS failure mode where Homebrew LLVM's cc is on PATH
-        // but cannot locate the system LibreSSL TBD stubs, while the Homebrew
-        // OpenSSL 3 dylib is always resolvable by its absolute path.
+        // OpenSSL: use the absolute paths baked in at build time when they still
+        // exist on this machine (developer / CI builds).  For installed binaries the
+        // baked-in CI paths won't exist, so fall back to the system -lssl/-lcrypto.
 #ifdef __APPLE__
         const char* cxx_rt = "-lc++";      // Apple Clang / libc++
 #else
         const char* cxx_rt = "-lstdc++";   // GCC / Clang on Linux / libstdc++
 #endif
+        const std::string baked_ssl    = DUXRT_OPENSSL_SSL;
+        const std::string baked_crypto = DUXRT_OPENSSL_CRYPTO;
+        std::string ssl_link =
+            (!baked_ssl.empty()    && std::filesystem::exists(baked_ssl))
+            ? baked_ssl    : "-lssl";
+        std::string crypto_link =
+            (!baked_crypto.empty() && std::filesystem::exists(baked_crypto))
+            ? baked_crypto : "-lcrypto";
+
         const char* argv[] = {
             "cc",
             obj_path.c_str(),
-            DUXRT_LIB_PATH,
+            duxrt_lib.c_str(),
             "-lm",
             cxx_rt,
             "-lpthread",
-            DUXRT_OPENSSL_SSL,     // full path — same OpenSSL duxrt was built with
-            DUXRT_OPENSSL_CRYPTO,  // full path — same OpenSSL duxrt was built with
+            ssl_link.c_str(),
+            crypto_link.c_str(),
             "-o", out_path.c_str(),
             nullptr
         };
@@ -189,9 +256,10 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
 // Recursively load .dux stdlib files for each import in `prog`, prepending
 // their declarations to prog->decls so codegen sees them first.
 // `loaded` tracks which module paths have already been loaded (avoids cycles).
+// `stdlib_dir` is the runtime-resolved standard library directory.
 void merge_stdlib_imports(dux::ast::Program* prog,
-                          std::unordered_set<std::string>& loaded) {
-    const std::string stdlib_dir = DUXSTDLIB_DIR;
+                          std::unordered_set<std::string>& loaded,
+                          const std::string& stdlib_dir) {
     if (stdlib_dir.empty()) return;
 
     // Collect import paths present in this program's decls (snapshot to avoid
@@ -216,10 +284,11 @@ void merge_stdlib_imports(dux::ast::Program* prog,
         if (!std::filesystem::exists(fpath)) continue;
 
         Driver sub;
+        sub.stdlib_dir = stdlib_dir;   // propagate resolved dir to recursive loads
         if (sub.parse(fpath.string()) != 0 || !sub.result) continue;
 
         // Recursively handle imports inside the stdlib file first
-        merge_stdlib_imports(sub.result.get(), loaded);
+        merge_stdlib_imports(sub.result.get(), loaded, stdlib_dir);
 
         // Prepend the stdlib file's decls to the main program
         dux::ast::DeclList prefix;
@@ -265,9 +334,14 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    // Resolve resource paths once: prefer installed layout, fall back to build tree.
+    const std::string duxrt_lib  = resolve_duxrt_lib();
+    const std::string stdlib_dir = resolve_stdlib_dir();
+
     Driver driver;
     driver.trace_scanning = opts.trace_lex;
     driver.trace_parsing  = opts.trace_parse;
+    driver.stdlib_dir     = stdlib_dir;   // used by Driver::resolve_imports
 
     int rc = driver.parse(opts.input);
     if (rc != 0) return EXIT_FAILURE;
@@ -277,7 +351,7 @@ int main(int argc, char** argv) {
     // Load stdlib .dux files for any imports in the program
     {
         std::unordered_set<std::string> loaded;
-        merge_stdlib_imports(driver.result.get(), loaded);
+        merge_stdlib_imports(driver.result.get(), loaded, stdlib_dir);
     }
 
     // Expand generic class/function instantiations before sema
@@ -331,7 +405,7 @@ int main(int argc, char** argv) {
             std::filesystem::path tmp_obj = std::filesystem::temp_directory_path()
                 / (mod_name + ".o");
             if (!cg.emit_object(tmp_obj.string())) return EXIT_FAILURE;
-            if (!link_executable(tmp_obj.string(), exe_out)) return EXIT_FAILURE;
+            if (!link_executable(tmp_obj.string(), exe_out, duxrt_lib)) return EXIT_FAILURE;
             std::filesystem::remove(tmp_obj);
         }
     }
