@@ -35,6 +35,11 @@ public:
     bool trace_scanning{false};
     bool trace_parsing{false};
 
+    // Runtime-resolved standard library directory.
+    // Set by main() after path resolution; defaults to the compile-time
+    // DUX_STDLIB_DIR macro in the Driver constructor.
+    std::string stdlib_dir;
+
     // ─── Diagnostics ─────────────────────────────────────────────────────────
     // Emit a clang-style error with source context. Throws DiagnosticAbort
     // once kMaxErrors have been accumulated.

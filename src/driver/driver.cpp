@@ -17,7 +17,7 @@ extern int   yy_flex_debug;
 yy::parser::symbol_type yylex(Driver& driver, yy::location& loc);
 
 /* ─── Driver ────────────────────────────────────────────────────────────── */
-Driver::Driver()  = default;
+Driver::Driver() : stdlib_dir(DUX_STDLIB_DIR) {}
 Driver::~Driver() = default;
 
 int Driver::parse(const std::string& filename) {
@@ -79,9 +79,10 @@ static const std::unordered_set<std::string> kStdlibModules = {};
 // Convert a dotted import path to a filesystem path.
 // "utils"           → "<base>/utils.dux"
 // "geometry.shapes" → "<base>/geometry/shapes.dux"
-// Falls back to DUX_STDLIB_DIR if not found in base_dir.
+// Falls back to stdlib_dir (runtime-resolved) if not found in base_dir.
 static std::string find_import_file(const std::string& import_path,
-                                    const std::string& base_dir) {
+                                    const std::string& base_dir,
+                                    const std::string& stdlib_dir) {
     // Replace dots with path separators
     std::string rel = import_path;
     for (char& c : rel)
@@ -97,8 +98,7 @@ static std::string find_import_file(const std::string& import_path,
             return candidate.string();
     }
 
-    // Fall back to baked-in stdlib directory
-    const std::string stdlib_dir = DUX_STDLIB_DIR;
+    // Fall back to runtime-resolved stdlib directory
     if (!stdlib_dir.empty()) {
         fs::path candidate = fs::path(stdlib_dir) / rel;
         std::error_code ec;
@@ -136,7 +136,7 @@ void Driver::resolve_imports(dux::ast::Program& prog,
             continue;
 
         // Find the file on disk.
-        std::string filepath = find_import_file(imp->path, base_dir);
+        std::string filepath = find_import_file(imp->path, base_dir, stdlib_dir);
         if (filepath.empty()) {
             std::cerr << "dux: import: module '" << imp->path
                       << "' not found (looked in '" << base_dir << "')\n";
@@ -148,7 +148,9 @@ void Driver::resolve_imports(dux::ast::Program& prog,
         visited.insert(filepath);
 
         // Parse the imported file with a fresh Driver instance.
+        // Propagate the runtime-resolved stdlib_dir so recursive imports work.
         Driver sub;
+        sub.stdlib_dir = stdlib_dir;
         if (sub.parse(filepath) != 0) {
             std::cerr << "dux: import: errors in '" << filepath << "'\n";
             continue;

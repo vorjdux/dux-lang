@@ -742,7 +742,11 @@ void Codegen::gen_namespace(const ast::NamespaceDecl& ns) {
 bool Codegen::lto_merge_runtime() {
     // Empty path means the bitcode was not built (tools absent at configure time).
     std::string_view bc_path = DUXRT_BC_PATH;
-    if (bc_path.empty()) return true;   // LTO disabled — not an error
+    if (bc_path.empty()) return true;   // LTO disabled at build time — not an error
+    // The bitcode path is the build-tree path baked in at compile time.
+    // If it no longer exists (e.g. installed binary on a different machine),
+    // skip LTO silently rather than aborting the compilation.
+    if (!std::filesystem::exists(std::filesystem::path(bc_path))) return true;
 
     // Load the runtime bitcode file into a memory buffer.
     auto buf_or_err = llvm::MemoryBuffer::getFile(bc_path);
