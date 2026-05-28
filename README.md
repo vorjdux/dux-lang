@@ -6,6 +6,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/vorjdux/dux-lang)](https://github.com/vorjdux/dux-lang/releases/latest)
 
+## Why did we create yet another programming language?
+
+- We love a good challenge
+- Why not?
+- We've seen plenty of languages drowning in crazy syntax sugar, but really, do we need all that?
+- Our goal: fuse the elegance of Python with the strength of C++, without going completely insane (just a little bit 😄)
+- And it compiles! Yeahhh \nn/_
+
+---
+
 Dux compiles to native machine code via LLVM, achieves C-level performance with
 link-time optimisation, and provides clean Python-like syntax with full type inference,
 classes, closures, async/await, and a reference-counted runtime.
