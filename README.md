@@ -10,7 +10,7 @@
 
 - We love a good challenge
 - Why not?
-- We've seen plenty of languages drowning in crazy syntax sugar — but really, do we need all that?
+- We've seen plenty of languages drowning in crazy syntax sugar, but really, do we need all that?
 - Our goal: fuse the elegance of Python with the strength of C++, without going completely insane (just a little bit 😄)
 - And it compiles! Yeahhh \nn/_
 
