@@ -115,11 +115,11 @@ module.exports = grammar({
 
     binary_literal: (_) => token(seq("0", /[bB]/, /[01]+/)),
 
-    // Plain string: "..." or '...'
+    // Plain string: double-quoted or single-quoted with escape sequences.
     string_literal: (_) =>
       choice(
-        seq('"', repeat(choice(/[^"\\]/, seq("\\", /.)/))), '"'),
-        seq("'", repeat(choice(/[^'\\]/, seq("\\", /.)/))), "'")
+        seq('"', repeat(choice(/[^"\\]+/, /\\./)), '"'),
+        seq("'", repeat(choice(/[^'\\]+/, /\\./)), "'")
       ),
 
     // f-string: f"..." or f'...' — the body is parsed for interpolations.
