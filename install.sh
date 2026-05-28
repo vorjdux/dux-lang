@@ -277,31 +277,79 @@ _install() {
     info "Extracting archive..."
     tar -xzf "${ARCHIVE_PATH}" -C "${TMP_DIR}"
 
-    # Find the extracted binary (may be in a subdirectory)
+    # Locate the dux binary inside the extracted tree (tolerates any depth).
     EXTRACTED_BIN="$(find "${TMP_DIR}" -type f -name "${BINARY_NAME}" | head -1)"
     if [ -z "${EXTRACTED_BIN}" ]; then
         die "Binary '${BINARY_NAME}' not found in archive ${ARCHIVE_NAME}"
     fi
 
+    # The tarball follows the CMake install layout:
+    #   <archive-root>/[usr/local/]bin/dux
+    #   <archive-root>/[usr/local/]lib/libduxrt.a
+    #   <archive-root>/[usr/local/]share/dux/stdlib/
+    # Derive the source prefix by walking up two levels from the binary.
+    SRC_PREFIX="$(dirname "$(dirname "${EXTRACTED_BIN}")")"
+
+    # Derive the destination prefix from the install directory.
+    # ~/.local/bin → ~/.local  |  /usr/local/bin → /usr/local  |  /opt/dux → /opt/dux
+    case "${INSTALL_DIR}" in
+        */bin)  DEST_PREFIX="${INSTALL_DIR%/bin}" ;;
+        *)      DEST_PREFIX="${INSTALL_DIR}" ;;
+    esac
+
+    # ── helper: install a single file with sudo fallback ─────────────────────
+    _do_install_file() {
+        local src="$1" dest="$2" mode="$3"
+        local dest_dir
+        dest_dir="$(dirname "${dest}")"
+        if [ ! -d "${dest_dir}" ]; then
+            mkdir -p "${dest_dir}" 2>/dev/null || sudo mkdir -p "${dest_dir}" || return 1
+        fi
+        if ! install -m "${mode}" "${src}" "${dest}" 2>/dev/null; then
+            sudo install -m "${mode}" "${src}" "${dest}" || return 1
+        fi
+    }
+
+    # ── helper: copy a directory tree with sudo fallback ─────────────────────
+    _do_install_dir() {
+        local src_dir="$1" dest_dir="$2"
+        if [ ! -d "${dest_dir}" ]; then
+            mkdir -p "${dest_dir}" 2>/dev/null || sudo mkdir -p "${dest_dir}" || return 1
+        fi
+        if ! cp -a "${src_dir}/." "${dest_dir}/" 2>/dev/null; then
+            sudo cp -a "${src_dir}/." "${dest_dir}/" || return 1
+        fi
+    }
+
     # Create install dir if needed
     if [ ! -d "${INSTALL_DIR}" ]; then
         info "Creating directory: ${INSTALL_DIR}"
-        if ! mkdir -p "${INSTALL_DIR}" 2>/dev/null; then
+        mkdir -p "${INSTALL_DIR}" 2>/dev/null || \
             sudo mkdir -p "${INSTALL_DIR}" || die "Failed to create ${INSTALL_DIR}"
-        fi
     fi
 
     DEST="${INSTALL_DIR}/${BINARY_NAME}"
 
     info "Installing to ${DEST}..."
-
-    # Try direct copy first, fall back to sudo
-    if ! install -m 755 "${EXTRACTED_BIN}" "${DEST}" 2>/dev/null; then
-        if ! sudo install -m 755 "${EXTRACTED_BIN}" "${DEST}"; then
-            die "Failed to install ${BINARY_NAME} to ${DEST}
+    _do_install_file "${EXTRACTED_BIN}" "${DEST}" 755 || \
+        die "Failed to install ${BINARY_NAME} to ${DEST}
 Try setting DUX_INSTALL_DIR to a directory you have write access to:
   DUX_INSTALL_DIR=~/.local/bin sh install.sh"
-        fi
+
+    # ── Runtime library (required for dux --compile) ──────────────────────────
+    if [ -f "${SRC_PREFIX}/lib/libduxrt.a" ]; then
+        _do_install_file "${SRC_PREFIX}/lib/libduxrt.a" \
+            "${DEST_PREFIX}/lib/libduxrt.a" 644 || \
+            warn "Could not install libduxrt.a — 'dux --compile' may not work."
+    else
+        warn "libduxrt.a not found in archive — 'dux --compile' will not work."
+    fi
+
+    # ── Standard library sources (required for import statements) ────────────
+    if [ -d "${SRC_PREFIX}/share/dux/stdlib" ]; then
+        _do_install_dir "${SRC_PREFIX}/share/dux/stdlib" \
+            "${DEST_PREFIX}/share/dux/stdlib" || \
+            warn "Could not install stdlib — import statements may not resolve."
     fi
 
     info "Installed: ${DEST}"
