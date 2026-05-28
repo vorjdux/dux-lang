@@ -21,6 +21,3 @@ Never use generic names like `editors-integration`, `my-branch`, or system-gener
 ### Commits
 - Author: `Matheus Santos <vorj.dux@gmail.com>`
 - No references to Claude, Anthropic, or AI tools in commit messages, code comments, PR titles/bodies, or any pushed artifacts.
-
-### Push target
-Development branch for open tasks: `claude/design-language-compiler-8E0zt`
