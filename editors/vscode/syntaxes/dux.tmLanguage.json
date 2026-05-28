@@ -1,0 +1,310 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Dux",
+  "scopeName": "source.dux",
+  "fileTypes": [
+    "dux"
+  ],
+  "patterns": [
+    { "include": "#block-comment" },
+    { "include": "#line-comment" },
+    { "include": "#fstring" },
+    { "include": "#string-double" },
+    { "include": "#string-single" },
+    { "include": "#number" },
+    { "include": "#keyword-control" },
+    { "include": "#keyword-declaration" },
+    { "include": "#storage-type" },
+    { "include": "#storage-modifier" },
+    { "include": "#constant-language" },
+    { "include": "#keyword-operator-word" },
+    { "include": "#support-function-builtin" },
+    { "include": "#function-definition" },
+    { "include": "#class-definition" },
+    { "include": "#interface-definition" },
+    { "include": "#enum-definition" },
+    { "include": "#special-identifiers" },
+    { "include": "#pascalcase-type" },
+    { "include": "#operator" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "block-comment": {
+      "name": "comment.block.dux",
+      "begin": "/\\*",
+      "end": "\\*/",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.comment.begin.dux" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.comment.end.dux" }
+      },
+      "patterns": [
+        { "include": "#block-comment" }
+      ]
+    },
+    "line-comment": {
+      "name": "comment.line.double-slash.dux",
+      "match": "//.*$",
+      "captures": {
+        "0": { "name": "comment.line.double-slash.dux" }
+      }
+    },
+    "fstring": {
+      "name": "string.interpolated.dux",
+      "begin": "f\"",
+      "end": "\"",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.dux" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.dux" }
+      },
+      "patterns": [
+        {
+          "name": "meta.embedded.expression.dux",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": { "name": "punctuation.section.embedded.begin.dux" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.section.embedded.end.dux" }
+          },
+          "patterns": [
+            { "include": "#block-comment" },
+            { "include": "#line-comment" },
+            { "include": "#fstring" },
+            { "include": "#string-double" },
+            { "include": "#string-single" },
+            { "include": "#number" },
+            { "include": "#keyword-control" },
+            { "include": "#keyword-declaration" },
+            { "include": "#storage-type" },
+            { "include": "#storage-modifier" },
+            { "include": "#constant-language" },
+            { "include": "#keyword-operator-word" },
+            { "include": "#support-function-builtin" },
+            { "include": "#special-identifiers" },
+            { "include": "#pascalcase-type" },
+            { "include": "#operator" }
+          ]
+        },
+        { "include": "#string-escape" }
+      ]
+    },
+    "string-double": {
+      "name": "string.quoted.double.dux",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.dux" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.dux" }
+      },
+      "patterns": [
+        { "include": "#string-escape" }
+      ]
+    },
+    "string-single": {
+      "name": "string.quoted.single.dux",
+      "begin": "'",
+      "end": "'",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.dux" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.dux" }
+      },
+      "patterns": [
+        { "include": "#string-escape" }
+      ]
+    },
+    "string-escape": {
+      "name": "constant.character.escape.dux",
+      "match": "\\\\(?:[\\\\\"'nrtbf0av]|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[0-7]{1,3})"
+    },
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.dux",
+          "match": "\\b0[xX][0-9A-Fa-f][0-9A-Fa-f_]*\\b"
+        },
+        {
+          "name": "constant.numeric.binary.dux",
+          "match": "\\b0[bB][01][01_]*\\b"
+        },
+        {
+          "name": "constant.numeric.float.dux",
+          "match": "\\b(?:[0-9][0-9_]*\\.(?:[0-9][0-9_]*)?(?:[eE][+-]?[0-9][0-9_]*)?|[0-9][0-9_]*[eE][+-]?[0-9][0-9_]*)\\b"
+        },
+        {
+          "name": "constant.numeric.integer.dux",
+          "match": "\\b[0-9][0-9_]*\\b"
+        }
+      ]
+    },
+    "keyword-control": {
+      "name": "keyword.control.dux",
+      "match": "\\b(if|else|for|while|do|switch|match|case|default|break|continue|return|try|catch|throw|in|defer)\\b"
+    },
+    "keyword-declaration": {
+      "name": "keyword.declaration.dux",
+      "match": "\\b(class|interface|enum|fn|namespace|import|from|as|extern|unsafe|async|await|new|delete)\\b"
+    },
+    "storage-type": {
+      "name": "storage.type.dux",
+      "match": "\\b(void|int|long|real|double|str|bool|list|dict|tuple|object|ptr|auto)\\b"
+    },
+    "storage-modifier": {
+      "name": "storage.modifier.dux",
+      "match": "\\b(public|private|protected|static|const|thread_local|override)\\b"
+    },
+    "constant-language": {
+      "name": "constant.language.dux",
+      "match": "\\b(true|false|null)\\b"
+    },
+    "keyword-operator-word": {
+      "name": "keyword.operator.word.dux",
+      "match": "\\b(and|or|not)\\b"
+    },
+    "support-function-builtin": {
+      "name": "support.function.builtin.dux",
+      "match": "\\b(println|print|readline|len|range|assert)\\b(?=\\s*\\()"
+    },
+    "function-definition": {
+      "comment": "Matches: fn name(...) or async fn name(...)",
+      "match": "\\b(?:async\\s+)?fn\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+      "captures": {
+        "0": { "name": "meta.function.dux" },
+        "1": { "name": "entity.name.function.dux" }
+      }
+    },
+    "class-definition": {
+      "comment": "Matches: class Name",
+      "match": "\\b(class)\\s+([A-Z][a-zA-Z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "keyword.declaration.dux" },
+        "2": { "name": "entity.name.type.class.dux" }
+      }
+    },
+    "interface-definition": {
+      "comment": "Matches: interface Name",
+      "match": "\\b(interface)\\s+([A-Z][a-zA-Z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "keyword.declaration.dux" },
+        "2": { "name": "entity.name.type.interface.dux" }
+      }
+    },
+    "enum-definition": {
+      "comment": "Matches: enum Name",
+      "match": "\\b(enum)\\s+([A-Z][a-zA-Z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "keyword.declaration.dux" },
+        "2": { "name": "entity.name.type.enum.dux" }
+      }
+    },
+    "special-identifiers": {
+      "patterns": [
+        {
+          "name": "variable.language.this.dux",
+          "match": "\\bthis\\b"
+        },
+        {
+          "name": "variable.language.super.dux",
+          "match": "\\bsuper\\b"
+        },
+        {
+          "name": "support.function.magic.dux",
+          "match": "\\b(__get__|__set__)\\b"
+        }
+      ]
+    },
+    "pascalcase-type": {
+      "comment": "PascalCase identifiers treated as type references",
+      "name": "entity.name.type.dux",
+      "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+    },
+    "operator": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.dux",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.assignment.dux",
+          "match": "(\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=|>>>=|\\*\\*=|//=|=)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.dux",
+          "match": "(\\*\\*|//|\\+|-|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.bitwise.dux",
+          "match": "(~|&|\\||\\^|<<|>>|>>>)"
+        },
+        {
+          "name": "keyword.operator.logical.dux",
+          "match": "(&&|\\|\\||!)"
+        },
+        {
+          "name": "keyword.operator.arrow.dux",
+          "match": "(->|=>)"
+        },
+        {
+          "name": "keyword.operator.range.dux",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.access.dux",
+          "match": "\\."
+        },
+        {
+          "name": "keyword.operator.optional.dux",
+          "match": "\\?"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.definition.block.begin.dux",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.definition.block.end.dux",
+          "match": "\\}"
+        },
+        {
+          "name": "punctuation.definition.bracket.begin.dux",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.definition.bracket.end.dux",
+          "match": "\\]"
+        },
+        {
+          "name": "punctuation.definition.paren.begin.dux",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.definition.paren.end.dux",
+          "match": "\\)"
+        },
+        {
+          "name": "punctuation.separator.comma.dux",
+          "match": ","
+        },
+        {
+          "name": "punctuation.terminator.statement.dux",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.separator.colon.dux",
+          "match": ":"
+        }
+      ]
+    }
+  }
+}

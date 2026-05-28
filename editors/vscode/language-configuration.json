@@ -1,0 +1,104 @@
+{
+  "comments": {
+    "lineComment": "//",
+    "blockComment": ["/*", "*/"]
+  },
+  "brackets": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"]
+  ],
+  "autoClosingPairs": [
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "(", "close": ")" },
+    { "open": "\"", "close": "\"", "notIn": ["string", "comment"] },
+    { "open": "'", "close": "'", "notIn": ["string", "comment"] },
+    { "open": "/*", "close": " */", "notIn": ["string"] }
+  ],
+  "autoCloseBefore": ";:.,=}])>` \n\t",
+  "surroundingPairs": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"],
+    ["\"", "\""],
+    ["'", "'"],
+    ["`", "`"]
+  ],
+  "colorizedBracketPairs": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"]
+  ],
+  "onEnterRules": [
+    {
+      "beforeText": {
+        "pattern": "^\\s*\\/\\*\\*(?!\\/)([^\\*]|\\*(?!\\/))*$"
+      },
+      "afterText": {
+        "pattern": "^\\s*\\*\\/$"
+      },
+      "action": {
+        "indent": "indentOutdent",
+        "appendText": " * "
+      }
+    },
+    {
+      "beforeText": {
+        "pattern": "^\\s*\\/\\*\\*(?!\\/)([^\\*]|\\*(?!\\/))*$"
+      },
+      "action": {
+        "indent": "indent",
+        "appendText": " * "
+      }
+    },
+    {
+      "beforeText": {
+        "pattern": "^(\\t|[ ])*[ ]\\*([ ]([^\\*]|\\*(?!\\/))*)?$"
+      },
+      "action": {
+        "indent": "none",
+        "appendText": "* "
+      }
+    },
+    {
+      "beforeText": {
+        "pattern": "^(\\t|[ ])*[ ]\\*\\/\\s*$"
+      },
+      "action": {
+        "indent": "none",
+        "removeText": 1
+      }
+    },
+    {
+      "beforeText": {
+        "pattern": "^(\\t|[ ])*[ ]\\*([ ]([^\\*]|\\*(?!\\/))*)?$"
+      },
+      "action": {
+        "indent": "none",
+        "appendText": "* "
+      }
+    }
+  ],
+  "indentationRules": {
+    "increaseIndentPattern": {
+      "pattern": "^((?!\\/\\/).)*(\\{[^}\"'`]*|\\([^)\"'`]*|\\[[^\\]\"'`]*)$"
+    },
+    "decreaseIndentPattern": {
+      "pattern": "^((?!.*?\\/\\*).*\\*/)?\\s*[\\}\\]].*$"
+    }
+  },
+  "wordPattern": {
+    "pattern": "(-?\\d*\\.\\d\\w*)|([^\\`\\~\\!\\@\\#\\%\\^\\&\\*\\(\\)\\-\\=\\+\\[\\{\\]\\}\\\\\\|\\;\\:\\'\\\"\\,\\.\\<\\>\\/\\?\\s]+)"
+  },
+  "folding": {
+    "markers": {
+      "start": {
+        "pattern": "^\\s*//\\s*#?region\\b"
+      },
+      "end": {
+        "pattern": "^\\s*//\\s*#?endregion\\b"
+      }
+    }
+  }
+}

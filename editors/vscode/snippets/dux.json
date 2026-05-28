@@ -1,0 +1,404 @@
+{
+  "Function Definition": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}) -> ${3:void} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define a function"
+  },
+  "Async Function Definition": {
+    "prefix": "afn",
+    "body": [
+      "async fn ${1:name}(${2:params}) -> ${3:void} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define an async function"
+  },
+  "Class Definition": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name} {",
+      "\tfn __init__(${2:params}) {",
+      "\t\t${0}",
+      "\t}",
+      "}"
+    ],
+    "description": "Define a class with constructor"
+  },
+  "Class with Inheritance": {
+    "prefix": "classi",
+    "body": [
+      "class ${1:Name}: ${2:Base} {",
+      "\tfn __init__(${3:params}) {",
+      "\t\tsuper.__init__(${4:args})",
+      "\t\t${0}",
+      "\t}",
+      "}"
+    ],
+    "description": "Define a class that extends a base class"
+  },
+  "Interface Definition": {
+    "prefix": "iface",
+    "body": [
+      "interface ${1:Name} {",
+      "\tfn ${2:method}(${3:params}) -> ${4:void}",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define an interface"
+  },
+  "Enum Definition": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:Name} {",
+      "\t${2:Variant1},",
+      "\t${3:Variant2},",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define an enum"
+  },
+  "Namespace": {
+    "prefix": "namespace",
+    "body": [
+      "namespace ${1:name} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define a namespace"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condition} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "If statement"
+  },
+  "If / Else Statement": {
+    "prefix": "ife",
+    "body": [
+      "if ${1:condition} {",
+      "\t${2}",
+      "} else {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "If / else statement"
+  },
+  "If / Else If / Else": {
+    "prefix": "ifei",
+    "body": [
+      "if ${1:condition} {",
+      "\t${2}",
+      "} else if ${3:condition} {",
+      "\t${4}",
+      "} else {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "If / else if / else statement"
+  },
+  "For-in Loop": {
+    "prefix": "for",
+    "body": [
+      "for ${1:item} in ${2:iterable} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "For-in loop"
+  },
+  "For Range Loop": {
+    "prefix": "forr",
+    "body": [
+      "for ${1:i} in range(${2:n}) {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "For loop over range(n)"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": [
+      "while ${1:condition} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "While loop"
+  },
+  "Do-While Loop": {
+    "prefix": "do",
+    "body": [
+      "do {",
+      "\t${0}",
+      "} while ${1:condition}"
+    ],
+    "description": "Do-while loop"
+  },
+  "Match Statement": {
+    "prefix": "match",
+    "body": [
+      "match ${1:expr} {",
+      "\tcase ${2:pattern1}: {",
+      "\t\t${3}",
+      "\t}",
+      "\tcase ${4:pattern2}: {",
+      "\t\t${5}",
+      "\t}",
+      "\tdefault: {",
+      "\t\t${0}",
+      "\t}",
+      "}"
+    ],
+    "description": "Match (switch-like) statement"
+  },
+  "Switch Statement": {
+    "prefix": "switch",
+    "body": [
+      "switch ${1:expr} {",
+      "\tcase ${2:value1}: {",
+      "\t\t${3}",
+      "\t\tbreak",
+      "\t}",
+      "\tcase ${4:value2}: {",
+      "\t\t${5}",
+      "\t\tbreak",
+      "\t}",
+      "\tdefault: {",
+      "\t\t${0}",
+      "\t}",
+      "}"
+    ],
+    "description": "Switch statement"
+  },
+  "Try / Catch": {
+    "prefix": "trycatch",
+    "body": [
+      "try {",
+      "\t${1}",
+      "} catch ${2:e} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Try / catch block"
+  },
+  "Try / Catch / Finally": {
+    "prefix": "trycatchf",
+    "body": [
+      "try {",
+      "\t${1}",
+      "} catch ${2:e} {",
+      "\t${3}",
+      "} defer {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Try / catch with deferred cleanup"
+  },
+  "Import Statement": {
+    "prefix": "import",
+    "body": [
+      "import ${1:module} from \"${2:path}\""
+    ],
+    "description": "Import a module"
+  },
+  "Import As": {
+    "prefix": "importas",
+    "body": [
+      "import ${1:name} from \"${2:path}\" as ${3:alias}"
+    ],
+    "description": "Import a module with alias"
+  },
+  "F-String": {
+    "prefix": "fstr",
+    "body": [
+      "f\"${1:text}{${2:expr}}${0}\""
+    ],
+    "description": "Interpolated f-string"
+  },
+  "Println": {
+    "prefix": "pl",
+    "body": [
+      "println(${1:value})"
+    ],
+    "description": "println() call"
+  },
+  "Println F-String": {
+    "prefix": "plf",
+    "body": [
+      "println(f\"${1:text}{${2:expr}}\")"
+    ],
+    "description": "println() with f-string"
+  },
+  "Assert": {
+    "prefix": "assert",
+    "body": [
+      "assert(${1:condition}${2:, \"${3:message}\"})"
+    ],
+    "description": "assert() call"
+  },
+  "Return Statement": {
+    "prefix": "ret",
+    "body": [
+      "return ${0}"
+    ],
+    "description": "Return statement"
+  },
+  "Const Variable": {
+    "prefix": "const",
+    "body": [
+      "const ${1:type} ${2:name} = ${0}"
+    ],
+    "description": "Constant declaration"
+  },
+  "Auto Variable": {
+    "prefix": "auto",
+    "body": [
+      "auto ${1:name} = ${0}"
+    ],
+    "description": "Auto-typed variable declaration"
+  },
+  "New Instance": {
+    "prefix": "new",
+    "body": [
+      "new ${1:Type}(${0})"
+    ],
+    "description": "Instantiate a new object"
+  },
+  "Async Await": {
+    "prefix": "await",
+    "body": [
+      "await ${1:asyncCall}(${0})"
+    ],
+    "description": "Await an async call"
+  },
+  "Extern Declaration": {
+    "prefix": "extern",
+    "body": [
+      "extern fn ${1:name}(${2:params}) -> ${3:void}"
+    ],
+    "description": "Extern function declaration"
+  },
+  "Unsafe Block": {
+    "prefix": "unsafe",
+    "body": [
+      "unsafe {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Unsafe block"
+  },
+  "Defer Statement": {
+    "prefix": "defer",
+    "body": [
+      "defer {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Deferred execution block"
+  },
+  "Main Function": {
+    "prefix": "main",
+    "body": [
+      "fn main() {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Main entry-point function"
+  },
+  "Getter Method": {
+    "prefix": "get",
+    "body": [
+      "fn __get__(str ${1:key}) -> ${2:object} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "__get__ magic method"
+  },
+  "Setter Method": {
+    "prefix": "set",
+    "body": [
+      "fn __set__(str ${1:key}, ${2:object} ${3:value}) {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "__set__ magic method"
+  },
+  "Public Method": {
+    "prefix": "pub",
+    "body": [
+      "public fn ${1:name}(${2:params}) -> ${3:void} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Public method"
+  },
+  "Private Method": {
+    "prefix": "priv",
+    "body": [
+      "private fn ${1:name}(${2:params}) -> ${3:void} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Private method"
+  },
+  "Static Method": {
+    "prefix": "static",
+    "body": [
+      "static fn ${1:name}(${2:params}) -> ${3:void} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Static method"
+  },
+  "Override Method": {
+    "prefix": "override",
+    "body": [
+      "override fn ${1:name}(${2:params}) -> ${3:void} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Override method"
+  },
+  "List Literal": {
+    "prefix": "list",
+    "body": [
+      "list[${1:type}] ${2:name} = [${0}]"
+    ],
+    "description": "Typed list declaration"
+  },
+  "Dict Literal": {
+    "prefix": "dict",
+    "body": [
+      "dict[${1:str}, ${2:object}] ${3:name} = {${0}}"
+    ],
+    "description": "Typed dict declaration"
+  },
+  "Tuple Literal": {
+    "prefix": "tuple",
+    "body": [
+      "tuple[${1:types}] ${2:name} = (${0})"
+    ],
+    "description": "Typed tuple declaration"
+  },
+  "Line Comment": {
+    "prefix": "//",
+    "body": [
+      "// ${0}"
+    ],
+    "description": "Line comment"
+  },
+  "Block Comment": {
+    "prefix": "/*",
+    "body": [
+      "/*",
+      " * ${0}",
+      " */"
+    ],
+    "description": "Block comment"
+  }
+}
