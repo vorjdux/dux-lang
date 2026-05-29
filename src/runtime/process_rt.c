@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <signal.h>
 
 int64_t duxrt_process_run(DuxStr* cmd) {
     if (!cmd) return -1;
