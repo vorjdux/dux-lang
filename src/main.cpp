@@ -112,21 +112,26 @@ bool link_executable(const std::string& obj_path, const std::string& out_path) {
         return false;
     }
     if (pid == 0) {
-        // child process: exec cc directly (no shell involved)
-        const char* argv[] = {
-            "cc",
-            obj_path.c_str(),
-            DUXRT_LIB_PATH,
-            "-lm",
-            "-lstdc++",  // C++ EH ABI (__gxx_personality_v0, __cxa_*)
-            "-lpthread", // POSIX threads (thread.pool, thread.chan, etc.)
-            "-lssl",     // OpenSSL TLS (net.tls)
-            "-lcrypto",  // OpenSSL crypto (net.tls)
-            "-o", out_path.c_str(),
-            nullptr
-        };
-        execvp("cc", const_cast<char* const*>(argv));
-        std::perror("dux: execvp cc");
+        // Use a C++ compiler driver (c++, g++, clang++) so the C++ runtime is
+        // linked automatically. This avoids requiring libstdc++-devel on Fedora/RHEL
+        // where "cc -lstdc++" fails unless the -devel package is installed.
+        static const char* kDrivers[] = { "c++", "g++", "clang++", nullptr };
+        for (int i = 0; kDrivers[i]; ++i) {
+            const char* argv[] = {
+                kDrivers[i],
+                obj_path.c_str(),
+                DUXRT_LIB_PATH,
+                "-lm",
+                "-lpthread", // POSIX threads (thread.pool, thread.chan, etc.)
+                "-lssl",     // OpenSSL TLS (net.tls)
+                "-lcrypto",  // OpenSSL crypto (net.tls)
+                "-o", out_path.c_str(),
+                nullptr
+            };
+            execvp(kDrivers[i], const_cast<char* const*>(argv));
+            // execvp only returns on failure (ENOENT = driver not found); try next.
+        }
+        std::perror("dux: no C++ compiler driver found (tried c++, g++, clang++)");
         _exit(1);
     }
     int status = 0;
