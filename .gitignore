@@ -89,5 +89,6 @@ cachegrind.out.*
 perf.data
 perf.data.old
 
-# Claude Code session state
-.claude/
+# Claude Code — track project settings but ignore session state
+.claude/*
+!.claude/settings.json
