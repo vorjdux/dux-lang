@@ -116,7 +116,7 @@ static std::unique_ptr<T> mk(Args&&... a) {
    ===================================================================== */
 
 /* Program */
-%type <DeclList>                         top_decl_list
+%type <std::unique_ptr<Program>>         top_decl_list
 %type <DeclPtr>                          top_decl decl extern_decl
 /* Declarations */
 %type <DeclPtr>  namespace_decl import_decl class_decl interface_decl enum_decl
@@ -208,15 +208,17 @@ program
         {
             auto p   = mk<Program>();
             p->loc   = sl(@$, driver);
-            p->decls = std::move($1);
+            p->decls = std::move($1->decls);
+            p->stmts = std::move($1->stmts);
             driver.result = std::move(p);
         }
     ;
 
 top_decl_list
-    : %empty                          { $$ = DeclList{}; }
+    : %empty                          { $$ = mk<Program>(); }
     | top_decl_list SEMI              { $$ = std::move($1); }
-    | top_decl_list top_decl          { $1.push_back(std::move($2)); $$ = std::move($1); }
+    | top_decl_list top_decl          { $1->decls.push_back(std::move($2)); $$ = std::move($1); }
+    | top_decl_list var_decl_stmt     { $1->stmts.push_back(std::move($2)); $$ = std::move($1); }
     | top_decl_list error SEMI        { $$ = std::move($1); yyerrok; }
     ;
 
